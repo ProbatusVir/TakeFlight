@@ -9,6 +9,12 @@ local-ip-address = "0.6.5"
 nokhwa = { version="0.10.9", features = ["input-native"] }
 openh264 = "0.8.1"
 rstest = "0.26.1"
+# actix = "0.13.5"      # This will be used to talk to the React server, should we choose to go that route.
+# rusqlite = "0.37.0"    # SQLite for Rust
+# mediapipe-rs = {git = "https://github.com/WasmEdge/mediapipe-rs.git"}
 
 [profile.test]
 opt-level = 3
+
+# When we add support for android, if there are additional dependecies to consider, this is how we do that.
+#[target.aarch64-linux-android]
