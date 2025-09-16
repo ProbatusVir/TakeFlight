@@ -20,7 +20,7 @@ impl From<std::io::Error> for Error
 
 impl From<local_ip_address::Error> for Error
 {
-	fn from(value: local_ip_address::Error) -> Self {
+	fn from(_value: local_ip_address::Error) -> Self {
 		LocalIPError
 	}
 }
