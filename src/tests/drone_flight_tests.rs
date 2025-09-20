@@ -18,6 +18,7 @@ mod tello_drone
 		Ok(())
 	}
 
+	#[rstest]
 	fn simple_planned_flight_test() -> Result<(), Error>
 	{
 		let mut drone = TelloDrone::init()?;
