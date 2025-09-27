@@ -9,10 +9,7 @@ use std::fs::File;
 use std::io::{Read};
 use image::EncodableLayout;
 use image::imageops::FilterType;
-use opencv::core::{OutputArray, ToOutputArray, _OutputArray};
-use opencv::flann::FLANN_FLOAT32;
 use error::Error;
-use opencv::prelude::*;
 
 fn main() -> Result<(), Error> {
 	println!("Hello, world!");
