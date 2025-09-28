@@ -9,7 +9,6 @@ pub enum Error
 	Custom(&'static str),
 	LocalIPError,
 	ImageError(image::ImageError),
-	OpenCVError(opencv::Error)
 }
 
 impl From<std::io::Error> for Error
@@ -33,13 +32,6 @@ impl From<image::ImageError> for Error
 	}
 }
 
-impl From<opencv::Error> for Error
-{
-	fn from(value: opencv::Error) -> Self {
-		Error::OpenCVError(value)
-	}
-}
-
 
 impl Display for Error {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -50,7 +42,6 @@ impl Display for Error {
 			Error::Custom(msg) => { msg.fmt(f) }
 			Error::LocalIPError => { "Failed to acquire local IP".fmt(f) }
 			Error::ImageError(e) => { e.fmt(f) }
-			Error::OpenCVError(e) => { e.fmt(f) }
 		}
 	}
 }
