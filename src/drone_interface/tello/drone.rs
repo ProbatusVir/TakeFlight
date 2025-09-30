@@ -61,6 +61,7 @@ impl drone_interface::Drone for Drone
 		let response_buffer = vec![0;255];
 
 		command_sock.send(b"command")?;
+		command_sock.send(b"streamon")?;
 
 		sleep(Duration::from_secs(1));
 
@@ -149,6 +150,24 @@ impl drone_interface::Drone for Drone
 		Ok(())
 	}
 
+	fn backflip(&mut self) -> Result<(), Error> {
+		self.command_sock.send(b"flip b")?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn frontflip(&mut self) -> Result<(), Error> {
+		self.command_sock.send(b"flip f")?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
 	fn clockwise_rot(&mut self, rads: f32) -> Result<(), Error> {
 		self.command_sock.send(format!("cw {}", rads.to_degrees()).as_bytes())?;
 		self.command_sock.recv(&mut self.response_buffer)?;
@@ -167,7 +186,7 @@ impl drone_interface::Drone for Drone
 		Ok(())
 	}
 
-	fn snapshot() -> Result<(), Error> {
+	fn snapshot(&mut self) -> Result<(), Error> {
 		todo!()
 	}
 }

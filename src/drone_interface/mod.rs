@@ -46,6 +46,10 @@ pub trait Drone
 	/// direction it is facing.
 	fn right(&mut self, x : Unit) -> Result<(), Error>;
 
+	fn backflip(&mut self) -> Result<(), Error>;
+
+	fn frontflip(&mut self) -> Result<(), Error>;
+
 	/// The drone's yaw may be adjusted in radians.
 	/// A negative radian will result in a counter
 	/// clockwise rotation.
@@ -57,5 +61,5 @@ pub trait Drone
 	fn cclockwise_rot(&mut self, rads : f32) -> Result<(), Error>;
 
 	/// Will return a picture from the drone's video feed.
-	fn snapshot() -> Result<(), Error>;
+	fn snapshot(&mut self) -> Result<(), Error>;
 }
