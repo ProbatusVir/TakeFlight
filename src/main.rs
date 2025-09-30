@@ -7,7 +7,7 @@ mod tests;
 
 use tflitec as tf;
 
-use std::io::Error;
+use error::Error;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
