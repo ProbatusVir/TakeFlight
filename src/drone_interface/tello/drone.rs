@@ -1,0 +1,173 @@
+use std::net::{ Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+use std::thread::sleep;
+use std::time::Duration;
+use local_ip_address::local_ip;
+use crate::drone_interface;
+use crate::drone_interface::Unit;
+use crate::error::Error;
+
+const WAIT_TIME : u64 = 3;
+
+pub struct Drone
+{
+	command_sock	: UdpSocket,
+	video_sock		: UdpSocket,
+	info_sock		: UdpSocket,
+	#[allow(dead_code)]
+	seq_number		: u16,			// Not in use right now.
+	response_buffer	: Vec<u8>,
+}
+
+impl drone_interface::Drone for Drone
+{
+	fn init() -> Result<Self, Error> {
+		let local_ip = local_ip()?;
+		let command_sock = {
+			const COMMAND_PORT : u16 = 8889;
+			const ARBITRARY_PORT : u16 = 8889; // Operator
+			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
+			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, COMMAND_PORT);
+
+			let mut command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			command_sock.connect(SocketAddrV4::new(CONN_ADDR, COMMAND_PORT) )?;
+
+			command_sock
+		};
+
+		let info_sock = {
+			const INFO_PORT : u16 = 8890;
+			const ARBITRARY_PORT : u16 = 8886;
+			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
+			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, INFO_PORT);
+			let mut info_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			info_sock.connect(CONN_SOCK)?;
+
+			info_sock
+		};
+
+		let video_sock = {
+			const VIDEO_PORT : u16 = 11111;
+			const ARBITRARY_PORT : u16 = 11112;
+			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
+			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, VIDEO_PORT);
+
+			let mut video_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			video_sock.connect(CONN_SOCK)?;
+
+			video_sock
+		};
+
+		let seq_number = 0;
+		let response_buffer = vec![0;255];
+
+		command_sock.send(b"command")?;
+
+		sleep(Duration::from_secs(1));
+
+		Ok( Self {command_sock, video_sock, info_sock, seq_number, response_buffer })
+	}
+
+	fn takeoff(&mut self) -> Result<(), Error> {
+		self.command_sock.send(b"takeoff")?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn emergency_land(&mut self) -> Result<(), Error> {
+		self.command_sock.send(b"emergency")?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn graceful_land(&mut self) -> Result<(), Error> {
+		self.command_sock.send(b"land")?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn up(&mut self, x: Unit) -> Result<(), Error> {
+		self.command_sock.send(format!("up {x}").as_bytes())?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn down(&mut self, x: Unit) -> Result<(), Error> {
+		self.command_sock.send(format!("down {x}").as_bytes())?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn forward(&mut self, x: Unit) -> Result<(), Error> {
+		self.command_sock.send(format!("forward {x}").as_bytes())?;
+		//self.command_sock.send(b"forward 25")?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn backward(&mut self, x: Unit) -> Result<(), Error> {
+		self.command_sock.send(format!("back {x}").as_bytes())?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn left(&mut self, x: Unit) -> Result<(), Error> {
+		self.command_sock.send(format!("left {x}").as_bytes())?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn right(&mut self, x: Unit) -> Result<(), Error> {
+		self.command_sock.send(format!("right {x}").as_bytes())?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn clockwise_rot(&mut self, rads: f32) -> Result<(), Error> {
+		self.command_sock.send(format!("cw {}", rads.to_degrees()).as_bytes())?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn cclockwise_rot(&mut self, rads: f32) -> Result<(), Error> {
+		self.command_sock.send(format!("ccw {}", rads.to_degrees()).as_bytes())?;
+		self.command_sock.recv(&mut self.response_buffer)?;
+
+		sleep(Duration::from_secs(3));
+
+		Ok(())
+	}
+
+	fn snapshot() -> Result<(), Error> {
+		todo!()
+	}
+}

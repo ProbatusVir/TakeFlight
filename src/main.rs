@@ -1,5 +1,7 @@
 mod helper;
 mod video_stream;
+mod drone_interface;
+mod error;
 #[cfg(test)]
 mod tests;
 
