@@ -12,7 +12,7 @@ use crate::Error;
 fn load_image_data() -> Result<Rgb32FImage, Error>
 {
 	// Load in test data
-	let mut image = image::open("src/tests/test_data/open_palm.webp")?;
+	let mut image = image::open("src/tests/test_data/open_palm.png")?;
 	Ok(
 		image.resize_exact(224, 224, FilterType::CatmullRom).into_rgb32f()
 	)
@@ -66,6 +66,29 @@ fn hand_detector_output(load_image_data : Result<Rgb32FImage, Error>) -> Result<
 	// Assert
 	let output = instance.output(0)?;
 	assert_eq!(*output.shape(), Shape::new(vec![1, 63]));
+
+	Ok(())
+}
+
+#[rstest]
+fn looksie_at_hand_data(load_image_data : Result<Rgb32FImage, Error>) -> Result<(), Error>
+{
+	// Arrange model and put the image in the input.
+	let model = Model::new("src/model/hand_landmarks_detector.tflite")?;
+	let instance = setup_interpreter(&model)?;
+	let input_tensor = instance.input(0)?;
+	let input_image = load_image_data?;
+	input_tensor.set_data(&input_image.as_bytes())?;
+
+	// Act
+	instance.invoke()?;
+
+	let num_outputs = instance.output_tensor_count();
+	for i in 0..num_outputs
+	{
+		let output = instance.output(i)?;
+		dbg!(output.shape());
+	}
 
 	Ok(())
 }
