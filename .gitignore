@@ -2,5 +2,6 @@
 /test_results
 /.idea
 /Frontend/takeofftestapp/node_modules
-
+/Frontend/takeofftestapp/dist/
+/Frontend/takeofftestapp/.env
 /src/model/
