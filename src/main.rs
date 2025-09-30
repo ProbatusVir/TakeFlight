@@ -5,6 +5,7 @@ mod error;
 #[cfg(test)]
 mod tests;
 
+use tflitec as tf;
 
 use std::io::Error;
 use std::process::{Command, Stdio};
