@@ -2,5 +2,5 @@
 /test_results
 /.idea
 /Frontend/takeofftestapp/node_modules
-
+/src/tests/test_data
 /src/model/

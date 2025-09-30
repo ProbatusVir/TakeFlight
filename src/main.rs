@@ -5,9 +5,9 @@ mod error;
 #[cfg(test)]
 mod tests;
 
+use tflitec as tf;
 
-use std::io::Error;
-
+use error::Error;
 fn main() -> Result<(), Error> {
 	println!("Hello, world!");
 	Ok(())
