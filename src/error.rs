@@ -9,6 +9,14 @@ pub enum Error
 	Custom(&'static str),
 	LocalIPError,
 	ImageError(image::ImageError),
+	TFLiteC(tflitec::Error)
+}
+
+impl From<tflitec::Error> for Error
+{
+	fn from(value: tflitec::Error) -> Self {
+		Error::TFLiteC(value)
+	}
 }
 
 impl From<std::io::Error> for Error
@@ -42,6 +50,7 @@ impl Display for Error {
 			Error::Custom(msg) => { msg.fmt(f) }
 			Error::LocalIPError => { "Failed to acquire local IP".fmt(f) }
 			Error::ImageError(e) => { e.fmt(f) }
+			Error::TFLiteC(e) => { e.fmt(f) }
 		}
 	}
 }
