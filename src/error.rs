@@ -9,7 +9,15 @@ pub enum Error
 	Custom(&'static str),
 	LocalIPError,
 	ImageError(image::ImageError),
-	TFLiteC(tflitec::Error)
+	TFLiteC(tflitec::Error),
+	H264Error(openh264::Error),
+}
+
+impl From<openh264::Error> for Error
+{
+	fn from(value: openh264::Error) -> Self {
+		Error::H264Error(value)
+	}
 }
 
 impl From<tflitec::Error> for Error
@@ -51,6 +59,7 @@ impl Display for Error {
 			Error::LocalIPError => { "Failed to acquire local IP".fmt(f) }
 			Error::ImageError(e) => { e.fmt(f) }
 			Error::TFLiteC(e) => { e.fmt(f) }
+			Error::H264Error(e) => { e.fmt(f) }
 		}
 	}
 }
