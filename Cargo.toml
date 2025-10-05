@@ -13,6 +13,9 @@ rstest = "0.26.1"
 # rusqlite = "0.37.0"    # SQLite for Rust
 tflitec = { version = "0.7.0", features = [] }
 image = "0.25.8"
+sdl = "0.3.6"
+
+ouroboros = "0.18.5"
 
 [profile.test]
 opt-level = 3
