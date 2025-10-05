@@ -1,7 +1,7 @@
 use local_ip_address::local_ip;
 use std::io::Error;
 use std::net::{ Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
-use crate::openh264::decoder::Decoder;
+use openh264::decoder::Decoder;
 #[allow(dead_code)]
 /// This is for an incoming video stream
 pub struct VideoStream {
