@@ -1,5 +1,4 @@
-use image::{DynamicImage, EncodableLayout, Rgb32FImage};
-use tflitec::interpreter;
+use image::{EncodableLayout, Rgb32FImage};
 use tflitec::interpreter::{Interpreter, Options};
 use tflitec::model::Model;
 use tflitec::tensor::{Shape, Tensor};
@@ -31,58 +30,64 @@ enum DigitIndices
 	PinkyTip,
 }
 
-struct HandLandmarker<'a>
-{
-	model: Model<'a>,
-	instance : Interpreter<'a>,
-}
-
-struct HandLandmarkerBuilder<'a>
-{
-	model : Option<Model<'a>>,
-	interpreter : Option<Interpreter<'a>>,
-}
-
 const NUM_BATCHES: usize = 1;
 const WIDTH : usize = 224;
 const HEIGHT: usize = 224;
 const BIT_DEPTH : usize = 3;
 
 
+#[ouroboros::self_referencing]
+pub struct HandLandmarker<'a>
+{
+	model		: Model<'a>,
+	#[borrows(model)]
+	#[covariant]
+	instance	: Interpreter<'this>,
+}
+
+
 impl<'a> HandLandmarker<'a>
 {
-	pub fn new(model_path : &str) -> Result<Self, Error>
+	pub fn from_path(model_path : &str) -> Result<Self, Error>
 	{
 		let model = Model::new(model_path)?;
 
 		Self::initialize_hand_landmarker_model(model)
 	}
 
-	/*#[allow(dead_code)]
-	pub fn from_bytes(buffer : &[u8]) -> Result<Self, Error>
+	#[allow(dead_code)]
+	pub fn from_bytes(buffer : &'a [u8]) -> Result<Self, Error>
 	{
 		let model = Model::from_bytes(buffer)?;
 
 		Self::initialize_hand_landmarker_model(model)
+	}
+
+	/*pub fn from_shared_buffer(buffer : Arc<[u8]>)
+	{
+		Self::initialize_hand_landmarker_model(buffer)
 	}*/
 
 	// FIXME: This should not return the unit value.
 	// 	I'll have to see if consuming the value is good or not.
-	pub fn run_model(&mut self, input : Rgb32FImage) -> Result<Vec<Tensor>, Error>
+	pub fn run_model(&mut self, input : Rgb32FImage) -> Result<Vec<Tensor<'_>>, Error>
 	{
 		debug_assert_eq!(input.as_bytes().len(), NUM_BATCHES * WIDTH * HEIGHT * BIT_DEPTH * size_of::<f32>(), "Image dimensions did not match expected size");
-		let input_tensor = self.instance.input(0)?;
+
+		let mut instance = self.borrow_instance();
+
+		let input_tensor = instance.input(0)?;
 		input_tensor.set_data(&input.into_vec())?;
 
-		self.instance.invoke()?;
+		instance.invoke()?;
 
 		let output =
 			{
-				let num_outputs = self.instance.output_tensor_count();
+				let num_outputs = instance.output_tensor_count();
 				let mut output = Vec::with_capacity(num_outputs); // I think there's only 4 values that can be returned here
 				for i in 0..num_outputs
 				{
-					output.push(self.instance.output(i)?);
+					output.push(instance.output(i)?);
 				}
 
 				output
@@ -95,26 +100,17 @@ impl<'a> HandLandmarker<'a>
 	{
 		let input_shape = Shape::new(vec![NUM_BATCHES, WIDTH, HEIGHT, BIT_DEPTH]);
 
-		let mut builder = HandLandmarkerBuilder { model :  Some(model), interpreter : None};
+		let result = HandLandmarkerBuilder {
+			model,
+			instance_builder : move |model : &Model| {
+				let instance = Interpreter::new(&model, Some(Options::default())).unwrap();
+				instance.resize_input(0, input_shape).unwrap();
+				instance.allocate_tensors().unwrap();
+				instance
+			},
+		}.build();
 
-		// Do instance thing
-		{
-			let instance = Interpreter::new(&builder.model, Some(Options::default()))?;
-			instance.resize_input(0, input_shape)?;
-			instance.allocate_tensors()?;
-
-			builder.interpreter = Some(instance);
-		}
-
-		let new_landmarker = Self { model : builder.model, instance: builder.interpreter.unwrap() };
-		/*new_landmarker.instance = Some(
-			{
-				let instance = Interpreter::new(&new_landmarker.model, Some(Options::default()))?;
-				instance.resize_input(0, input_shape)?;
-				instance.allocate_tensors()?;
-			});
-*/
-		Ok(new_landmarker)
+		Ok(result)
 	}
 
 }

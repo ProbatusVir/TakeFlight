@@ -1,18 +1,33 @@
+use crate::tests::computer_vision_test::HandLandmarkIndices::Presence;
+use std::fs::File;
+use std::io::Write;
 use crate::tf::tensor::Shape;
 use crate::tf::interpreter::Interpreter;
 use crate::tf::interpreter::Options;
 use crate::tf::model::Model;
-use image::imageops::FilterType;
+use image::imageops::{CatmullRom, FilterType};
 use image::{EncodableLayout, Rgb32FImage};
 use rstest::{fixture, rstest};
 use crate::Error;
+use crate::tests::computer_vision_test::HandLandmarkIndices::Handedness;
+use crate::tests::get_mut_pixel;
+use crate::computer_vision::HandLandmarker as Landmarker;
 
+#[repr(usize)]
+enum HandLandmarkIndices
+{
+	ScreenSpace	= 0,
+	Presence	= 1,
+	Handedness	= 2,
+	WorldSpace	= 3,
+}
 
-#[fixture]
-fn load_image_data() -> Result<Rgb32FImage, Error>
+const PRESENCE_THRESHOLD : f32 = 0.5;
+
+fn load_image_data(path : &str) -> Result<Rgb32FImage, Error>
 {
 	// Load in test data
-	let mut image = image::open("src/tests/test_data/open_palm.png")?;
+	let mut image = image::open(path)?;
 	Ok(
 		image.resize_exact(224, 224, FilterType::CatmullRom).into_rgb32f()
 	)
@@ -35,60 +50,143 @@ fn setup_interpreter<'a>(model: &'a Model<'a>) -> Result<Interpreter<'a>, Error>
 }
 
 #[rstest]
-fn hand_detector_runs(load_image_data : Result<Rgb32FImage, Error>) -> Result<(), Error>
+fn hand_detector_runs() -> Result<(), Error>
 {
-	// Arrange model and put the image in the input.
-	let model = Model::new("src/model/hand_landmarks_detector.tflite")?;
-	let instance = setup_interpreter(&model)?;
-	let input_tensor = instance.input(0)?;
-	let input_image = load_image_data?;
-	input_tensor.set_data(&input_image.as_bytes())?;
-
-	// Act
-	instance.invoke()?;
+	let input_image = load_image_data("src/tests/test_data/open_palm.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
+	let _output = instance.run_model(input_image)?;
 
 	Ok(())
 }
 
 #[rstest]
-fn hand_detector_output(load_image_data : Result<Rgb32FImage, Error>) -> Result<(), Error>
+fn hand_detector_output() -> Result<(), Error>
 {
 	// Arrange model and put the image in the input.
-	let model = Model::new("src/model/hand_landmarks_detector.tflite")?;
-	let instance = setup_interpreter(&model)?;
-	let input_tensor = instance.input(0)?;
-	let input_image = load_image_data?;
-	input_tensor.set_data(&input_image.as_bytes())?;
+	let input_image = load_image_data("src/tests/test_data/open_palm.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
 
 	// Act
-	instance.invoke()?;
+	let _output = instance.run_model(input_image)?;
+	let output = &_output[0];
 
 	// Assert
-	let output = instance.output(0)?;
 	assert_eq!(*output.shape(), Shape::new(vec![1, 63]));
 
 	Ok(())
 }
 
 #[rstest]
-fn looksie_at_hand_data(load_image_data : Result<Rgb32FImage, Error>) -> Result<(), Error>
+fn peek_at_hand_data() -> Result<(), Error>
 {
-	// Arrange model and put the image in the input.
-	let model = Model::new("src/model/hand_landmarks_detector.tflite")?;
-	let instance = setup_interpreter(&model)?;
-	let input_tensor = instance.input(0)?;
-	let input_image = load_image_data?;
-	input_tensor.set_data(&input_image.as_bytes())?;
+	let input_image = load_image_data("src/tests/test_data/open_palm.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
 
 	// Act
-	instance.invoke()?;
+	let output = instance.run_model(input_image)?;
+	output.into_iter().for_each(|x| { dbg!(x); });
 
-	let num_outputs = instance.output_tensor_count();
-	for i in 0..num_outputs
+	Ok(())
+}
+
+#[rstest]
+fn peek_two_hands_data() -> Result<(), Error>
+{
+	// Arrange
+	let input_image = load_image_data("src/tests/test_data/open_palm.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
+
+	// Act
+	let output = instance.run_model(input_image)?;
+	let num_outputs = output.len();
+
+	// Assert (and peek)
+	assert_eq!(8, num_outputs);
+	output.into_iter().for_each(|x| { dbg!(x); });
+
+	Ok(())
+}
+
+// This test requires manual review
+#[rstest]
+fn color_based_on_index() -> Result<(), Error>
+{
+	// Arrange model and put the image in the input.
+	let input_image = load_image_data("src/tests/test_data/open_palm.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
+
+	// Act
+	let output = instance.run_model(input_image)?;
+
+	// Act -- color the hands
+	let screen_coordinates = &output[0];
+
+	let mut output_image = image::open("src/tests/test_data/open_palm.png")?.resize_exact(224, 224, CatmullRom).into_rgb8();
+
+	for point in screen_coordinates.data::<f32>().chunks_exact(3)
 	{
-		let output = instance.output(i)?;
-		dbg!(output.shape());
+		// Values are 0-244 for x & y, and just all real numbers for z???
+		let x = point[0] as usize;
+		let y = point[1] as usize;
+		let _z = point[2];
+		let pixel = get_mut_pixel(&mut output_image, x, y, 224, 3);
+		pixel.swap_with_slice(&mut [0, 0, 0]);
 	}
+
+	let mut file = File::create("test_results/colored_hand.f32rgb")?;
+	file.write_all(&output_image.as_bytes())?;
+
+
+	Ok(())
+}
+
+#[rstest]
+fn determine_handedness() -> Result<(), Error>
+{
+	// Arrange
+	let input_image = load_image_data("src/tests/test_data/open_palm.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
+
+	// Act
+	let _output = instance.run_model(input_image)?;
+	let output = &_output[Handedness as usize];
+
+	dbg!(output.data::<f32>()[0]);
+
+	Ok(())
+}
+
+#[rstest]
+//#[case("src/tests/test_data/blank.png", false)]
+//#[case("src/tests/test_data/open_palm.png", true)]
+fn determine_hand_presence_false() -> Result<(), Error>
+{
+
+	// Arrange
+	let input_image = load_image_data("src/tests/test_data/blank.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
+
+	// Act
+	let _output = instance.run_model(input_image)?;
+	let output = &_output[Presence as usize];
+
+	assert_eq!(PRESENCE_THRESHOLD < output.data::<f32>()[0], false);
+
+	Ok(())
+}
+
+#[rstest]
+fn determine_hand_presence_true() -> Result<(), Error>
+{
+	// Arrange
+	let input_image = load_image_data("src/tests/test_data/open_palm.png")?;
+	let mut instance = Landmarker::from_path("src/model/hand_landmarks_detector.tflite")?;
+
+	// Act
+	let _output = instance.run_model(input_image)?;
+	let output = &_output[Presence as usize];
+
+	assert_eq!(PRESENCE_THRESHOLD > output.data::<f32>()[0], false);
 
 	Ok(())
 }
