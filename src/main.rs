@@ -4,6 +4,7 @@ mod drone_interface;
 mod error;
 #[cfg(test)]
 mod tests;
+mod computer_vision;
 
 use tflitec as tf;
 
