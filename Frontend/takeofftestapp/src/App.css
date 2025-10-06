@@ -160,20 +160,19 @@ button.secondary:hover { background: rgba(255,255,255,0.12); }
 .no-feed-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2; }
 
 /* Controller */
-.controller { position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; background: #dcdcdc; color: #333; }
-.controller-wire { padding: 0; }
-.controller-wire .hud, .video-stage .hud { position: absolute; top: 8px; left: 12px; right: 12px; display: flex; align-items: center; color: #fff; font-weight: 700; }
-.controller-wire .hud-left, .video-stage .hud-left { font-size: 22px; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
-.controller-wire .hud-right, .video-stage .hud-right { font-size: 22px; display: inline-flex; align-items: center; gap: 10px; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
-.controller-wire .battery { display: inline-flex; gap: 3px; margin-left: 2px; }
-.controller-wire .battery i { width: 12px; height: 8px; background: #39d353; border-radius: 1px; display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset; }
+/* After: no positional offsets; all groups are fully controlled by inline styles */
+.controls { position: absolute; width: 180px; display: grid; justify-items: center; gap: 8px; color: #fff; }
+.controls-left {}
+.controls-right {}
 
-/* Rings layout */
+/* Action buttons: position only via inline style */
+.action-buttons { position: absolute; display: flex; flex-direction: column; gap: 10px; z-index: 3; }
 
-/* Bottom dock */
-.bottom-dock { position: absolute; left: 50%; transform: translateX(-50%); bottom: 16px; height: 64px; width: 420px; border-radius: 18px; background: #2f2f2f; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; gap: 6px; padding: 0 18px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
-/* Allow inline top/left centering override for video screen */
-.video-stage .bottom-dock { transform: translate(-50%, -50%) !important; bottom: auto !important; }
+/* Bottom dock: centered and sized, but placement is controlled by inline top/left */
+.bottom-dock { position: absolute; left: 50%; transform: translate(-50%, -50%); height: 64px; width: 420px; border-radius: 18px; background: #2f2f2f; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; gap: 6px; padding: 0 18px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+
+
+
 .layout-preview { position: relative; }
 .layout-preview .action-buttons,
 .layout-preview .controls,
