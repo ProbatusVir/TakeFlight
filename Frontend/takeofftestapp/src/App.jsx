@@ -356,6 +356,18 @@ function VideoScreen({ onOpenSettings, onBack }) {
     try { return JSON.parse(localStorage.getItem('layoutConfig')) || defaultLayout() } catch { return defaultLayout() }
   })
 
+  const apiBase = 'http://localhost:8080'
+  const callApi = async (path) => {
+    try {
+      const res = await fetch(apiBase + path, { method: 'GET' })
+      if (!res.ok) throw new Error('API error')
+      return await res.json().catch(() => ({}))
+    } catch (e) {
+      console.error('API call failed', e)
+      alert('Command failed: ' + (e?.message || 'unknown'))
+    }
+  }
+
   useEffect(() => {
     const keyMap = {
       // WASD now control altitude (W/S) and yaw/rotation (A/D)
@@ -412,20 +424,20 @@ function VideoScreen({ onOpenSettings, onBack }) {
           <>
             {/* Action buttons (positionable) */}
             <div className="action-buttons" aria-label="Flight Actions" style={posStyle('actions')}>
-              <button className="action-btn emergency" title="Emergency Stop" aria-label="Emergency Stop">
+              <button className="action-btn emergency" title="Emergency Stop" aria-label="Emergency Stop" onClick={() => callApi('/api/emergency')}>
                 <span className="ico">
                   <img src={OctagonSvg} alt="" className="octagon" />
                 </span>
                 <span className="label">STOP</span>
               </button>
-              <button className="action-btn takeoff" title="Take Off">
+              <button className="action-btn takeoff" title="Take Off" onClick={() => callApi('/api/takeoff')}>
                 <span className="ico">
                   <img src={DroneBg} alt="" className="drone" />
                   <img src={ArrowUp} alt="" className="arrow" />
                 </span>
                 <span className="label">Take Off</span>
               </button>
-              <button className="action-btn land" title="Land">
+              <button className="action-btn land" title="Land" onClick={() => callApi('/api/land')}>
                 <span className="ico">
                   <img src={DroneBg} alt="" className="drone" />
                   <img src={ArrowDown} alt="" className="arrow" />
@@ -437,20 +449,20 @@ function VideoScreen({ onOpenSettings, onBack }) {
             {/* Left control: Altitude + Rotation (Undo arrows) */}
             <div className="controls controls-left" aria-label="Altitude and Rotation" style={posStyle('leftCtrl')}>
               <div className="pad-grid">
-                <div className="cell up"><button className="ctrl-btn" data-action="alt-up" title="Altitude Up"><img src={ArrowUp} alt="Altitude Up" /></button></div>
-                <div className="cell left"><button className="ctrl-btn" data-action="yaw-left" title="Rotate CCW"><img src={UndoLeft} alt="Rotate CCW" /></button></div>
-                <div className="cell right"><button className="ctrl-btn" data-action="yaw-right" title="Rotate CW"><img src={UndoRight} alt="Rotate CW" /></button></div>
-                <div className="cell down"><button className="ctrl-btn" data-action="alt-down" title="Altitude Down"><img src={ArrowDown} alt="Altitude Down" /></button></div>
+                <div className="cell up"><button className="ctrl-btn" data-action="alt-up" title="Altitude Up" onClick={() => callApi('/api/alt?dir=up&dist=30')}><img src={ArrowUp} alt="Altitude Up" /></button></div>
+                <div className="cell left"><button className="ctrl-btn" data-action="yaw-left" title="Rotate CCW" onClick={() => callApi('/api/rotate?dir=ccw&deg=15')}><img src={UndoLeft} alt="Rotate CCW" /></button></div>
+                <div className="cell right"><button className="ctrl-btn" data-action="yaw-right" title="Rotate CW" onClick={() => callApi('/api/rotate?dir=cw&deg=15')}><img src={UndoRight} alt="Rotate CW" /></button></div>
+                <div className="cell down"><button className="ctrl-btn" data-action="alt-down" title="Altitude Down" onClick={() => callApi('/api/alt?dir=down&dist=30')}><img src={ArrowDown} alt="Altitude Down" /></button></div>
               </div>
             </div>
 
             {/* Right control: Directional Movement */}
             <div className="controls controls-right" aria-label="Directional Movement" style={posStyle('rightCtrl')}>
               <div className="pad-grid">
-                <div className="cell up"><button className="ctrl-btn" data-action="move-up" title="Forward"><img src={ArrowUp} alt="Forward" /></button></div>
-                <div className="cell left"><button className="ctrl-btn" data-action="move-left" title="Left"><img src={ArrowLeft} alt="Left" /></button></div>
-                <div className="cell right"><button className="ctrl-btn" data-action="move-right" title="Right"><img src={ArrowRight} alt="Right" /></button></div>
-                <div className="cell down"><button className="ctrl-btn" data-action="move-down" title="Backward"><img src={ArrowDown} alt="Backward" /></button></div>
+                <div className="cell up"><button className="ctrl-btn" data-action="move-up" title="Forward" onClick={() => callApi('/api/move?dir=forward&dist=50')}><img src={ArrowUp} alt="Forward" /></button></div>
+                <div className="cell left"><button className="ctrl-btn" data-action="move-left" title="Left" onClick={() => callApi('/api/move?dir=left&dist=50')}><img src={ArrowLeft} alt="Left" /></button></div>
+                <div className="cell right"><button className="ctrl-btn" data-action="move-right" title="Right" onClick={() => callApi('/api/move?dir=right&dist=50')}><img src={ArrowRight} alt="Right" /></button></div>
+                <div className="cell down"><button className="ctrl-btn" data-action="move-down" title="Backward" onClick={() => callApi('/api/move?dir=back&dist=50')}><img src={ArrowDown} alt="Backward" /></button></div>
               </div>
             </div>
           </>
@@ -473,10 +485,52 @@ function VideoScreen({ onOpenSettings, onBack }) {
 }
 
 function ConnectionView() {
+  const [status, setStatus] = useState('idle') // 'idle' | 'working' | 'ok' | 'err'
+  const [message, setMessage] = useState('')
+
+  const apiBase = 'http://localhost:8080'
+  const reinit = async () => {
+    setStatus('working')
+    setMessage('')
+    try {
+      const res = await fetch(apiBase + '/api/init', { method: 'GET' })
+      const text = await res.text()
+      if (!res.ok) throw new Error(text || 'API error')
+      setStatus('ok')
+      setMessage('Drone initialized successfully.')
+    } catch (e) {
+      setStatus('err')
+      setMessage('Init failed: ' + (e?.message || 'unknown error'))
+    }
+  }
+
   return (
     <div className="panel scrollable">
       <h1 className="page-title">Connection</h1>
-      <p style={{ color: 'var(--neutral-gray-4)' }}>No drone connected. Configure or connect your device here.</p>
+      <p style={{ color: 'var(--neutral-gray-4)', marginBottom: 12 }}>
+        Use this to initialize or reinitialize the drone connection.
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button className="primary" onClick={reinit} disabled={status === 'working'}>
+          {status === 'working' ? 'Initializing…' : 'Reinitialize Drone'}
+        </button>
+        {status === 'ok' && <span style={{ color: '#6fe76f' }}>Ready</span>}
+        {status === 'err' && <span style={{ color: '#ff6b6b' }}>Error</span>}
+      </div>
+
+      {message && (
+        <div style={{ marginTop: 10, color: status === 'err' ? '#ff8f8f' : '#bfe7bf' }}>
+          {message}
+        </div>
+      )}
+
+      <div className="section" style={{ marginTop: 16 }}>Tips</div>
+      <ul className="bullets">
+        <li>Connect your PC to the TELLO-* Wi‑Fi first.</li>
+        <li>Ensure Windows Firewall allows UDP for this app, or temporarily disable to test.</li>
+        <li>If your drone uses a non-standard IP, let me know so we can make it configurable.</li>
+      </ul>
     </div>
   )
 }
