@@ -20,7 +20,7 @@ h1, h2, h3, h4, h5, h6,
 .section,
 .nav-item,
 .g-name,
-.modal h2 { font-family: 'IBM Plex Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-weight: 700; }
+.modal h2 { font-family: 'IBM Plex Sans'; font-weight: 700; }
 
 /* Ensure controls inherit body font */
 button, input, select, textarea { font-family: inherit; }
@@ -149,7 +149,7 @@ button.secondary:hover { background: rgba(255,255,255,0.12); }
 .action-buttons { position: absolute; left: 20px; bottom: 280px; display: flex; flex-direction: column; gap: 10px; z-index: 3; }
 .action-btn { min-width: 140px; height: 44px; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #fff; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .action-btn .ico { position: relative; width: 28px; height: 28px; }
-.action-btn .ico .drone { position: absolute; inset: 0; opacity: 0.9; }
+.action-btn .ico .drone { width: 100%; height: 100%; }
 .action-btn .ico .arrow { position: absolute; right: -6px; bottom: -6px; width: 18px; height: 18px; }
 .action-btn.takeoff { background: rgba(55,196,76,0.18); border-color: rgba(55,196,76,0.45); }
 .action-btn.land { background: rgba(255,255,255,0.08); }
