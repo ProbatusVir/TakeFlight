@@ -15,6 +15,24 @@ import UndoRight from './assets/Arrow/Arrow_Undo_Up_Right.svg'
 // Emergency shape
 import OctagonSvg from './assets/Shape/Octagon.svg'
 
+// --- API helper ---
+const getApiBase = () => (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) ? import.meta.env.VITE_API_BASE : 'http://localhost:8080'
+
+async function apiRequest(path, options = {}) {
+  const controller = new AbortController()
+  const timeoutMs = options.timeoutMs ?? 8000
+  const id = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(getApiBase() + path, { ...options, signal: controller.signal })
+    const text = await res.text()
+    if (!res.ok) throw new Error(text || `HTTP ${res.status}`)
+    // Try parse JSON, fallback to raw text
+    try { return JSON.parse(text) } catch { return text }
+  } finally {
+    clearTimeout(id)
+  }
+}
+
 function Topbar({ batteryPct = null, heightM = null }) {
   const pct = typeof batteryPct === 'number' && batteryPct >= 0 && batteryPct <= 100 ? Math.round(batteryPct) : null
   const showHeight = typeof heightM === 'number'
@@ -356,15 +374,14 @@ function VideoScreen({ onOpenSettings, onBack }) {
     try { return JSON.parse(localStorage.getItem('layoutConfig')) || defaultLayout() } catch { return defaultLayout() }
   })
 
-  const apiBase = 'http://localhost:8080'
   const callApi = async (path) => {
     try {
-      const res = await fetch(apiBase + path, { method: 'GET' })
-      if (!res.ok) throw new Error('API error')
-      return await res.json().catch(() => ({}))
+      const res = await apiRequest(path, { method: 'GET' })
+      return res || {}
     } catch (e) {
       console.error('API call failed', e)
       alert('Command failed: ' + (e?.message || 'unknown'))
+      return {}
     }
   }
 
@@ -488,16 +505,13 @@ function ConnectionView() {
   const [status, setStatus] = useState('idle') // 'idle' | 'working' | 'ok' | 'err'
   const [message, setMessage] = useState('')
 
-  const apiBase = 'http://localhost:8080'
   const reinit = async () => {
     setStatus('working')
     setMessage('')
     try {
-      const res = await fetch(apiBase + '/api/init', { method: 'GET' })
-      const text = await res.text()
-      if (!res.ok) throw new Error(text || 'API error')
+      const res = await apiRequest('/api/init', { method: 'GET' })
       setStatus('ok')
-      setMessage('Drone initialized successfully.')
+      setMessage(typeof res === 'string' ? res : 'Drone initialized successfully.')
     } catch (e) {
       setStatus('err')
       setMessage('Init failed: ' + (e?.message || 'unknown error'))
