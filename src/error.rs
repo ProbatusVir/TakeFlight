@@ -11,6 +11,14 @@ pub enum Error
 	ImageError(image::ImageError),
 	TFLiteC(tflitec::Error),
 	H264Error(openh264::Error),
+	Infallible(std::convert::Infallible)
+}
+
+impl From<std::convert::Infallible> for Error
+{
+	fn from(value: std::convert::Infallible) -> Self {
+		Error::Infallible(value)
+	}
 }
 
 impl From<openh264::Error> for Error
@@ -60,6 +68,7 @@ impl Display for Error {
 			Error::ImageError(e) => { e.fmt(f) }
 			Error::TFLiteC(e) => { e.fmt(f) }
 			Error::H264Error(e) => { e.fmt(f) }
+			Error::Infallible(e) => { e.fmt(f) }
 		}
 	}
 }
