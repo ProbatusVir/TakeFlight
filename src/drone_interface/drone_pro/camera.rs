@@ -1,7 +1,5 @@
-use std::fs::File;
 use std::io::Read;
 use zerocopy::IntoBytes;
-use crate::debug_utils::view_raw_memory;
 use crate::drone_interface::drone_pro::camera::BitFlagsVPXCCMPT::{ShiftCC, ShiftV, ShiftP, ShiftPT, ShiftX, CC, M, P, PT, V, X, ShiftM};
 use crate::error::Error;
 
