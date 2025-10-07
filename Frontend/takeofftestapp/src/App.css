@@ -20,7 +20,7 @@ h1, h2, h3, h4, h5, h6,
 .section,
 .nav-item,
 .g-name,
-.modal h2 { font-family: 'IBM Plex Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-weight: 700; }
+.modal h2 { font-family: 'IBM Plex Sans'; font-weight: 700; }
 
 /* Ensure controls inherit body font */
 button, input, select, textarea { font-family: inherit; }
@@ -75,10 +75,11 @@ button.secondary:hover { background: rgba(255,255,255,0.12); }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: inherit; cursor: pointer; }
 .icon-button:hover { background: rgba(255,255,255,0.12); }
 
-.sidebar { position: relative; width: 260px; padding-top: 60px; background: var(--rich-black); border-right: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 2px; border-radius: 16px; }
+.sidebar { position: relative; width: 260px; padding-top: 60px; background: var(--rich-black); display: flex; flex-direction: column; gap: 2px; border-radius: 16px; }
 .nav-item { text-align: left; padding: 16px 18px; background: transparent; border: none; color: #dfe4ea; font-weight: 600; border-radius: 6px; }
 .nav-item:hover { background: rgba(255,255,255,0.04); }
-.nav-item.active { background: var(--rich-black-80); }
+/* Active nav matches panel background to create a seamless blend into the right side */
+.nav-item.active { background: var(--rich-black-80); color: #ffffff; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 
 .main { flex: 1; padding: 0; margin-left: 0; background: var(--midnight-blue); border-radius: 0; overflow: hidden; height: 100dvh; position: relative; }
 .panel { position: relative; height: 100%; padding: 12px 24px 24px; border-radius: 0; background: var(--rich-black-80); color: #f1f1f1; }
@@ -148,7 +149,7 @@ button.secondary:hover { background: rgba(255,255,255,0.12); }
 .action-buttons { position: absolute; left: 20px; bottom: 280px; display: flex; flex-direction: column; gap: 10px; z-index: 3; }
 .action-btn { min-width: 140px; height: 44px; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #fff; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .action-btn .ico { position: relative; width: 28px; height: 28px; }
-.action-btn .ico .drone { position: absolute; inset: 0; opacity: 0.9; }
+.action-btn .ico .drone { width: 100%; height: 100%; }
 .action-btn .ico .arrow { position: absolute; right: -6px; bottom: -6px; width: 18px; height: 18px; }
 .action-btn.takeoff { background: rgba(55,196,76,0.18); border-color: rgba(55,196,76,0.45); }
 .action-btn.land { background: rgba(255,255,255,0.08); }
@@ -159,20 +160,19 @@ button.secondary:hover { background: rgba(255,255,255,0.12); }
 .no-feed-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2; }
 
 /* Controller */
-.controller { position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; background: #dcdcdc; color: #333; }
-.controller-wire { padding: 0; }
-.controller-wire .hud, .video-stage .hud { position: absolute; top: 8px; left: 12px; right: 12px; display: flex; align-items: center; color: #fff; font-weight: 700; }
-.controller-wire .hud-left, .video-stage .hud-left { font-size: 22px; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
-.controller-wire .hud-right, .video-stage .hud-right { font-size: 22px; display: inline-flex; align-items: center; gap: 10px; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
-.controller-wire .battery { display: inline-flex; gap: 3px; margin-left: 2px; }
-.controller-wire .battery i { width: 12px; height: 8px; background: #39d353; border-radius: 1px; display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset; }
+/* After: no positional offsets; all groups are fully controlled by inline styles */
+.controls { position: absolute; width: 180px; display: grid; justify-items: center; gap: 8px; color: #fff; }
+.controls-left {}
+.controls-right {}
 
-/* Rings layout */
+/* Action buttons: position only via inline style */
+.action-buttons { position: absolute; display: flex; flex-direction: column; gap: 10px; z-index: 3; }
 
-/* Bottom dock */
-.bottom-dock { position: absolute; left: 50%; transform: translateX(-50%); bottom: 16px; height: 64px; width: 420px; border-radius: 18px; background: #2f2f2f; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; gap: 6px; padding: 0 18px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
-/* Allow inline top/left centering override for video screen */
-.video-stage .bottom-dock { transform: translate(-50%, -50%) !important; bottom: auto !important; }
+/* Bottom dock: centered and sized, but placement is controlled by inline top/left */
+.bottom-dock { position: absolute; left: 50%; transform: translate(-50%, -50%); height: 64px; width: 420px; border-radius: 18px; background: #2f2f2f; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; gap: 6px; padding: 0 18px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+
+
+
 .layout-preview { position: relative; }
 .layout-preview .action-buttons,
 .layout-preview .controls,
@@ -226,6 +226,9 @@ button.secondary:hover { background: rgba(255,255,255,0.12); }
 .layout-preview .controls,
 .layout-preview .bottom-dock { cursor: move; }
 
+/* Drag UX hardening */
+.layout-preview { user-select: none; -webkit-user-drag: none; }
+
 :root {
   --rich-black: #010203;
   --pure-white: #FFFFFF;
@@ -236,6 +239,3 @@ button.secondary:hover { background: rgba(255,255,255,0.12); }
   --neutral-gray-4: #C9C9C9;
   color-scheme: light dark;
 }
-
-/* Drag UX hardening */
-.layout-preview { user-select: none; -webkit-user-drag: none; }
