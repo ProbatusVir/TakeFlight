@@ -7,3 +7,8 @@ Consequently, if you want to test one module, and not another, you should go int
 ### Currently the manual testing modules include
 * camera_conversion_test (an integration test)
 * stream_tests (The encoding is lossy, so testing that it is actually working correctly is a little difficult)
+
+### Contributors
+* Rashid Byrdsell
+* Joshua Smith
+* Ian Shaw
