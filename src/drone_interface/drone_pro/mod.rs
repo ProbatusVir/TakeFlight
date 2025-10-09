@@ -99,13 +99,17 @@ fn test() -> Result<(), Error>
 	{
 		let bytes_read = video_stream_sock.recv(&mut frame_buf)?;
 		frame_cursor = Cursor::new(&frame_buf);
+		// Strip the RTP header from the stream
 		let new_header = drone_interface::drone_pro::camera::RTPHeader::from_stream(&mut frame_cursor)?;
+
+		// If it's part of an image, append it to the image buffer, else end the image
 		if new_header.timestamp == header.timestamp {
+			// Add only the jpeg data. Markers and payload, not sure if the markers must go yet, too.
 			frame.extend_from_slice(&frame_buf[frame_cursor.position() as usize..bytes_read]);
 			number_of_packets += 1;
-			println!("We've recieved {number_of_packets} packets!");
+			println!("We've received {number_of_packets} packets!");
 			continue
-		} else { break }
+		} else { break /* TODO: add logic here */ }
 	}
 
 	println!("Number of packets: {number_of_packets}");
