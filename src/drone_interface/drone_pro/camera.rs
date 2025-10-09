@@ -138,7 +138,7 @@ impl JpegMainHeader
 
 
 #[derive(Debug)]
-struct JpegRestartHeader
+pub struct JpegRestartHeader
 {
 	pub restart_interval	: u16,
 	pub f					: bool,
@@ -177,7 +177,7 @@ impl JpegRestartHeader
 
 pub type JQTH = JpegQuantizationTableHeader;
 #[derive(Debug)]
-struct JpegQuantizationTableHeader
+pub struct JpegQuantizationTableHeader
 {
 	pub mbz			: u8,
 	pub precision	: u8,
