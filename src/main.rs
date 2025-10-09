@@ -5,6 +5,7 @@ mod error;
 #[cfg(test)]
 mod tests;
 mod computer_vision;
+mod video;
 
 use tflitec as tf;
 
