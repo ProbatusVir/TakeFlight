@@ -20,9 +20,6 @@ use std::time::Duration;
 
 
 fn main() -> Result<(), Error> {
-	drone_pro::test()?;
-
-	return Ok(());
 	println!("Hello, world!");
     let frontend_dir = r"Frontend\\takeofftestapp"; // Windows path
     let mut react_child = Command::new("cmd")
