@@ -153,6 +153,9 @@ fn make_huffman_header(p : &mut Vec<u8>, codelens : &[u8], symbols : &[u8],
 /// lqt and cqt are merely containers, their values at the time they are passed in do not matter
 fn make_tables(q : i32, lqt : &mut [u8;64], cqt : &mut [u8;64])
 {
+	// Apparently, if q is greater than 128, we should use the tables as-is
+	if q >= 128 { return }
+
 	let mut factor = q;
 
 	// re-set factor, perhaps
