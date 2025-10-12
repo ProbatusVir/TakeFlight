@@ -94,12 +94,13 @@ pub(crate) fn test() -> Result<(), Error>
 	let mut frame = Vec::new();
 	//frame.extend_from_slice(&frame_buf[(byte_after_header) as usize..bytes_read]); // Read only the payload information from the packet -- this should be part of the other code
 	frame.extend_from_slice(&frame_buf[frame_cursor.position() as usize..bytes_read]); // Read only the payload information from the packet -- this should be part of the other code
-	let mut cqt: [u8;64] = [0;64];
 	let mut lqt : [u8;64] = [0;64];
+	let mut cqt: [u8;64] = [0;64];
+
 	// initialize the dang tables >:(
 	{
 		let jpeg_information = jpeg_header.quantization_header.as_ref().unwrap();
-		cqt.clone_from_slice(&jpeg_information.table[..64]);
+		lqt.clone_from_slice(&jpeg_information.table[..64]);
 		cqt.clone_from_slice(&jpeg_information.table[64..]);
 	}
 	let mut out_buffer = Vec::new();
