@@ -1,17 +1,17 @@
+use crate::computer_vision::HandLandmarker as Landmarker;
+use crate::tests::computer_vision_test::HandLandmarkIndices::Handedness;
 use crate::tests::computer_vision_test::HandLandmarkIndices::Presence;
-use std::fs::File;
-use std::io::Write;
-use crate::tf::tensor::Shape;
+use crate::tests::get_mut_pixel;
 use crate::tf::interpreter::Interpreter;
 use crate::tf::interpreter::Options;
 use crate::tf::model::Model;
+use crate::tf::tensor::Shape;
+use crate::Error;
 use image::imageops::{CatmullRom, FilterType};
 use image::{EncodableLayout, Rgb32FImage};
 use rstest::{fixture, rstest};
-use crate::Error;
-use crate::tests::computer_vision_test::HandLandmarkIndices::Handedness;
-use crate::tests::get_mut_pixel;
-use crate::computer_vision::HandLandmarker as Landmarker;
+use std::fs::File;
+use std::io::Write;
 
 #[repr(usize)]
 enum HandLandmarkIndices

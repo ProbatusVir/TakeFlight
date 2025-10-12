@@ -7,6 +7,7 @@ name = "TakeFlight"
 version = "0.1.0"
 dependencies = [
  "image",
+ "lebe",
  "local-ip-address",
  "nokhwa",
  "openh264",

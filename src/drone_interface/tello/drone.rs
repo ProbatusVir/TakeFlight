@@ -1,10 +1,10 @@
-use std::net::{ Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
-use std::thread::sleep;
-use std::time::Duration;
-use local_ip_address::local_ip;
 use crate::drone_interface;
 use crate::drone_interface::Unit;
 use crate::error::Error;
+use local_ip_address::local_ip;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+use std::thread::sleep;
+use std::time::Duration;
 
 const WAIT_TIME : u64 = 3;
 
@@ -28,7 +28,7 @@ impl drone_interface::Drone for Drone
 			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, COMMAND_PORT);
 
-			let mut command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
 			command_sock.connect(SocketAddrV4::new(CONN_ADDR, COMMAND_PORT) )?;
 
 			command_sock
@@ -39,7 +39,7 @@ impl drone_interface::Drone for Drone
 			const ARBITRARY_PORT : u16 = 8886;
 			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, INFO_PORT);
-			let mut info_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let info_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
 			info_sock.connect(CONN_SOCK)?;
 
 			info_sock
@@ -51,7 +51,7 @@ impl drone_interface::Drone for Drone
 			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, VIDEO_PORT);
 
-			let mut video_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let video_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
 			video_sock.connect(CONN_SOCK)?;
 
 			video_sock

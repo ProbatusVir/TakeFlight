@@ -16,9 +16,10 @@ tflitec = { version = "0.7.0", features = [] }
 image = "0.25.8"
 sdl = "0.3.6"
 
-# This is for self-referential code. Doesn't strictly provide functionality to the program.
-ouroboros = "0.18.5"
-zerocopy = "0.8.27"
+
+ouroboros = "0.18.5"    # This is for self-referential code. Doesn't strictly provide functionality to the program.
+zerocopy = "0.8.27" # This is for low-level byte operations on primitive types
+lebe = "0.5.3"  # This is for cheap endian translations
 
 [profile.test]
 opt-level = 3

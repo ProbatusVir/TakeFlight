@@ -1,10 +1,10 @@
-use std::io::{Error, Write};
 use crate::helper::{rgb_image_to_yuv_image, yuv_image_to_rgb_image};
-use std::fs::File;
-use std::fs;
-use rstest::rstest;
 use crate::tests::mock_camera::MockCamera;
 use crate::tests::TEST_PATH;
+use rstest::rstest;
+use std::fs;
+use std::fs::File;
+use std::io::{Error, Write};
 
 // This is taking a picture through YOUR camera.
 #[rstest]

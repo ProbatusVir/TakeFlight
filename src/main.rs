@@ -4,16 +4,25 @@ mod drone_interface;
 mod error;
 #[cfg(test)]
 mod tests;
+#[cfg(debug_assertions)]
+pub(crate) mod debug_utils;
+
 mod computer_vision;
 mod video;
 
 use tflitec as tf;
 
+use crate::drone_interface::drone_pro;
 use error::Error;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+
+
 fn main() -> Result<(), Error> {
+	drone_pro::test()?;
+
+	return Ok(());
 	println!("Hello, world!");
     let frontend_dir = r"Frontend\\takeofftestapp"; // Windows path
     let mut react_child = Command::new("cmd")

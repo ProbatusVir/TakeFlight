@@ -1,10 +1,10 @@
 // https://datatracker.ietf.org/doc/html/rfc2435
 
-use std::io::{Cursor, Write};
-use zerocopy::IntoBytes;
 use crate::drone_interface::drone_pro::camera::JpegMainHeader;
 use crate::error::Error;
 use crate::video::rfc2435::Markers::{DriHeaderMarker, EndOfImageMarker, HuffmanTableMarker, QuantizationTableMarker, StartOfFileMarker, StartOfImageMarker, StartOfScanMarker};
+use std::io::Write;
+use zerocopy::IntoBytes;
 
 // Luminance constants
 // Yes, this is like Directional Current. This makes sense in the context of Discrete Cosine Transform, apparently.
@@ -98,6 +98,14 @@ enum Markers
 	StartOfScanMarker		= 0xFFDA_u16.to_be(),
 
 	EndOfImageMarker		= 0xFFD9_u16.to_be(),
+	JfifApp0Marker			= 0xFFE0_u16.to_be(),
+}
+
+pub struct Thumbnail<'a> 	// probably missing a whole 6 bytes on alignment or something.
+{
+	image_data	: &'a [u8],
+	width		: u8,
+	height		: u8,
 }
 
 type QuantizationHeader = [u8;132];
@@ -105,7 +113,7 @@ type QuantizationHeader = [u8;132];
 /// I am assuming that the table number should be a byte, since the alternative (i32) makes no sense
 ///
 /// qt should be either the luminance or chrominance quant table
-fn make_quant_header(p : &mut Cursor<&mut Vec<u8>>, qt : &[u8], table_number : u8) -> Result<(), Error>
+fn make_quant_header(p : &mut Vec<u8>, qt : &[u8], table_number : u8) -> Result<(), Error>
 {
 	debug_assert_eq!(qt.len(), 64);
 
@@ -122,11 +130,10 @@ fn make_quant_header(p : &mut Cursor<&mut Vec<u8>>, qt : &[u8], table_number : u
 	Ok(())
 }
 
-fn make_huffman_header(p : &mut Cursor<&mut Vec<u8>>, codelens : &[u8], symbols : &[u8],
-						table_number : u8, table_class : u8) -> Result<(), Error>
+fn make_huffman_header(p : &mut Vec<u8>, codelens : &[u8], symbols : &[u8],
+					   table_number : u8, table_class : u8) -> Result<(), Error>
 {
 	debug_assert_eq!(codelens.len(), 16);
-	debug_assert_eq!(symbols.len(), 16);
 
 	p.write_all([
 		HuffmanTableMarker as u16,
@@ -163,7 +170,7 @@ fn make_tables(q : i32, lqt : &mut [u8;64], cqt : &mut [u8;64])
 	}
 }
 
-fn make_dri_header(p : &mut Cursor<&mut Vec<u8>>, dri : u16) -> Result<(), Error>
+fn make_dri_header(p : &mut Vec<u8>, dri : u16) -> Result<(), Error>
 {
 	p.write_all([
 		DriHeaderMarker as u16,
@@ -185,8 +192,8 @@ fn make_dri_header(p : &mut Cursor<&mut Vec<u8>>, dri : u16) -> Result<(), Error
 /// * dri: restart interval in MCUs, or 0 if no restarts.
 /// * p: pointer to the buffer, we will append the payload to the end of the buffer.
 /// ```
-pub fn make_headers(p : &mut Cursor<&mut Vec<u8>>, headers_type : u8, mut blocks_w : u16, mut blocks_h : u16,
-				lqt : &mut [u8], cqt : &mut[u8], dri : u16) -> Result<(), Error>
+pub fn make_headers(p : &mut Vec<u8>, headers_type : u8, blocks_w : u16, blocks_h : u16,
+					lqt : &mut [u8], cqt : &mut[u8], dri : u16) -> Result<(), Error>
 {
 	debug_assert!(headers_type == 0 || headers_type == 1, "For headers_type not 0, or 1, there is no definition in this standard.");
 
@@ -207,19 +214,21 @@ pub fn make_headers(p : &mut Cursor<&mut Vec<u8>>, headers_type : u8, mut blocks
 	/* Write the start of file and the length of this segment */ {
 		p.write_all([
 			StartOfFileMarker as u16,
-			17_u16, // length of StartOfFile Header (minus the marker)
+			17_u16.to_be(), // length of StartOfFile Header (minus the marker)
 		].as_bytes())?;
 
 		p.write_all(&[0x08])?; // 8 is for 8-bits of precision (for the pixel components, YUV8, I think)
 
 		// Write out the height in pixels
 		p.write_all([
-			h,
-			w,
+			h.to_be(),
+			w.to_be(),
 		].as_bytes())?;
 
-		// Comp 0
-		p.write_all(&[0x00])?;
+		p.write_all(&[
+			0x03, // number of components
+			0x00, // comp 0
+		])?;
 
 		// hsamp = 2;	vsamp = 1 | 2
 		p.write_all(&[ if headers_type == 0 { 0x21 } else { 0x22 }])?;
@@ -248,13 +257,14 @@ pub fn make_headers(p : &mut Cursor<&mut Vec<u8>>, headers_type : u8, mut blocks
 			12_u16.to_be(),	// Length of the start of scan header
 		].as_bytes())?;
 
+
 		p.write_all(&[
-			0x03,
-			0x00,	// comp 0
+			0x03,	// number of components
+			0x00,	// comp (y)
 			0x00,	// huffman table 0
-			0x01,	// comp 1
+			0x01,	// comp (cr)
 			0x11,	// huffman table 1
-			0x02,	// comp 2
+			0x02,	// comp (cb)
 			0x11,	// huffman table 1
 			0x00,	// first DCT coefficient
 			63,		// last DCT coefficient
@@ -266,21 +276,88 @@ pub fn make_headers(p : &mut Cursor<&mut Vec<u8>>, headers_type : u8, mut blocks
 }
 
 /// all_payloads: The payload for each one of the images.
-pub fn create_image(out_buffer : &mut Vec<u8>, jpeg_main_header : JpegMainHeader, all_payloads : &mut [u8],
-					lqt : &mut [u8;64], cqt : &mut [u8;64]) -> Result<(), Error>
+pub fn create_image(out_buffer : &mut Vec<u8>, jpeg_main_header : &JpegMainHeader, all_payloads : &mut [u8],
+					lqt : &mut [u8;64], cqt : &mut [u8;64], _thumbnail : Option<Thumbnail>) -> Result<(), Error>
 {
 	if jpeg_main_header.packet_type > 127 { return Err(Error::Custom("JPEG packet types above 127 are not implemented."))? }
 	let packet_type = jpeg_main_header.packet_type % 64;
 
-	make_headers(&mut Cursor::new(out_buffer), packet_type,
+	make_tables(jpeg_main_header.quantization as i32, lqt, cqt);
+
+	//out_buffer.write_all((StartOfImageMarker as u16).as_bytes())?;
+
+
+	/* insert JFIF APP0 */ /* {
+		const SIZE_OF_SEGMENT : u16 = 2 + 5 + 2 + 1 + 2 + 2 + 1 + 1;
+		let (total_segment_size, thumbnail_w, thumbnail_h) = if thumbnail.is_some() {
+				let thumbnail = thumbnail.as_ref().unwrap();
+				(SIZE_OF_SEGMENT + thumbnail.image_data.len() as u16, thumbnail.width, thumbnail.height)
+			} else {
+				(SIZE_OF_SEGMENT, 0, 0)
+			};
+
+		out_buffer.write_all([
+			JfifApp0Marker as u16,
+			total_segment_size.to_be(),
+		].as_bytes())?;
+
+		out_buffer.write_all(b"JFIF\0")?;
+
+		out_buffer.write_all(&[
+			0x01,	// Major version of JFIF
+			0x02,	// Minor version of JFIF
+			0x00,	// Units for pixel density. none are specified for this standard.
+		])?;
+
+		// TODO: make these 1 again
+		out_buffer.write_all([
+			2_16,	// horizontal pixel density
+			2_u16,	// vertical pixel density
+		].as_bytes())?;
+
+		out_buffer.write_all(&[
+			thumbnail_w,	// thumbnail width
+			thumbnail_h,	// thumbnail height
+		])?;
+
+		if thumbnail.is_some() { out_buffer.write_all(thumbnail.unwrap().image_data)?; }
+	} */
+
+
+	make_headers(out_buffer, packet_type,
 				 jpeg_main_header.width / 8, jpeg_main_header.height / 8,
 				 lqt, cqt,
-				 jpeg_main_header.restart_header.unwrap().restart_interval)?;
+				 jpeg_main_header.restart_header.as_ref().unwrap().restart_interval)?;
 
-	out_buffer.write_all(all_payloads)?;
+	// FIXME: Presumably, the issue is in the payloads
 
-	out_buffer.write_all(&(EndOfImageMarker as u16).to_be_bytes())?;
-
+	out_buffer.write(all_payloads)?;
+	out_buffer.write(&(EndOfImageMarker as u16).as_bytes())?;
 
 	Ok(())
 }
+
+
+
+/***********************************************************************************************
+ * This next section is for sending a jpeg in the format of this specification
+***********************************************************************************************/
+
+/*
+fn send_frame<T : Write>(mut start_seq : u16, ts : u32, ssrc: u32,
+			  jpeg_data : &[u8], headers_type : u8,
+			  type_spec : u8, width : usize, height : usize, dri : u16,
+			  q : u8, lqt : &[u8], ctq : &[u8], packet_size : usize,
+			  out_stream : T)
+{
+	let mut packet_buffer = Vec::with_capacity(packet_size);
+	RTPHeader {
+		version: 2,
+		payload_type : 0,
+		sequence_number : 0,
+		timestamp : 0,
+		ssrc,
+		is_last_in_frame: false,
+	}
+}
+*/

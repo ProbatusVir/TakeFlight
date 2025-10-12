@@ -1,8 +1,8 @@
 mod pixel_tests
 {
-	use crate::helper::rgb_pixel_to_yuv_pixel_in_place;
-	use crate::helper::{yuv_image_to_rgb_image};
 	use crate::helper;
+	use crate::helper::rgb_pixel_to_yuv_pixel_in_place;
+	use crate::helper::yuv_image_to_rgb_image;
 	use rstest::rstest;
 
 	#[rstest]

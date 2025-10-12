@@ -1,17 +1,17 @@
+use crate::debug_utils::view_raw_hex;
+use crate::error::Error;
+use local_ip_address::local_ip;
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
-use local_ip_address::local_ip;
-use crate::drone_interface;
-use crate::error::Error;
 
 pub mod camera;
 
-#[test]
-fn test() -> Result<(), Error>
+//#[test]
+pub(crate) fn test() -> Result<(), Error>
 {
 	/*
 
@@ -86,34 +86,48 @@ fn test() -> Result<(), Error>
 	let mut frame_buf = vec![0; 4096];
 	let bytes_read = video_stream_sock.recv(&mut frame_buf)?;
 	let mut frame_cursor = Cursor::new(&frame_buf[0..bytes_read]); // This slice doesn't actually *really* matter... just makes some things a little nicer.
-	let header = drone_interface::drone_pro::camera::RTPHeader::from_stream(&mut frame_cursor)?;
-	let byte_after_header = frame_cursor.position();
-	let jpeg_header = drone_interface::drone_pro::camera::JpegMainHeader::from_stream(&mut frame_cursor)?;
+	let _header = camera::RTPHeader::from_stream(&mut frame_cursor)?;
+	let _byte_after_header = frame_cursor.position();
+	let jpeg_header = camera::JpegMainHeader::from_stream(&mut frame_cursor, false)?;
 
 	// Create frames and copy the first buffer's data
 	let mut frame = Vec::new();
-	frame.extend_from_slice(&frame_buf[byte_after_header as usize..bytes_read]); // Read only the payload information from the packet -- this should be part of the other code
+	//frame.extend_from_slice(&frame_buf[(byte_after_header) as usize..bytes_read]); // Read only the payload information from the packet -- this should be part of the other code
+	frame.extend_from_slice(&frame_buf[frame_cursor.position() as usize..bytes_read]); // Read only the payload information from the packet -- this should be part of the other code
+	let mut cqt: [u8;64] = [0;64];
+	let mut lqt : [u8;64] = [0;64];
+	// initialize the dang tables >:(
+	{
+		let jpeg_information = jpeg_header.quantization_header.as_ref().unwrap();
+		cqt.clone_from_slice(&jpeg_information.table[..64]);
+		cqt.clone_from_slice(&jpeg_information.table[64..]);
+	}
+	let mut out_buffer = Vec::new();
+	let mut number_of_packets = 1;
 
-	let mut number_of_packets = 0;
+	println!("Number of packets: {number_of_packets}");
 	loop
 	{
 		let bytes_read = video_stream_sock.recv(&mut frame_buf)?;
 		frame_cursor = Cursor::new(&frame_buf);
 		// Strip the RTP header from the stream
-		let new_header = drone_interface::drone_pro::camera::RTPHeader::from_stream(&mut frame_cursor)?;
+		let new_header = camera::RTPHeader::from_stream(&mut frame_cursor)?;
+		let _jpeg_header = camera::JpegMainHeader::from_stream(&mut frame_cursor, true)?;
 
-		// If it's part of an image, append it to the image buffer, else end the image
-		if new_header.timestamp == header.timestamp {
-			// Add only the jpeg data. Markers and payload, not sure if the markers must go yet, too.
+		// we're gonna assume that the images are all sent in order.
+		{
+			// Add only the jpeg data. Markers and payload
 			frame.extend_from_slice(&frame_buf[frame_cursor.position() as usize..bytes_read]);
-			number_of_packets += 1;
 			println!("We've received {number_of_packets} packets!");
-			continue
-		} else { break /* TODO: add logic here */ }
+			number_of_packets += 1;
+		}
+		if
+		new_header.is_last_in_frame {
+			crate::video::rfc2435::create_image(&mut out_buffer, &jpeg_header, &mut frame, &mut lqt, &mut cqt, None)?;
+			break /* TODO: add logic here */
+		}
 	}
-
-	println!("Number of packets: {number_of_packets}");
-	File::create("test_results/one_frame.raw")?.write_all(&frame)?;
-
+	//File::create("test_results/one_frame.raw")?.write_all(&frame)?;
+	File::create("test_results/decoded_picture.jpeg")?.write_all(&out_buffer)?;
 	Ok(())
 }

@@ -1,8 +1,8 @@
+use crate::Error;
 use image::{EncodableLayout, Rgb32FImage};
 use tflitec::interpreter::{Interpreter, Options};
 use tflitec::model::Model;
 use tflitec::tensor::{Shape, Tensor};
-use crate::Error;
 
 // These acronyms are anatomical, and I lack better words for them
 enum DigitIndices
@@ -74,7 +74,7 @@ impl<'a> HandLandmarker<'a>
 	{
 		debug_assert_eq!(input.as_bytes().len(), NUM_BATCHES * WIDTH * HEIGHT * BIT_DEPTH * size_of::<f32>(), "Image dimensions did not match expected size");
 
-		let mut instance = self.borrow_instance();
+		let instance = self.borrow_instance();
 
 		let input_tensor = instance.input(0)?;
 		input_tensor.set_data(&input.into_vec())?;
