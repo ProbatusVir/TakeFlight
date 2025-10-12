@@ -24,7 +24,12 @@ fn main() -> Result<(), Error> {
 	let mut application_status = Command::new("cmd")
 		.args(["/C", "start http://localhost:5173"])
 		.spawn()?;
-	println!("React dev server exited with status: {}", application_status.wait()?);
+
+	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
+
+
+
+	println!("React application exited with status: {}", application_status.wait()?);
 
 	Ok(())
 
