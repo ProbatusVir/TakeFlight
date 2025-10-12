@@ -1,9 +1,9 @@
-use nokhwa::utils::{ CameraIndex, RequestedFormat, RequestedFormatType};
-use openh264::encoder::Encoder;
-use std::io::{Error, };
-use nokhwa::pixel_format::{RgbFormat};
+use nokhwa::pixel_format::RgbFormat;
+use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use openh264::decoder::Decoder;
+use openh264::encoder::Encoder;
 use openh264::formats::{RgbSliceU8, YUVBuffer};
+use std::io::Error;
 
 pub(crate) struct Resolution
 {

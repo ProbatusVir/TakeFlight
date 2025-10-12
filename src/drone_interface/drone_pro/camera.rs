@@ -1,7 +1,8 @@
+use crate::drone_interface::drone_pro::camera::BitFlagsVPXCCMPT::{ShiftCC, ShiftM, ShiftP, ShiftPT, ShiftV, ShiftX, CC, M, P, PT, V, X};
+use crate::error::Error;
+use lebe::io::ReadPrimitive;
 use std::io::Read;
 use zerocopy::IntoBytes;
-use crate::drone_interface::drone_pro::camera::BitFlagsVPXCCMPT::{ShiftCC, ShiftV, ShiftP, ShiftPT, ShiftX, CC, M, P, PT, V, X, ShiftM};
-use crate::error::Error;
 
 pub struct RTPHeader
 {
@@ -53,7 +54,7 @@ impl RTPHeader
 		let padding = (flags & P as u16) >> ShiftP as u16;
 		let extension = (flags & X as u16) >> ShiftX as u16;
 		let csrc_count = ((flags & CC as u16) >> ShiftCC as u16) as u8;
-		let marker = ((flags & M as u16) >>  ShiftM as u16);
+		let marker = (flags & M as u16) >>  ShiftM as u16;
 		let payload_type = ((flags & PT as u16) >> ShiftPT as u16) as u8;
 
 		assert_eq!(extension, 0, "Extensions not implemented!");
@@ -90,26 +91,28 @@ pub struct JpegMainHeader
 impl JpegMainHeader
 {
 
-	pub fn from_stream(mut stream : impl Read) -> Result<Self, Error>
+	pub fn from_stream(mut stream : impl Read, ignore_quant : bool) -> Result<Self, Error>
 	{
 		let width : u16;
 		let height : u16;
 		let mut restart_header = None;
 		let mut quantization_header = None;
 		// I'm not sure this is accurate...
-		let mut type_specific	: u8 = 0;
+		let type_specific	: u8;
 		let mut fragment_offset	: u32 = 0; // u24, more like.
-		let mut packet_type		: u8 = 0;
-		let mut quantization	: u8 = 0;
-		let mut unscaled_width	: u8 = 0;
-		let mut unscaled_height	: u8 = 0;
+		let packet_type		: u8;
+		let quantization	: u8;
+		let unscaled_width	: u8;
+		let unscaled_height	: u8;
 
-		stream.read(type_specific.as_mut_bytes())?;
+		type_specific = u8::read_from_big_endian(&mut stream)?;
+		// A complex case
 		stream.read(&mut (fragment_offset.as_mut_bytes()[0..3]))?;
-		stream.read(packet_type.as_mut_bytes())?;
-		stream.read(quantization.as_mut_bytes())?;
-		stream.read(unscaled_width.as_mut_bytes())?;
-		stream.read(unscaled_height.as_mut_bytes())?;
+		fragment_offset = u32::from_be(fragment_offset << u8::BITS); // Needs shifted since we only fill on the most significant bytes.
+		packet_type = u8::read_from_big_endian(&mut stream)?;
+		quantization = u8::read_from_big_endian(&mut stream)?;
+		unscaled_width = u8::read_from_big_endian(&mut stream)?;
+		unscaled_height = u8::read_from_big_endian(&mut stream)?;
 
 		width = (unscaled_width as u16) * 8;
 		height = (unscaled_height as u16) * 8;
@@ -118,7 +121,7 @@ impl JpegMainHeader
 		{
 			restart_header = Some(JpegRestartHeader::from_stream(&mut stream)?);
 		}
-		if quantization >= 128
+		if quantization >= 128 && !ignore_quant
 		{
 			quantization_header = Some(JQTH::from_stream(&mut stream)?);
 		}
@@ -138,7 +141,7 @@ impl JpegMainHeader
 
 
 #[derive(Debug)]
-struct JpegRestartHeader
+pub struct JpegRestartHeader
 {
 	pub restart_interval	: u16,
 	pub f					: bool,
@@ -163,7 +166,7 @@ impl JpegRestartHeader
 
 		let f = (restart_count & F_BIT) != 0;
 		let l = (restart_count & L_BIT) != 0;
-		restart_count = (restart_count & R_COUNT_MASK);
+		restart_count = restart_count & R_COUNT_MASK;
 
 
 		Ok(Self {
@@ -177,7 +180,7 @@ impl JpegRestartHeader
 
 pub type JQTH = JpegQuantizationTableHeader;
 #[derive(Debug)]
-struct JpegQuantizationTableHeader
+pub struct JpegQuantizationTableHeader
 {
 	pub mbz			: u8,
 	pub precision	: u8,

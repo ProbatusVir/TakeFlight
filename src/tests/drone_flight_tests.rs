@@ -1,15 +1,15 @@
-use rstest::rstest;
 use crate::Error;
+use rstest::rstest;
 
 mod tello_drone
 {
+	use super::rstest;
+	use super::Error;
+	use crate::drone_interface::tello::drone::Drone as TelloDrone;
+	use crate::drone_interface::Drone;
 	use std::f32::consts::PI;
 	use std::thread::sleep;
 	use std::time::Duration;
-	use super::rstest;
-	use super::Error;
-	use crate::drone_interface::Drone;
-	use crate::drone_interface::tello::drone::Drone as TelloDrone;
 	#[rstest]
 	fn drone_init_test() -> Result<(), Error>
 	{

@@ -1,10 +1,10 @@
-use crate::tests::TEST_PATH;
-use std::fs::File;
-use std::io::{ Read, Write };
-use openh264::formats::YUVSource;
 use crate::tests::mock_camera::MockCamera;
+use crate::tests::TEST_PATH;
 use crate::Error;
+use openh264::formats::YUVSource;
 use rstest::rstest;
+use std::fs::File;
+use std::io::{Read, Write};
 
 #[rstest]
 fn test_mock_camera_init() -> Result<(), Error>
