@@ -1,4 +1,3 @@
-use crate::debug_utils::view_raw_hex;
 use crate::error::Error;
 use local_ip_address::local_ip;
 use std::fs::File;
