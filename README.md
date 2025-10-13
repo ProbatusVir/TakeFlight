@@ -24,7 +24,9 @@ Once these steps are complete, the project's build system will take care of the 
 
 # Contributors
 Rashid Byrdsell
+
 Ian Shaw
+
 Joshua Smith
 
 # Project Status
