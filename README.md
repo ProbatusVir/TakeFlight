@@ -1,8 +1,7 @@
-/* Copyright (C) Joshua Smith, Ian Shaw & Rashid Byrdsell - All Rights Reserved
- * Unauthorized copying of this file, via any medium is strictly prohibited
- * Proprietary and confidential
- * Written by Joshua Smith <joshbear05@hotmail.com>, October 12, 2025
- */
+Copyright (C) Joshua Smith, Ian Shaw & Rashid Byrdsell - All Rights Reserved
+Unauthorized copying of this file, via any medium is strictly prohibited
+Proprietary and confidential
+Written by Joshua Smith <joshbear05@hotmail.com>, October 12, 2025
 
  # Features
  This software is intended to provide a user interface for controlling unmanned aerial vehicles with hand gestures. Its features include (but are not limited to): 
