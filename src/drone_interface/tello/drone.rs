@@ -1,10 +1,14 @@
-use crate::drone_interface;
+use std::collections::HashMap;
+use crate::{drone_interface, Connection};
+use std::net::IpAddr;
 use crate::drone_interface::Unit;
 use crate::error::Error;
 use local_ip_address::local_ip;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
+use mio::{Poll, Token};
 
 const WAIT_TIME : u64 = 3;
 
@@ -20,8 +24,7 @@ pub struct Drone
 
 impl drone_interface::Drone for Drone
 {
-	fn init() -> Result<Self, Error> {
-		let local_ip = local_ip()?;
+	fn init(registry : Arc<Mutex<Poll>>, map : Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> {
 		let command_sock = {
 			const COMMAND_PORT : u16 = 8889;
 			const ARBITRARY_PORT : u16 = 8889; // Operator
@@ -65,7 +68,7 @@ impl drone_interface::Drone for Drone
 
 		sleep(Duration::from_secs(1));
 
-		Ok( Self {command_sock, video_sock, info_sock, seq_number, response_buffer })
+		Ok( Arc::new(Mutex::new(Self {command_sock, video_sock, info_sock, seq_number, response_buffer })))
 	}
 
 	fn takeoff(&mut self) -> Result<(), Error> {
@@ -187,6 +190,14 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn snapshot(&mut self) -> Result<(), Error> {
+		todo!()
+	}
+
+	fn send_heartbeat(&mut self) -> Result<(), Error> {
+		todo!()
+	}
+
+	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
 		todo!()
 	}
 }
