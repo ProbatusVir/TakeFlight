@@ -1,17 +1,23 @@
 pub mod tello;
 pub mod drone_pro;
 
-use crate::error::Error;
+use crate::{Error, Poll, Registry, Token, Arc, Mutex, HashMap, SocketAddr, Connection};
+use std::net::IpAddr;
 
 /// The unit corresponds to a centimeter, for now; even if the precision of the drone is not matched to the centimeter.
 type Unit = u64;
+
+
 pub trait Drone
 {
 	/// The init will establish whatever internal state is necessary.
 	/// This must include whatever network operations are necessary
 	/// for communicating with the drone. This may ***NOT*** include
 	/// takeoff.
-	fn init() -> Result<Self, Error> where Self: Sized;
+	///
+	/// Due to the nature of the registry and map, any drone must clean
+	/// up its entries in both the map and registry.
+	fn init(registry : Arc<Mutex<Poll>>, map : Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> where Self: Sized;
 
 	/// The drone will reach an operational height.
 	fn takeoff(&mut self) -> Result<(), Error>;
@@ -63,4 +69,7 @@ pub trait Drone
 
 	/// Will return a picture from the drone's video feed.
 	fn snapshot(&mut self) -> Result<(), Error>;
+
+	fn send_heartbeat(&mut self) -> Result<(), Error>;
+	fn receive_signal(&mut self, port : u16) -> Result<(), Error>;
 }

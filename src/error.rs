@@ -11,7 +11,10 @@ pub enum Error
 	ImageError(image::ImageError),
 	TFLiteC(tflitec::Error),
 	H264Error(openh264::Error),
-	Infallible(std::convert::Infallible)
+	Infallible(std::convert::Infallible),
+	MutexError,
+	PoisonError,
+	AddrParseError(std::net::AddrParseError)
 }
 
 impl From<std::convert::Infallible> for Error
@@ -56,6 +59,20 @@ impl From<image::ImageError> for Error
 	}
 }
 
+impl<T> From<std::sync::LockResult<T>> for Error
+{
+	fn from(_value : std::sync::LockResult<T>) -> Self { Error::MutexError }
+}
+
+impl<T> From<std::sync::PoisonError<T>> for Error
+{
+	fn from(_value : std::sync::PoisonError<T>) -> Self { Error::MutexError }
+}
+
+impl From<std::net::AddrParseError> for Error
+{
+	fn from(value : std::net::AddrParseError) -> Self { Error::AddrParseError(value) }
+}
 
 impl Display for Error {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -69,6 +86,9 @@ impl Display for Error {
 			Error::TFLiteC(e) => { e.fmt(f) }
 			Error::H264Error(e) => { e.fmt(f) }
 			Error::Infallible(e) => { e.fmt(f) }
+			Error::MutexError => { "Failed to acquire lock!".fmt(f) }
+			Error::PoisonError => { "Failed to acquire lock!".fmt(f) }
+			Error::AddrParseError(e) => { e.fmt(f) }
 		}
 	}
 }

@@ -1,6 +1,6 @@
 // https://datatracker.ietf.org/doc/html/rfc2435
 
-use crate::drone_interface::drone_pro::camera::JpegMainHeader;
+use crate::video::rtp::JpegMainHeader;
 use crate::error::Error;
 use crate::video::rfc2435::Markers::{DriHeaderMarker, EndOfImageMarker, HuffmanTableMarker, QuantizationTableMarker, StartOfFileMarker, StartOfImageMarker, StartOfScanMarker};
 use std::io::Write;

@@ -6,8 +6,9 @@ use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
+use crate::video::rtp;
 
-pub mod camera;
+pub mod drone;
 
 //#[test]
 pub(crate) fn test() -> Result<(), Error>
@@ -85,9 +86,9 @@ pub(crate) fn test() -> Result<(), Error>
 	let mut frame_buf = vec![0; 4096];
 	let bytes_read = video_stream_sock.recv(&mut frame_buf)?;
 	let mut frame_cursor = Cursor::new(&frame_buf[0..bytes_read]); // This slice doesn't actually *really* matter... just makes some things a little nicer.
-	let _header = camera::RTPHeader::from_stream(&mut frame_cursor)?;
+	let _header = rtp::RTPHeader::from_stream(&mut frame_cursor)?;
 	let _byte_after_header = frame_cursor.position();
-	let jpeg_header = camera::JpegMainHeader::from_stream(&mut frame_cursor, false)?;
+	let jpeg_header = rtp::JpegMainHeader::from_stream(&mut frame_cursor, false)?;
 
 	// Create frames and copy the first buffer's data
 	let mut frame = Vec::new();
@@ -111,8 +112,8 @@ pub(crate) fn test() -> Result<(), Error>
 		let bytes_read = video_stream_sock.recv(&mut frame_buf)?;
 		frame_cursor = Cursor::new(&frame_buf);
 		// Strip the RTP header from the stream
-		let new_header = camera::RTPHeader::from_stream(&mut frame_cursor)?;
-		let _jpeg_header = camera::JpegMainHeader::from_stream(&mut frame_cursor, true)?;
+		let new_header = rtp::RTPHeader::from_stream(&mut frame_cursor)?;
+		let _jpeg_header = rtp::JpegMainHeader::from_stream(&mut frame_cursor, true)?;
 
 		// we're gonna assume that the images are all sent in order.
 		{

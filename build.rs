@@ -16,7 +16,7 @@ fn main() -> Result<(), Error>
 		.spawn()?;
 
 	#[cfg(not(debug_assertions))]
-	let mut react_child = Command::new("cmd")
+	let mut _react_child = Command::new("cmd")
 		.args(["/C", "npm run build"])
 		.current_dir(FRONTEND_DIRECTORY)
 		.stdout(Stdio::inherit())
