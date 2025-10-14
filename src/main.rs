@@ -72,7 +72,8 @@ fn main() -> Result<(), Error> {
 	let mut ownership_map = Arc::new(Mutex::new(HashMap::<Token, Connection>::new()));
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
-	let drone = crate::drone_interface::drone_pro::drone::Drone::init(poll.clone(), ownership_map.clone(), server_address);
+	// test
+	//let drone = crate::drone_interface::drone_pro::drone::Drone::init(poll.clone(), ownership_map.clone(), server_address);
 
 	// Some multiplexing
 	let status = loop
