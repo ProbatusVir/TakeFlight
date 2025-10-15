@@ -6,6 +6,8 @@ use crate::drone_interface::Unit;
 use crate::{Error, Arc, Mutex, HashMap, Connection, Token, Poll, UdpSocket, TcpStream};
 use std::io::{Write, Read};
 use std::str::FromStr;
+use mio::event::Source;
+
 pub struct Drone
 {
 	video_frame		: usize,
@@ -199,4 +201,25 @@ impl drone_interface::Drone for Drone
 	}
 }
 
-//FIXME: we need a drop method here!!!
+impl Drop for Drone
+{
+	fn drop(&mut self) {
+		// If we cannot lock the poll to unregister these sockets, this is an unrecoverable error
+		{
+			let poll_lock = self.poll.lock().unwrap();
+			let registry = poll_lock.registry();
+			self.handshake_sock.deregister(registry).unwrap();
+			self.heartbeat_sock.deregister(registry).unwrap();
+			self.video_sock.deregister(registry).unwrap();
+			self.rtp_sock.deregister(registry).unwrap()
+		}
+
+		{
+			let mut map_lock = self.connection_map.lock().unwrap();
+			map_lock.remove(&Token(self.handshake_sock.local_addr().unwrap().port() as usize));
+			map_lock.remove(&Token(self.heartbeat_sock.local_addr().unwrap().port() as usize));
+			map_lock.remove(&Token(self.video_sock.local_addr().unwrap().port() as usize));
+			map_lock.remove(&Token(self.rtp_sock.local_addr().unwrap().port() as usize));
+		}
+	}
+}
