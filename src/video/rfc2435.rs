@@ -2,7 +2,7 @@
 
 use crate::video::rtp::JpegMainHeader;
 use crate::error::Error;
-use crate::video::rfc2435::Markers::{DriHeaderMarker, EndOfImageMarker, HuffmanTableMarker, QuantizationTableMarker, StartOfFileMarker, StartOfImageMarker, StartOfScanMarker};
+use crate::video::rfc2435::Markers::{DriHeaderMarker, EndOfImageMarker, HuffmanTableMarker, QuantizationTableMarker, StartOfFrameMarker, StartOfImageMarker, StartOfScanMarker};
 use std::io::Write;
 use zerocopy::IntoBytes;
 
@@ -94,7 +94,7 @@ enum Markers
 	DriHeaderMarker			= 0xFFDD_u16.to_be(),
 
 	StartOfImageMarker		= 0xFFD8_u16.to_be(),
-	StartOfFileMarker		= 0xFFC0_u16.to_be(),
+	StartOfFrameMarker		= 0xFFC0_u16.to_be(),
 	StartOfScanMarker		= 0xFFDA_u16.to_be(),
 
 	EndOfImageMarker		= 0xFFD9_u16.to_be(),
@@ -216,7 +216,7 @@ pub fn make_headers(p : &mut Vec<u8>, headers_type : u8, blocks_w : u16, blocks_
 
 	/* Write the start of file and the length of this segment */ {
 		p.write_all([
-			StartOfFileMarker as u16,
+			StartOfFrameMarker as u16,
 			17_u16.to_be(), // length of StartOfFile Header (minus the marker)
 		].as_bytes())?;
 
