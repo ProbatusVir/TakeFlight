@@ -1,26 +1,40 @@
+use std::fs::File;
 use crate::Interest;
 use crate::SocketAddr;
 use std::net::IpAddr;
 use crate::drone_interface;
 use crate::drone_interface::Unit;
 use crate::{Error, Arc, Mutex, HashMap, Connection, Token, Poll, UdpSocket, TcpStream};
-use std::io::{Write, Read};
+use std::io::{Write, Read, BufReader, Cursor, ErrorKind};
 use std::str::FromStr;
 use mio::event::Source;
+use crate::video::rtp;
+use crate::video::rtp::JpegMainHeader;
 
+#[derive(Debug)]
 pub struct Drone
 {
 	video_frame		: usize,
 	// I am assuming this is the handshake socket. I can't recall if I've seen other activity on this socket.
-	handshake_sock	: UdpSocket,
-	heartbeat_sock	: UdpSocket,
-	video_sock		: UdpSocket,
-	rtp_sock		: TcpStream,
-	frame_buffer	: [u8;4096],
-	rtp_count		: u8,			// This is janky, and I don't like it.
-	poll			: Arc<Mutex<Poll>>,
-	connection_map	: Arc<Mutex<HashMap<Token, Connection>>>,
+	handshake_sock			: UdpSocket,
+	heartbeat_sock			: UdpSocket,
+	video_sock				: UdpSocket,
+	rtp_sock				: TcpStream,
+	pub fin_image_buf		: Vec<u8>,
+	pub poll				: Arc<Mutex<Poll>>,
+	pub connection_map		: Arc<Mutex<HashMap<Token, Connection>>>,
+	inner_main_jpg_header	: Option<JpegMainHeader>,
+	inner_raw_img_buf		: Vec<u8>,
+	inner_read_buf			: [u8;4096],
 }
+
+
+struct _DroneInnerBuffer
+{
+	pub bytes_read	: usize,
+	pub array		: [u8;4096],
+}
+
 
 impl drone_interface::Drone for Drone
 {
@@ -28,6 +42,17 @@ impl drone_interface::Drone for Drone
 	where
 		Self: Sized
 	{
+
+		let video_sock = {
+			let mut poll_lock = poll.lock()?;
+			let registry = poll_lock.registry();
+			let mut video_sock = UdpSocket::bind(SocketAddr::new(local_ip, 30732))?;
+			let port = video_sock.local_addr()?.port() as usize;
+			registry.register(&mut video_sock, Token(port), Interest::READABLE)?;
+
+			video_sock
+		};
+
 		let mut handshake_sock = UdpSocket::bind(SocketAddr::new(local_ip, 0))?;
 		handshake_sock.connect("192.168.1.1:7099".parse()?)?;
 		handshake_sock.send(&[0x01, 0x01])?;
@@ -77,12 +102,16 @@ impl drone_interface::Drone for Drone
 
 		let mut rtp_sock = mio::net::TcpStream::from_std(rtp_sock);
 
-		/* Just for one send, it looks like. */
-		let video_sock = UdpSocket::bind(SocketAddr::new(local_ip, 0))?; // this number matters since the drone initiates
-		video_sock.connect("192.168.1.1:52612".parse()?)?;
-		video_sock.send(&[0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0])?;
 
-		let mut video_sock = UdpSocket::bind(SocketAddr::new(local_ip, 30732))?;
+		/* Just for one send, it looks like. */
+		{
+			let mut video_start = UdpSocket::bind(SocketAddr::new(local_ip, 0))?; // this number matters since the drone initiates
+			video_start.connect("192.168.1.1:52612".parse()?)?;
+			video_start.send(&[0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0])?;
+		}
+		let mut inner_read_buf = [0_u8;4096];
+
+
 
 		let handshake_token	= Token(handshake_sock.local_addr()?.port() as usize);
 		let heartbeat_token	= Token(heartbeat_sock.local_addr()?.port() as usize);
@@ -95,7 +124,7 @@ impl drone_interface::Drone for Drone
 			poll_lock.registry().register(&mut handshake_sock,	handshake_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut heartbeat_sock,	heartbeat_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut rtp_sock,		rtp_token,			Interest::READABLE)?;
-			poll_lock.registry().register(&mut video_sock,		video_token,		Interest::READABLE)?;
+			//poll_lock.registry().register(&mut video_sock,		video_token,		Interest::READABLE)?;
 		}
 
 		let this_drone = Arc::new(Mutex::new(Self {
@@ -104,10 +133,12 @@ impl drone_interface::Drone for Drone
 			heartbeat_sock,
 			video_sock,
 			rtp_sock,
-			frame_buffer	: [0;4096],
-			rtp_count		: 0,			// This is janky, and I don't like it.
+			inner_raw_img_buf: Default::default(),
+			fin_image_buf	: Default::default(),
+			inner_read_buf,
 			poll			: poll.clone(),
-			connection_map : connection_map.clone(),
+			connection_map	: connection_map.clone(),
+			inner_main_jpg_header: None,
 		}));
 
 		// Register all sockets to map
@@ -188,14 +219,65 @@ impl drone_interface::Drone for Drone
 		if port == self.video_sock.local_addr()?.port() {
 			loop
 			{
-				self.video_sock.recv(&mut self.frame_buffer);
-				dbg!("Received video thing");
+				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
+				let mut cursor = Cursor::new(&self.inner_read_buf);
+				// Strip the RTP header from the stream
+				let new_header = rtp::RTPHeader::from_stream(&mut cursor)?;
+				// FIXME: We must factor out 'ignore quant' somehow. Probably by making it part of the RTP thing
+				let jpeg_header = rtp::JpegMainHeader::from_stream(&mut cursor, self.inner_main_jpg_header.is_some())?;
+
+				// we're gonna assume that the images are all sent in order.
+				{
+					// Add only the jpeg data. Markers and payload
+					let cursor_position = cursor.position() as usize;
+					// FIXME: this is debug only!
+					if cursor_position > bytes_read {
+						panic!("Something is very wrong!");
+					}
+					self.inner_raw_img_buf.extend_from_slice(&self.inner_read_buf[cursor_position..bytes_read]);
+
+				}
+
+				if jpeg_header.is_image_start() {
+					self.inner_main_jpg_header = Some(jpeg_header)
+				}
+				// I suppose it's possible for a packet to be both start and finish.
+				if new_header.is_last_in_frame {
+					let mut lqt : [u8;64] = [0;64];
+					let mut cqt : [u8;64] = [0;64];
+
+					let main_jpeg_header = self.inner_main_jpg_header.as_ref().unwrap(); // we're fine consuming the quantization header here.
+					let quant_header = main_jpeg_header.quantization_header.as_ref().unwrap();
+
+					lqt.clone_from_slice(&quant_header.table[..64]);
+					cqt.clone_from_slice(&quant_header.table[64..]);
+
+					crate::video::rfc2435::create_image(&mut self.fin_image_buf,
+														&main_jpeg_header, &mut self.inner_raw_img_buf,
+														&mut lqt, &mut cqt, None)?;
+
+					// FIXME: GET RID OF THIS ONCE THIS IS BRIDGED
+					if self.video_frame % 10 == 0
+					{
+						File::create(format!("test_results/DroneImage{}.jpeg", self.video_frame))?.write_all(&self.fin_image_buf)?;
+					}
+
+					self.video_frame += 1;
+					/* TODO: add logic here */
+
+					// Cleanup for next loop
+					self.inner_raw_img_buf.clear();
+					self.fin_image_buf.clear();
+					self.inner_main_jpg_header = None;
+				}
+
+
 			}
 			Ok(())
 		}
 		else if port == self.rtp_sock.local_addr()?.port() { todo!() }
 		else if port == self.heartbeat_sock.local_addr()?.port() { todo!() }
-		else if port == self.handshake_sock.local_addr()?.port() { self.handshake_sock.recv(&mut self.frame_buffer); dbg!("Received a response from handshake socket"); Ok(())/*todo!("DronePro: Handshake socket sent a new packet.")*/ }
+		else if port == self.handshake_sock.local_addr()?.port() { self.handshake_sock.recv(&mut self.inner_read_buf)?; dbg!("Received a response from handshake socket"); Ok(())/*todo!("DronePro: Handshake socket sent a new packet.")*/ }
 		else { return Err(Error::Custom("DronePro: Requested socket not found in DronePro!")) }
 
 	}
@@ -223,3 +305,4 @@ impl Drop for Drone
 		}
 	}
 }
+

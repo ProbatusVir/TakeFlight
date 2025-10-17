@@ -91,7 +91,7 @@ pub(crate) fn test() -> Result<(), Error>
 	let jpeg_header = rtp::JpegMainHeader::from_stream(&mut frame_cursor, false)?;
 
 	// Create frames and copy the first buffer's data
-	let mut frame = Vec::new();
+		let mut frame = Vec::new();
 	//frame.extend_from_slice(&frame_buf[(byte_after_header) as usize..bytes_read]); // Read only the payload information from the packet -- this should be part of the other code
 	frame.extend_from_slice(&frame_buf[frame_cursor.position() as usize..bytes_read]); // Read only the payload information from the packet -- this should be part of the other code
 	let mut lqt : [u8;64] = [0;64];

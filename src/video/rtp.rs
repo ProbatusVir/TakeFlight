@@ -90,6 +90,15 @@ pub struct JpegMainHeader
 
 impl JpegMainHeader
 {
+	pub fn is_image_start(&self) -> bool
+	{
+		let quant_header_exists = match self.quantization_header {
+			Some(_)	=> { true }
+			None	=> { false }
+		};
+
+		quant_header_exists
+	}
 
 	pub fn from_stream(mut stream : impl Read, ignore_quant : bool) -> Result<Self, Error>
 	{

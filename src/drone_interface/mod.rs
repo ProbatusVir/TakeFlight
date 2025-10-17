@@ -1,6 +1,7 @@
 pub mod tello;
 pub mod drone_pro;
 
+use std::fmt::Debug;
 use crate::{Error, Poll, Registry, Token, Arc, Mutex, HashMap, SocketAddr, Connection};
 use std::net::IpAddr;
 
@@ -8,7 +9,7 @@ use std::net::IpAddr;
 type Unit = u64;
 
 
-pub trait Drone
+pub trait Drone : Debug
 {
 	/// The init will establish whatever internal state is necessary.
 	/// This must include whatever network operations are necessary

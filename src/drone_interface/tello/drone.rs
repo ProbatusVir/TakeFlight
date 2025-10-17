@@ -12,6 +12,7 @@ use mio::{Poll, Token};
 
 const WAIT_TIME : u64 = 3;
 
+#[derive(Debug)]
 pub struct Drone
 {
 	command_sock	: UdpSocket,

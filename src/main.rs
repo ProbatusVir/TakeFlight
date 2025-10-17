@@ -25,6 +25,7 @@ use mio::{Events, Interest, Poll, Registry, Token, Waker};
 use mio::net::{TcpStream, UdpSocket, TcpListener};
 use crate::drone_interface::Drone;
 
+#[derive(Debug)]
 enum Connection
 {
 	TCP(TcpStream),
@@ -142,13 +143,31 @@ fn drain_events(event_buffer	: &mut Events,
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
-				loop {
-					for mut connection in ownership_map.lock()?.iter_mut() {
-						match connection.1
-						{
-							Connection::Drone(drone) => { drone.lock()?.send_heartbeat()?; }
-							_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
+				for mut connection in ownership_map.lock()?.iter_mut() {
+					match connection.1
+					{
+						// TODO: This is sorely in need of a refactor...
+						Connection::Drone(drone) => {
+							let mut drone_lock = drone.lock()?;
+							let ping_result = drone_lock.send_heartbeat();
+							match ping_result {
+								Ok(_)	=> { continue; }
+								Err(e)	=> {
+									match e {
+										Error::IOError(io_error) => {
+											if io_error.kind() == std::io::ErrorKind::WouldBlock {
+												continue;
+											}
+											else {
+												return Err(Error::Custom("IO error occurred while pinging a drone!"));
+											}
+										}
+										_ => { return Err(Error::Custom("Generic error occurred while pinging a drone!")); }
+									}
+								}
+							}
 						}
+						_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
 					}
 				}
 			}
