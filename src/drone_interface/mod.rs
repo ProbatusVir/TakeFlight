@@ -11,6 +11,7 @@ type Unit = u64;
 
 pub trait Drone : Debug
 {
+
 	/// The init will establish whatever internal state is necessary.
 	/// This must include whatever network operations are necessary
 	/// for communicating with the drone. This may ***NOT*** include
@@ -18,7 +19,8 @@ pub trait Drone : Debug
 	///
 	/// Due to the nature of the registry and map, any drone must clean
 	/// up its entries in both the map and registry.
-	fn init(registry : Arc<Mutex<Poll>>, map : Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> where Self: Sized;
+	///
+	/// ⚠ INIT HAS BEEN DEPRECATED -- THESE CONSTRAINTS SHOULD APPLY TO THE DRONE'S INITIALIZATION METHODS ⚠
 
 	/// The drone will reach an operational height.
 	fn takeoff(&mut self) -> Result<(), Error>;

@@ -25,53 +25,6 @@ pub struct Drone
 
 impl drone_interface::Drone for Drone
 {
-	fn init(registry : Arc<Mutex<Poll>>, map : Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> {
-		let command_sock = {
-			const COMMAND_PORT : u16 = 8889;
-			const ARBITRARY_PORT : u16 = 8889; // Operator
-			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
-			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, COMMAND_PORT);
-
-			let command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
-			command_sock.connect(SocketAddrV4::new(CONN_ADDR, COMMAND_PORT) )?;
-
-			command_sock
-		};
-
-		let info_sock = {
-			const INFO_PORT : u16 = 8890;
-			const ARBITRARY_PORT : u16 = 8886;
-			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
-			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, INFO_PORT);
-			let info_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
-			info_sock.connect(CONN_SOCK)?;
-
-			info_sock
-		};
-
-		let video_sock = {
-			const VIDEO_PORT : u16 = 11111;
-			const ARBITRARY_PORT : u16 = 11112;
-			const CONN_ADDR : Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
-			const CONN_SOCK : SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, VIDEO_PORT);
-
-			let video_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
-			video_sock.connect(CONN_SOCK)?;
-
-			video_sock
-		};
-
-		let seq_number = 0;
-		let response_buffer = vec![0;255];
-
-		command_sock.send(b"command")?;
-		command_sock.send(b"streamon")?;
-
-		sleep(Duration::from_secs(1));
-
-		Ok( Arc::new(Mutex::new(Self {command_sock, video_sock, info_sock, seq_number, response_buffer })))
-	}
-
 	fn takeoff(&mut self) -> Result<(), Error> {
 		self.command_sock.send(b"takeoff")?;
 		self.command_sock.recv(&mut self.response_buffer)?;
@@ -200,5 +153,55 @@ impl drone_interface::Drone for Drone
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
 		todo!()
+	}
+}
+
+impl Drone
+{
+	fn init(registry: Arc<Mutex<Poll>>, map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> {
+		let command_sock = {
+			const COMMAND_PORT: u16 = 8889;
+			const ARBITRARY_PORT: u16 = 8889; // Operator
+			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
+			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, COMMAND_PORT);
+
+			let command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			command_sock.connect(SocketAddrV4::new(CONN_ADDR, COMMAND_PORT))?;
+
+			command_sock
+		};
+
+		let info_sock = {
+			const INFO_PORT: u16 = 8890;
+			const ARBITRARY_PORT: u16 = 8886;
+			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
+			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, INFO_PORT);
+			let info_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			info_sock.connect(CONN_SOCK)?;
+
+			info_sock
+		};
+
+		let video_sock = {
+			const VIDEO_PORT: u16 = 11111;
+			const ARBITRARY_PORT: u16 = 11112;
+			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
+			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, VIDEO_PORT);
+
+			let video_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			video_sock.connect(CONN_SOCK)?;
+
+			video_sock
+		};
+
+		let seq_number = 0;
+		let response_buffer = vec![0; 255];
+
+		command_sock.send(b"command")?;
+		command_sock.send(b"streamon")?;
+
+		sleep(Duration::from_secs(1));
+
+		Ok(Arc::new(Mutex::new(Self { command_sock, video_sock, info_sock, seq_number, response_buffer })))
 	}
 }
