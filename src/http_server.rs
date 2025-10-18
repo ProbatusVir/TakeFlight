@@ -1,34 +1,84 @@
-//Basic HTTP server implementation
-use std::{
-    io::{prelude::*,BufReader },
-    net::{TcpStream, TcpListener, UdpSocket},
+use crate::error;
+use error::Error;
+use serde::{
+    Deserialize,
+    Serialize
+};
+//HTTP server implementation
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
 };
 
-fn server(){
-    //bind to localhost:5137
-    let listener = TcpListener::bind("127.0.0.1:5137").unwrap();
-    println!("Listening on {}", listener.local_addr().unwrap());
-
-    //Accept incoming TCP connections
-    for stream in listener.incoming(){
-        let stream = stream.unwrap();
-        //Handle each connection
-        handle_connection(stream);
-    }
+#[derive(Serialize, Deserialize)]
+struct DroneNames{
+    names: Vec<String>
 }
 
-fn handle_connection(mut stream: TcpStream){
+#[tokio::main]
+async fn server() -> Result<(), Error>{
+    //bind to localhost:5137
+    let listener = TcpListener::bind("127.0.0.1:5137").await?;
+    println!("Listening on {}", listener.local_addr()?);
+
+    //Accept incoming TCP connections
+    loop{
+        let (stream, addr) = listener.accept().await?;
+        println!("Accepted connection from {}", addr);
+        tokio::spawn(async move {
+            if let Error::IOError(e) = handle_connection(stream).await {
+                eprintln!("Error: {}", e);
+            }
+        });
+    }
+    Ok(())
+}
+
+async fn handle_connection(mut stream: TcpStream) -> Result<(), Error>{
     //Initialize buffer
     let mut buffer = [0; 512];
-    //Read the HTTP request into the buffer
-    stream.read(&mut buffer).unwrap();
+    //Reads the request size/bytes
+    if let Ok(size) = stream.read(&mut buffer).await?{
+        if size == 0{
+            return Ok(());
+        }
+    }
+    //Grabs the type of request command
+    let request = String::from_utf8_lossy(&buffer[..]);
     //For Debugging: Converts bytes to string
-    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    println!("Request: {}", request);
 
-    //Create Simple HTTP response
-    let response = "HTTP/1.1 200 OK\r\n\r\n";
+    //GET handle for drone names
+    let (status, body) = if request.contains("drone_names"){
+        //populates drone vector with random string names
+        let data = DroneNames{
+            names: vec![
+                "Alpha".into(),
+                "Bravo".into(),
+                "Charlie".into(),
+                "Delta".into(),
+                "Echo".into(),
+                "Fern".into(),
+                "Germany".into(),
+            ],
+        };
+        //Serializes the vector to JSON String
+        let json = serde_json::to_string(&data).unwrap();
+        ("HTTP/1.1 200 OK", json)
+    }else{
+        let msg = serde_json::to_string(&DroneNames{
+            names: vec!["Invalid request".into()],
+        }).unwrap();
+        ("HTTP/1.1 200 OK", msg)
+    };
+    //Create HTTP response with proper formatting
+    let response = format!(
+        "{status}\r\nContent-Type: application/json\
+        \r\nContent-Length: {}\r\n\r\n{body}", body.len()
+    );
     //Send it to client
-    stream.write(response.as_bytes()).unwrap();
+    stream.write(response.as_bytes()).await?;
     //Ensures anything using write/write_all is sent out
-    stream.flush().unwrap();
+    stream.flush().await?;
+    Ok(())
 }
