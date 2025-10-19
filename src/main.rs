@@ -20,7 +20,6 @@ use error::Error;
 use mio;
 use mio::net::{TcpListener, TcpStream, UdpSocket};
 use mio::{Events, Interest, Poll, Token, Waker};
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -145,11 +144,20 @@ fn drain_events(event_buffer	: &mut Events,
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
+				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
 				for connection in ownership_map.lock()?.iter_mut() {
+					// This seems like a patchy solution. This combats sending multiple pings per cycle.
 					match connection.1
 					{
 						// TODO: This is sorely in need of a refactor...
 						Connection::Drone(drone) => {
+							if contacted_drones.iter().find(|ptr| { Arc::ptr_eq(ptr, drone) }).is_some() {
+								continue
+							}
+							else {
+								contacted_drones.push(drone.clone())
+							}
+
 							let mut drone_lock = drone.lock()?;
 							let ping_result = drone_lock.send_heartbeat();
 							match ping_result {
