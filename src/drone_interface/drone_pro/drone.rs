@@ -170,7 +170,10 @@ impl drone_interface::Drone for Drone
 		}
 		else if port == self.rtp_sock.local_addr()?.port() { todo!() }
 		else if port == self.heartbeat_sock.local_addr()?.port() { todo!() }
-		else if port == self.handshake_sock.local_addr()?.port() { self.handshake_sock.recv(&mut self.inner_read_buf)?; dbg!("Received a response from handshake socket"); Ok(())/*todo!("DronePro: Handshake socket sent a new packet.")*/ }
+		else if port == self.handshake_sock.local_addr()?.port() {
+			dbg!("Received a response from handshake socket");
+			self.handshake_sock.recv(&mut self.inner_read_buf)?;
+			Ok(()) }
 		else { return Err(Error::Custom("DronePro: Requested socket not found in DronePro!")) }
 
 	}
@@ -202,7 +205,7 @@ impl Drop for Drone
 
 impl Drone
 {
-	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr, hand_landmarker : Arc<Mutex<HandLandmarker>>) -> Result<Arc<Mutex<Self>>, Error>
+	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr, /*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
 	where
 		Self: Sized
 	{

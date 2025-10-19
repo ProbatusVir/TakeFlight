@@ -5,7 +5,7 @@ use tflitec::model::Model;
 use tflitec::tensor::{Shape, Tensor};
 
 // These acronyms are anatomical, and I lack better words for them
-enum DigitIndices
+pub enum DigitIndices
 {
 	Wrist = 0,
 	ThumbCMC,

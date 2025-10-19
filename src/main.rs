@@ -74,7 +74,7 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
-	//let drone = crate::drone_interface::drone_pro::drone::Drone::init(poll.clone(), ownership_map.clone(), server_address);
+	//let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
 
 	// Some multiplexing
 	let status = loop
