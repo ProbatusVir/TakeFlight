@@ -4,6 +4,17 @@ use lebe::io::ReadPrimitive;
 use std::io::Read;
 use zerocopy::IntoBytes;
 
+#[derive(Debug)]
+pub enum RTPContent
+{
+	Jpeg(JpegMainHeader)
+}
+impl RTPContent
+{
+	const JPEG : u8 = 26;
+}
+
+#[derive(Debug)]
 pub struct RTPHeader
 {
 	pub version				: u8,
@@ -12,6 +23,7 @@ pub struct RTPHeader
 	pub timestamp			: u32,
 	pub ssrc				: u32,
 	pub is_last_in_frame	: bool,
+	pub content_header		: Option<RTPContent>
 }
 
 #[repr(u16)]
@@ -34,12 +46,13 @@ enum BitFlagsVPXCCMPT
 
 impl RTPHeader
 {
-	pub fn from_stream(mut stream: impl Read) -> Result<Self, Error>
+	pub fn from_stream(mut stream: impl Read, header_len : usize) -> Result<Self, Error>
 	{
 		let mut flags : u16 = 0;
 		let mut sequence_number : u16 = 0;
 		let mut timestamp : u32 = 0;
 		let mut ssrc : u32 = 0;
+
 		//let mut csrcs : u32 = 0;
 		{
 			stream.read(flags.as_mut_bytes())?;
@@ -63,6 +76,15 @@ impl RTPHeader
 		//assert_eq!(marker, 0, "Markers not implemented!");
 		let is_last_in_frame = marker != 0;
 
+		let mut content_header = None;
+
+		match payload_type {
+			RTPContent::JPEG => {
+				content_header = Some(RTPContent::Jpeg(JpegMainHeader::from_stream(stream)?));
+			}
+			_ => { panic!("Unexpected payload type: {}", payload_type)}
+		}
+
 		Ok(Self {
 			version,
 			payload_type,
@@ -70,6 +92,7 @@ impl RTPHeader
 			timestamp,
 			ssrc,
 			is_last_in_frame,
+			content_header,
 		})
 	}
 }
@@ -90,6 +113,7 @@ pub struct JpegMainHeader
 
 impl JpegMainHeader
 {
+	const LENGTH_OF_HEADER : usize = 8;
 	pub fn is_image_start(&self) -> bool
 	{
 		let quant_header_exists = match self.quantization_header {
@@ -100,7 +124,7 @@ impl JpegMainHeader
 		quant_header_exists
 	}
 
-	pub fn from_stream(mut stream : impl Read, ignore_quant : bool) -> Result<Self, Error>
+	pub fn from_stream(mut stream : impl Read) -> Result<Self, Error>
 	{
 		let width : u16;
 		let height : u16;
@@ -126,11 +150,14 @@ impl JpegMainHeader
 		width = (unscaled_width as u16) * 8;
 		height = (unscaled_height as u16) * 8;
 
+		let mut bytes_read = Self::LENGTH_OF_HEADER;
+
 		if packet_type >= 64
 		{
 			restart_header = Some(JpegRestartHeader::from_stream(&mut stream)?);
+			bytes_read += JpegRestartHeader::LENGTH_OF_HEADER;
 		}
-		if quantization >= 128 && !ignore_quant
+		if quantization >= 128 && fragment_offset == 0
 		{
 			quantization_header = Some(JQTH::from_stream(&mut stream)?);
 		}
@@ -160,6 +187,7 @@ pub struct JpegRestartHeader
 
 impl JpegRestartHeader
 {
+	const LENGTH_OF_HEADER : usize = 4;
 	pub fn from_stream(mut stream : impl Read) -> Result<Self, Error>
 	{
 		const F_BIT : u16 = 0b1000_0000__0000_0000_u16.to_be();

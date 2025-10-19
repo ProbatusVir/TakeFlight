@@ -14,20 +14,21 @@ pub enum Error
 	Infallible(std::convert::Infallible),
 	MutexError,
 	PoisonError,
-	AddrParseError(std::net::AddrParseError)
-}
-
-impl From<std::convert::Infallible> for Error
-{
-	fn from(value: std::convert::Infallible) -> Self {
-		Error::Infallible(value)
-	}
+	AddrParseError(std::net::AddrParseError),
+	RTPTypeNotImplemented(u8),
 }
 
 impl From<openh264::Error> for Error
 {
 	fn from(value: openh264::Error) -> Self {
 		Error::H264Error(value)
+	}
+}
+
+impl From<std::convert::Infallible> for Error
+{
+	fn from(value: std::convert::Infallible) -> Self {
+		Error::Infallible(value)
 	}
 }
 
@@ -89,6 +90,7 @@ impl Display for Error {
 			Error::MutexError => { "Failed to acquire lock!".fmt(f) }
 			Error::PoisonError => { "Failed to acquire lock!".fmt(f) }
 			Error::AddrParseError(e) => { e.fmt(f) }
+			Error::RTPTypeNotImplemented(value) => { format!("RTP type {value} not implemented!").fmt(f) }
 		}
 	}
 }

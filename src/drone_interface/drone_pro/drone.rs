@@ -9,7 +9,7 @@ use std::io::{Write, Read, BufReader, Cursor, ErrorKind};
 use std::str::FromStr;
 use mio::event::Source;
 use crate::video::rtp;
-use crate::video::rtp::JpegMainHeader;
+use crate::video::rtp::{JpegMainHeader, RTPContent};
 use crate::computer_vision::HandLandmarker;
 use image::DynamicImage;
 use image::ImageFormat::Jpeg;
@@ -108,9 +108,8 @@ impl drone_interface::Drone for Drone
 				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
 				let mut cursor = Cursor::new(&self.inner_read_buf);
 				// Strip the RTP header from the stream
-				let new_header = rtp::RTPHeader::from_stream(&mut cursor)?;
+				let new_header = rtp::RTPHeader::from_stream(&mut cursor, bytes_read)?;
 				// FIXME: We must factor out 'ignore quant' somehow. Probably by making it part of the RTP thing
-				let jpeg_header = rtp::JpegMainHeader::from_stream(&mut cursor, self.inner_main_jpg_header.is_some())?;
 
 				// we're gonna assume that the images are all sent in order.
 				{
@@ -124,15 +123,32 @@ impl drone_interface::Drone for Drone
 
 				}
 
-				if jpeg_header.is_image_start() {
-					self.inner_main_jpg_header = Some(jpeg_header)
+				if new_header.content_header.is_some()
+				{
+					match new_header.content_header.unwrap() {
+						RTPContent::Jpeg(jpeg_header) => {
+							if jpeg_header.fragment_offset == 0
+							{
+								self.inner_main_jpg_header = Some(jpeg_header)
+							}
+						}
+						_ => { Err(Error::RTPTypeNotImplemented(new_header.payload_type))? }
+					}
 				}
+
 				// I suppose it's possible for a packet to be both start and finish.
 				if new_header.is_last_in_frame {
 					let mut lqt : [u8;64] = [0;64];
 					let mut cqt : [u8;64] = [0;64];
 
-					let main_jpeg_header = self.inner_main_jpg_header.as_ref().unwrap(); // we're fine consuming the quantization header here.
+					// This avoids a fatal error where this value is unwrapped below.
+					// This covers the case where we do not receive the first packet of the image.
+					if self.inner_main_jpg_header.is_none()
+					{
+						self.cleanup_image();
+						continue;
+					}
+					let main_jpeg_header = self.inner_main_jpg_header.as_ref().unwrap();
 					let quant_header = main_jpeg_header.quantization_header.as_ref().unwrap();
 
 					lqt.clone_from_slice(&quant_header.table[..64]);
@@ -158,10 +174,7 @@ impl drone_interface::Drone for Drone
 					self.video_frame += 1;
 					/* TODO: add logic here */
 
-					// Cleanup for next loop
-					self.inner_raw_img_buf.clear();
-					self.fin_image_buf.clear();
-					self.inner_main_jpg_header = None;
+					self.cleanup_image();
 				}
 
 
@@ -318,13 +331,18 @@ impl Drone
 			map_lock.insert(video_token,		Connection::Drone(this_drone.clone()));
 		}
 
-		println!("Pre send");
 		// Try to takeoff -- handshake is also the command sock
 		this_drone.lock()?.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x0, 0x80, 0x0, 0x80, 0x99])?;
 		this_drone.lock()?.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x0, 0x80, 0x0, 0x80, 0x99])?;
 		this_drone.lock()?.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x0, 0x80, 0x0, 0x80, 0x99])?;
-		println!("post send");
 
 		Ok(this_drone)
+	}
+
+	fn cleanup_image(&mut self)
+	{
+		self.inner_raw_img_buf.clear();
+		self.fin_image_buf.clear();
+		self.inner_main_jpg_header = None;
 	}
 }
