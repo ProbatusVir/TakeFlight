@@ -1,18 +1,18 @@
-use std::fs::File;
-use crate::Interest;
-use crate::SocketAddr;
-use std::net::IpAddr;
+use crate::computer_vision::HandLandmarker;
 use crate::drone_interface;
 use crate::drone_interface::Unit;
-use crate::{Error, Arc, Mutex, HashMap, Connection, Token, Poll, UdpSocket, TcpStream};
-use std::io::{Write, Read, BufReader, Cursor, ErrorKind};
-use std::str::FromStr;
-use mio::event::Source;
 use crate::video::rtp;
 use crate::video::rtp::{JpegMainHeader, RTPContent};
-use crate::computer_vision::HandLandmarker;
+use crate::Interest;
+use crate::SocketAddr;
+use crate::{Arc, Connection, Error, HashMap, Mutex, Poll, TcpStream, Token, UdpSocket};
 use image::DynamicImage;
 use image::ImageFormat::Jpeg;
+use mio::event::Source;
+use std::fs::File;
+use std::io::{Cursor, Read, Write};
+use std::net::IpAddr;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Drone

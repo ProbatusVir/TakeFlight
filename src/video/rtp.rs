@@ -1,5 +1,5 @@
-use crate::video::rtp::BitFlagsVPXCCMPT::{ShiftCC, ShiftM, ShiftP, ShiftPT, ShiftV, ShiftX, CC, M, P, PT, V, X};
 use crate::error::Error;
+use crate::video::rtp::BitFlagsVPXCCMPT::{ShiftCC, ShiftM, ShiftP, ShiftPT, ShiftV, ShiftX, CC, M, P, PT, V, X};
 use lebe::io::ReadPrimitive;
 use std::io::Read;
 use zerocopy::IntoBytes;

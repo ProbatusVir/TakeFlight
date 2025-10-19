@@ -1,8 +1,8 @@
 // https://datatracker.ietf.org/doc/html/rfc2435
 
-use crate::video::rtp::JpegMainHeader;
 use crate::error::Error;
 use crate::video::rfc2435::Markers::{DriHeaderMarker, EndOfImageMarker, HuffmanTableMarker, QuantizationTableMarker, StartOfFrameMarker, StartOfImageMarker, StartOfScanMarker};
+use crate::video::rtp::JpegMainHeader;
 use std::io::Write;
 use zerocopy::IntoBytes;
 

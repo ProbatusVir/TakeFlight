@@ -15,15 +15,15 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use tflitec as tf;
 
+use crate::drone_interface::Drone;
 use error::Error;
-use std::process::{Command, Stdio};
+use mio;
+use mio::net::{TcpListener, TcpStream, UdpSocket};
+use mio::{Events, Interest, Poll, Registry, Token, Waker};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use mio;
-use mio::{Events, Interest, Poll, Registry, Token, Waker};
-use mio::net::{TcpStream, UdpSocket, TcpListener};
-use crate::drone_interface::Drone;
 
 #[derive(Debug)]
 enum Connection
@@ -74,7 +74,7 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
-	//let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
+	let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
 
 	// Some multiplexing
 	let status = loop

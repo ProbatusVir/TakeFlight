@@ -1,5 +1,5 @@
-use std::process::{Command, Stdio};
 use std::io::Error;
+use std::process::{Command, Stdio};
 
 /// This will build the JavaScript.
 /// Both fail if the JavaScript doesn't build.

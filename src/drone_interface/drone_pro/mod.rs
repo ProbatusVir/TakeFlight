@@ -1,12 +1,5 @@
-use crate::error::Error;
-use local_ip_address::local_ip;
-use std::fs::File;
-use std::io::{Cursor, Read, Write};
-use std::net::{SocketAddr, TcpStream, UdpSocket};
+use std::io::{Read, Write};
 use std::str::FromStr;
-use std::thread;
-use std::time::Duration;
-use crate::video::rtp;
 
 pub mod drone;
 

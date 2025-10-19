@@ -1,14 +1,13 @@
-use std::collections::HashMap;
-use crate::{drone_interface, Connection};
-use std::net::IpAddr;
 use crate::drone_interface::Unit;
 use crate::error::Error;
-use local_ip_address::local_ip;
+use crate::{drone_interface, Connection};
+use mio::{Poll, Token};
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use mio::{Poll, Token};
 
 const WAIT_TIME : u64 = 3;
 

@@ -1,9 +1,8 @@
 pub mod tello;
 pub mod drone_pro;
 
+use crate::Error;
 use std::fmt::Debug;
-use crate::{Error, Poll, Registry, Token, Arc, Mutex, HashMap, SocketAddr, Connection};
-use std::net::IpAddr;
 
 /// The unit corresponds to a centimeter, for now; even if the precision of the drone is not matched to the centimeter.
 type Unit = u64;
