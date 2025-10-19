@@ -1,5 +1,3 @@
-use std::io::{Read, Write};
-use std::str::FromStr;
 
 pub mod drone;
 

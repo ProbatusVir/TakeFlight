@@ -52,26 +52,32 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn up(&mut self, x: Unit) -> Result<(), Error> {
+		dbg!(x);
 		todo!()
 	}
 
 	fn down(&mut self, x: Unit) -> Result<(), Error> {
+		dbg!(x);
 		todo!()
 	}
 
 	fn forward(&mut self, x: Unit) -> Result<(), Error> {
+		dbg!(x);
 		todo!()
 	}
 
 	fn backward(&mut self, x: Unit) -> Result<(), Error> {
+		dbg!(x);
 		todo!()
 	}
 
 	fn left(&mut self, x: Unit) -> Result<(), Error> {
+		dbg!(x);
 		todo!()
 	}
 
 	fn right(&mut self, x: Unit) -> Result<(), Error> {
+		dbg!(x);
 		todo!()
 	}
 
@@ -84,10 +90,12 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn clockwise_rot(&mut self, rads: f32) -> Result<(), Error> {
+		dbg!(rads);
 		todo!()
 	}
 
 	fn cclockwise_rot(&mut self, rads: f32) -> Result<(), Error> {
+		dbg!(rads);
 		todo!()
 	}
 
@@ -108,7 +116,7 @@ impl drone_interface::Drone for Drone
 				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
 				let mut cursor = Cursor::new(&self.inner_read_buf);
 				// Strip the RTP header from the stream
-				let new_header = rtp::RTPHeader::from_stream(&mut cursor, bytes_read)?;
+				let new_header = rtp::RTPHeader::from_stream(&mut cursor)?;
 				// FIXME: We must factor out 'ignore quant' somehow. Probably by making it part of the RTP thing
 
 				// we're gonna assume that the images are all sent in order.
@@ -127,11 +135,14 @@ impl drone_interface::Drone for Drone
 				{
 					match new_header.content_header.unwrap() {
 						RTPContent::Jpeg(jpeg_header) => {
-							if jpeg_header.fragment_offset == 0
+							// TODO: perhaps make this jpeg_header.is_image_start()
+							//if jpeg_header.fragment_offset == 0
+							if jpeg_header.is_image_start()
 							{
 								self.inner_main_jpg_header = Some(jpeg_header)
 							}
 						}
+						#[allow(unreachable_patterns)]
 						_ => { Err(Error::RTPTypeNotImplemented(new_header.payload_type))? }
 					}
 				}
@@ -179,7 +190,7 @@ impl drone_interface::Drone for Drone
 
 
 			}
-			Ok(())
+
 		}
 		else if port == self.rtp_sock.local_addr()?.port() { todo!() }
 		else if port == self.heartbeat_sock.local_addr()?.port() { todo!() }
@@ -224,7 +235,7 @@ impl Drone
 	{
 
 		let video_sock = {
-			let mut poll_lock = poll.lock()?;
+			let poll_lock = poll.lock()?;
 			let registry = poll_lock.registry();
 			let mut video_sock = UdpSocket::bind(SocketAddr::new(local_ip, 30732))?;
 			let port = video_sock.local_addr()?.port() as usize;
@@ -285,11 +296,11 @@ impl Drone
 
 		/* Just for one send, it looks like. */
 		{
-			let mut video_start = UdpSocket::bind(SocketAddr::new(local_ip, 0))?; // this number matters since the drone initiates
+			let video_start = UdpSocket::bind(SocketAddr::new(local_ip, 0))?; // this number matters since the drone initiates
 			video_start.connect("192.168.1.1:52612".parse()?)?;
 			video_start.send(&[0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0])?;
 		}
-		let mut inner_read_buf = [0_u8;4096];
+		let inner_read_buf = [0_u8;4096];
 
 
 
@@ -300,7 +311,7 @@ impl Drone
 
 		// register all sockets to poll
 		{
-			let mut poll_lock = poll.lock()?;
+			let poll_lock = poll.lock()?;
 			poll_lock.registry().register(&mut handshake_sock,	handshake_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut heartbeat_sock,	heartbeat_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut rtp_sock,		rtp_token,			Interest::READABLE)?;

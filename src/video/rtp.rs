@@ -14,6 +14,7 @@ impl RTPContent
 	const JPEG : u8 = 26;
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct RTPHeader
 {
@@ -46,7 +47,7 @@ enum BitFlagsVPXCCMPT
 
 impl RTPHeader
 {
-	pub fn from_stream(mut stream: impl Read, header_len : usize) -> Result<Self, Error>
+	pub fn from_stream(mut stream: impl Read) -> Result<Self, Error>
 	{
 		let mut flags : u16 = 0;
 		let mut sequence_number : u16 = 0;
@@ -76,14 +77,12 @@ impl RTPHeader
 		//assert_eq!(marker, 0, "Markers not implemented!");
 		let is_last_in_frame = marker != 0;
 
-		let mut content_header = None;
-
-		match payload_type {
+		let content_header = match payload_type {
 			RTPContent::JPEG => {
-				content_header = Some(RTPContent::Jpeg(JpegMainHeader::from_stream(stream)?));
+				Some(RTPContent::Jpeg(JpegMainHeader::from_stream(stream)?))
 			}
 			_ => { panic!("Unexpected payload type: {}", payload_type)}
-		}
+		};
 
 		Ok(Self {
 			version,
@@ -97,6 +96,7 @@ impl RTPHeader
 	}
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct JpegMainHeader
 {
@@ -113,11 +113,10 @@ pub struct JpegMainHeader
 
 impl JpegMainHeader
 {
-	const LENGTH_OF_HEADER : usize = 8;
 	pub fn is_image_start(&self) -> bool
 	{
 		let quant_header_exists = match self.quantization_header {
-			Some(_)	=> { true }
+			Some(_)	=> { debug_assert!(self.fragment_offset == 0); true }
 			None	=> { false }
 		};
 
@@ -150,16 +149,14 @@ impl JpegMainHeader
 		width = (unscaled_width as u16) * 8;
 		height = (unscaled_height as u16) * 8;
 
-		let mut bytes_read = Self::LENGTH_OF_HEADER;
 
 		if packet_type >= 64
 		{
 			restart_header = Some(JpegRestartHeader::from_stream(&mut stream)?);
-			bytes_read += JpegRestartHeader::LENGTH_OF_HEADER;
 		}
 		if quantization >= 128 && fragment_offset == 0
 		{
-			quantization_header = Some(JQTH::from_stream(&mut stream)?);
+			quantization_header = Some(JpegQuantizationTableHeader::from_stream(&mut stream)?);
 		}
 
 		Ok(Self {
@@ -176,6 +173,7 @@ impl JpegMainHeader
 }
 
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct JpegRestartHeader
 {
@@ -187,7 +185,6 @@ pub struct JpegRestartHeader
 
 impl JpegRestartHeader
 {
-	const LENGTH_OF_HEADER : usize = 4;
 	pub fn from_stream(mut stream : impl Read) -> Result<Self, Error>
 	{
 		const F_BIT : u16 = 0b1000_0000__0000_0000_u16.to_be();
@@ -215,7 +212,7 @@ impl JpegRestartHeader
 	}
 }
 
-pub type JQTH = JpegQuantizationTableHeader;
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct JpegQuantizationTableHeader
 {

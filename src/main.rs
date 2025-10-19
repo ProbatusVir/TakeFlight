@@ -19,12 +19,14 @@ use crate::drone_interface::Drone;
 use error::Error;
 use mio;
 use mio::net::{TcpListener, TcpStream, UdpSocket};
-use mio::{Events, Interest, Poll, Registry, Token, Waker};
+use mio::{Events, Interest, Poll, Token, Waker};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+
+#[allow(dead_code)]
 #[derive(Debug)]
 enum Connection
 {
@@ -61,7 +63,7 @@ fn main() -> Result<(), Error> {
 
 	// Start heartbeat
 	{
-		let mut heartbeat = Waker::new(poll.lock()?.registry(), HEARTBEAT)?;
+		let heartbeat = Waker::new(poll.lock()?.registry(), HEARTBEAT)?;
 		thread::spawn(move || { loop {
 			thread::sleep(heartbeat_time);
 			heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
@@ -74,7 +76,7 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
-	let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
+	//let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
 
 	// Some multiplexing
 	let status = loop
@@ -143,7 +145,7 @@ fn drain_events(event_buffer	: &mut Events,
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
-				for mut connection in ownership_map.lock()?.iter_mut() {
+				for connection in ownership_map.lock()?.iter_mut() {
 					match connection.1
 					{
 						// TODO: This is sorely in need of a refactor...

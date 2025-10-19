@@ -4,7 +4,6 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug)]
 pub enum Error
 {
-	InitFail,
 	IOError(std::io::Error),
 	Custom(&'static str),
 	LocalIPError,
@@ -67,7 +66,7 @@ impl<T> From<std::sync::LockResult<T>> for Error
 
 impl<T> From<std::sync::PoisonError<T>> for Error
 {
-	fn from(_value : std::sync::PoisonError<T>) -> Self { Error::MutexError }
+	fn from(_value : std::sync::PoisonError<T>) -> Self { Error::PoisonError }
 }
 
 impl From<std::net::AddrParseError> for Error
@@ -79,7 +78,6 @@ impl Display for Error {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		match self
 		{
-			Error::InitFail => { "Failed to initialize drone!".fmt(f) }
 			Error::IOError(e) => { e.fmt(f) }
 			Error::Custom(msg) => { msg.fmt(f) }
 			Error::LocalIPError => { "Failed to acquire local IP".fmt(f) }

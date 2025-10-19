@@ -4,6 +4,7 @@ use tflitec::interpreter::{Interpreter, Options};
 use tflitec::model::Model;
 use tflitec::tensor::{Shape, Tensor};
 
+#[allow(dead_code)]
 // These acronyms are anatomical, and I lack better words for them
 pub enum DigitIndices
 {
@@ -46,6 +47,7 @@ pub struct HandLandmarker<'a>
 }
 
 
+#[allow(dead_code)]
 impl<'a> HandLandmarker<'a>
 {
 	pub fn from_path(model_path : &str) -> Result<Self, Error>
