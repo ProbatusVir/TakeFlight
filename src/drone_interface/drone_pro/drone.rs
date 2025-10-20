@@ -12,6 +12,7 @@ use mio::event::Source;
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::net::IpAddr;
+use std::ops::BitXor;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -34,21 +35,32 @@ pub struct Drone
 
 
 
-
+// It appears that the packet structure uses [0x03 0x66] as an indicator
+//	that this is a command, and ends the transmission with [0x99]
+// It also appears that all commands are 9 characters long.
 
 impl drone_interface::Drone for Drone
 {
 
 	fn takeoff(&mut self) -> Result<(), Error> {
-		todo!()
+		self.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x80, 0x80, 0x0, 0x0, 0x99])?;
+		self.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x80, 0x80, 0x01, 0x01, 0x99])?;
+
+		Ok(())
 	}
 
 	fn emergency_land(&mut self) -> Result<(), Error> {
-		todo!()
+		self.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x80, 0x80, 0x0, 0x0, 0x99])?;
+		self.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x80, 0x80, 0x4, 0x4, 0x99])?;
+
+		Ok(())
 	}
 
 	fn graceful_land(&mut self) -> Result<(), Error> {
-		todo!()
+		self.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x80, 0x80, 0x0, 0x0, 0x99])?;
+		self.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x80, 0x80, 0x02, 0x02, 0x99])?;
+
+		Ok(())
 	}
 
 	fn up(&mut self, x: Unit) -> Result<(), Error> {
@@ -105,6 +117,7 @@ impl drone_interface::Drone for Drone
 
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
 		self.heartbeat_sock.send(&[0xef, 0x00, 0x04, 0x00])?;
+		self.handshake_sock.send(&[0x01, 0x01])?;
 
 		Ok(())
 	}
@@ -195,9 +208,12 @@ impl drone_interface::Drone for Drone
 		else if port == self.rtp_sock.local_addr()?.port() { todo!() }
 		else if port == self.heartbeat_sock.local_addr()?.port() { todo!() }
 		else if port == self.handshake_sock.local_addr()?.port() {
-			dbg!("Received a response from handshake socket");
-			self.handshake_sock.recv(&mut self.inner_read_buf)?;
-			Ok(()) }
+			loop {
+				let bytes_read = self.handshake_sock.recv(&mut self.inner_read_buf)?;
+				dbg!("Received some bytes, put a command below this line to execute it. Make sure to add some condition to stop it after certain number of times!");
+			}
+			Ok(())
+		}
 		else { return Err(Error::Custom("DronePro: Requested socket not found in DronePro!")) }
 
 	}
@@ -342,11 +358,6 @@ impl Drone
 			map_lock.insert(video_token,		Connection::Drone(this_drone.clone()));
 		}
 
-		// Try to takeoff -- handshake is also the command sock
-		this_drone.lock()?.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x0, 0x80, 0x0, 0x80, 0x99])?;
-		this_drone.lock()?.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x0, 0x80, 0x0, 0x80, 0x99])?;
-		this_drone.lock()?.handshake_sock.send(&[0x3, 0x66, 0x80, 0x80, 0x0, 0x80, 0x0, 0x80, 0x99])?;
-
 		Ok(this_drone)
 	}
 
@@ -355,5 +366,14 @@ impl Drone
 		self.inner_raw_img_buf.clear();
 		self.fin_image_buf.clear();
 		self.inner_main_jpg_header = None;
+	}
+
+	fn spin_rotors(&mut self, unkn1 : u8) -> Result<(), Error>
+	{
+		// Looks like the number xor the last bit...
+		let unkn2 = unkn1.bitxor(0b1000_0000);
+		self.handshake_sock.send(&[0x03, 0x66, 0x80, 0x80, unkn1, 0x80, 0x00, unkn2, 0x099])?;
+
+		Ok(())
 	}
 }
