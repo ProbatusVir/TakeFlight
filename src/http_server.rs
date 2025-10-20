@@ -1,46 +1,107 @@
-use crate::error;
+use crate::{error, LISTENER};
 use error::Error;
+use std::{
+    collections::HashMap,
+    io::ErrorKind,
+    net::SocketAddr,
+};
+use std::io::{Read, Write};
+use httparse::{Request, Response, Status};
 use serde::{
     Deserialize,
     Serialize
 };
 //HTTP server implementation
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+use mio::{
+    net::{TcpListener, TcpStream, UdpSocket},
+    Events, Interest, Poll, Registry, Token, Waker,
 };
 
 #[derive(Serialize, Deserialize)]
 struct DroneNames{
     names: Vec<String>
 }
+struct Connection {
+    stream: TcpStream,
+    buffer: Vec<u8>,
+    response: Vec<u8>,
+    closed: bool,
+}
+const SERVER: Token = Token(0); //Server token
+fn server() -> Result<(), Error>{
+    //create poll instance
+    let mut poll = Poll::new()?;
+    //Storage for events
+    let mut events = Events::with_capacity(1024);
+    //set up the TCP socket
+    let addr = "127.0.0.1:5137".parse()?;
+    let mut server = TcpListener::bind(addr)?;
+    poll.registry()
+        .register(&mut server, LISTENER, Interest::READABLE)?;
 
-#[tokio::main]
-async fn server() -> Result<(), Error>{
-    //bind to localhost:5137
-    let listener = TcpListener::bind("127.0.0.1:5137").await?;
-    println!("Listening on {}", listener.local_addr()?);
+    //map of 'Token -> TCPStream'
+    let mut clients: HashMap<Token, TcpStream> = HashMap::new();
+    let mut unique_token = Token(SERVER.0 + 1);
 
-    //Accept incoming TCP connections
+    println!("Listening on {}", server.local_addr()?);
+
+    //event loop
     loop{
-        let (stream, addr) = listener.accept().await?;
-        println!("Accepted connection from {}", addr);
-        tokio::spawn(async move {
-            if let Error::IOError(e) = handle_connection(stream).await {
-                eprintln!("Error: {}", e);
+        poll.poll(&mut events, None)?;
+        for event in events.iter() {
+            match event.token() {
+                SERVER => {
+                    //Accepting new connections
+                    match server.accept() {
+                        Ok((mut socket, addr)) => {
+                            println!("Accepted connection from {}", addr);
+                            let token = Token(unique_token.0 + 1);
+                            //register clients for readable events
+                            poll.registry()
+                                .register(&mut socket, token, Interest::READABLE)?;
+                            //add connected client to hashmap
+                            clients.insert(token, socket);
+                        }
+                        Err(e) => {
+                            if e.kind() == ErrorKind::WouldBlock {continue}
+                            else { return Err(e.into()) }
+                        }
+                    }
+                }
+                token => {
+                    //Client ready to read
+                    if let Some(client) = clients.get_mut(&token){
+                        if let Err(e) = handle_connection(client)?{
+                            eprintln!("Error on {:?}: {}",token, e );
+                        }
+                    }
+                }
             }
-        });
+        }
     }
-    Ok(())
 }
 
-async fn handle_connection(mut stream: TcpStream) -> Result<(), Error>{
+fn handle_connection(mut stream: &mut TcpStream) -> Result<(), Error>{
     //Initialize buffer
-    let mut buffer = [0; 512];
-    //Reads the request size/bytes
-    if let Ok(size) = stream.read(&mut buffer).await?{
-        if size == 0{
-            return Ok(());
+    let mut buffer = [0; 1024];
+    let n = stream.read(&mut buffer)?;
+    //create a request object and a buffer for headers
+    let mut headers = [httparse::EMPTY_HEADER; 16];
+    let mut req = httparse::Request::new(&mut headers);
+
+    //Try parsing the HTTP request
+    match req.parse(&buffer[..n]) {
+        Ok(Status::Complete(_)) =>{
+            println!("Method: {:?}", req.method);
+            println!("Path: {:?}", req.path);
+            println!("Version: {:?}", req.version);
+            println!("Headers: {:?}", req.headers);
+        }
+        Ok(Status::Partial) => {
+            eprintln!("Request is Incomplete");
+        }
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
         }
     }
     //Grabs the type of request command
@@ -49,7 +110,8 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Error>{
     println!("Request: {}", request);
 
     //GET handle for drone names
-    let (status, body) = if request.contains("drone_names"){
+    let (status, body) = if req.method == Some("GET")
+        && req.path == Some("/drone_names"){
         //populates drone vector with random string names
         let data = DroneNames{
             names: vec![
@@ -77,8 +139,8 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Error>{
         \r\nContent-Length: {}\r\n\r\n{body}", body.len()
     );
     //Send it to client
-    stream.write(response.as_bytes()).await?;
+    stream.write(response.as_bytes())?;
     //Ensures anything using write/write_all is sent out
-    stream.flush().await?;
+    stream.flush()?;
     Ok(())
 }
