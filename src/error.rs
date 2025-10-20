@@ -4,7 +4,6 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug)]
 pub enum Error
 {
-	InitFail,
 	IOError(std::io::Error),
 	Custom(&'static str),
 	LocalIPError,
@@ -14,20 +13,21 @@ pub enum Error
 	Infallible(std::convert::Infallible),
 	MutexError,
 	PoisonError,
-	AddrParseError(std::net::AddrParseError)
-}
-
-impl From<std::convert::Infallible> for Error
-{
-	fn from(value: std::convert::Infallible) -> Self {
-		Error::Infallible(value)
-	}
+	AddrParseError(std::net::AddrParseError),
+	RTPTypeNotImplemented(u8),
 }
 
 impl From<openh264::Error> for Error
 {
 	fn from(value: openh264::Error) -> Self {
 		Error::H264Error(value)
+	}
+}
+
+impl From<std::convert::Infallible> for Error
+{
+	fn from(value: std::convert::Infallible) -> Self {
+		Error::Infallible(value)
 	}
 }
 
@@ -66,7 +66,7 @@ impl<T> From<std::sync::LockResult<T>> for Error
 
 impl<T> From<std::sync::PoisonError<T>> for Error
 {
-	fn from(_value : std::sync::PoisonError<T>) -> Self { Error::MutexError }
+	fn from(_value : std::sync::PoisonError<T>) -> Self { Error::PoisonError }
 }
 
 impl From<std::net::AddrParseError> for Error
@@ -78,7 +78,6 @@ impl Display for Error {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		match self
 		{
-			Error::InitFail => { "Failed to initialize drone!".fmt(f) }
 			Error::IOError(e) => { e.fmt(f) }
 			Error::Custom(msg) => { msg.fmt(f) }
 			Error::LocalIPError => { "Failed to acquire local IP".fmt(f) }
@@ -89,6 +88,7 @@ impl Display for Error {
 			Error::MutexError => { "Failed to acquire lock!".fmt(f) }
 			Error::PoisonError => { "Failed to acquire lock!".fmt(f) }
 			Error::AddrParseError(e) => { e.fmt(f) }
+			Error::RTPTypeNotImplemented(value) => { format!("RTP type {value} not implemented!").fmt(f) }
 		}
 	}
 }

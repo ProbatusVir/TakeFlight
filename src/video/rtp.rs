@@ -1,9 +1,21 @@
-use crate::video::rtp::BitFlagsVPXCCMPT::{ShiftCC, ShiftM, ShiftP, ShiftPT, ShiftV, ShiftX, CC, M, P, PT, V, X};
 use crate::error::Error;
+use crate::video::rtp::BitFlagsVPXCCMPT::{ShiftCC, ShiftM, ShiftP, ShiftPT, ShiftV, ShiftX, CC, M, P, PT, V, X};
 use lebe::io::ReadPrimitive;
 use std::io::Read;
 use zerocopy::IntoBytes;
 
+#[derive(Debug)]
+pub enum RTPContent
+{
+	Jpeg(JpegMainHeader)
+}
+impl RTPContent
+{
+	const JPEG : u8 = 26;
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
 pub struct RTPHeader
 {
 	pub version				: u8,
@@ -12,6 +24,7 @@ pub struct RTPHeader
 	pub timestamp			: u32,
 	pub ssrc				: u32,
 	pub is_last_in_frame	: bool,
+	pub content_header		: Option<RTPContent>
 }
 
 #[repr(u16)]
@@ -40,6 +53,7 @@ impl RTPHeader
 		let mut sequence_number : u16 = 0;
 		let mut timestamp : u32 = 0;
 		let mut ssrc : u32 = 0;
+
 		//let mut csrcs : u32 = 0;
 		{
 			stream.read(flags.as_mut_bytes())?;
@@ -63,6 +77,13 @@ impl RTPHeader
 		//assert_eq!(marker, 0, "Markers not implemented!");
 		let is_last_in_frame = marker != 0;
 
+		let content_header = match payload_type {
+			RTPContent::JPEG => {
+				Some(RTPContent::Jpeg(JpegMainHeader::from_stream(stream)?))
+			}
+			_ => { panic!("Unexpected payload type: {}", payload_type)}
+		};
+
 		Ok(Self {
 			version,
 			payload_type,
@@ -70,10 +91,12 @@ impl RTPHeader
 			timestamp,
 			ssrc,
 			is_last_in_frame,
+			content_header,
 		})
 	}
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct JpegMainHeader
 {
@@ -93,14 +116,14 @@ impl JpegMainHeader
 	pub fn is_image_start(&self) -> bool
 	{
 		let quant_header_exists = match self.quantization_header {
-			Some(_)	=> { true }
+			Some(_)	=> { debug_assert!(self.fragment_offset == 0); true }
 			None	=> { false }
 		};
 
 		quant_header_exists
 	}
 
-	pub fn from_stream(mut stream : impl Read, ignore_quant : bool) -> Result<Self, Error>
+	pub fn from_stream(mut stream : impl Read) -> Result<Self, Error>
 	{
 		let width : u16;
 		let height : u16;
@@ -126,13 +149,14 @@ impl JpegMainHeader
 		width = (unscaled_width as u16) * 8;
 		height = (unscaled_height as u16) * 8;
 
+
 		if packet_type >= 64
 		{
 			restart_header = Some(JpegRestartHeader::from_stream(&mut stream)?);
 		}
-		if quantization >= 128 && !ignore_quant
+		if quantization >= 128 && fragment_offset == 0
 		{
-			quantization_header = Some(JQTH::from_stream(&mut stream)?);
+			quantization_header = Some(JpegQuantizationTableHeader::from_stream(&mut stream)?);
 		}
 
 		Ok(Self {
@@ -149,6 +173,7 @@ impl JpegMainHeader
 }
 
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct JpegRestartHeader
 {
@@ -187,7 +212,7 @@ impl JpegRestartHeader
 	}
 }
 
-pub type JQTH = JpegQuantizationTableHeader;
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct JpegQuantizationTableHeader
 {

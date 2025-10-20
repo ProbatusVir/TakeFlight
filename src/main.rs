@@ -16,16 +16,17 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use tflitec as tf;
 
+use crate::drone_interface::Drone;
 use error::Error;
-use std::process::{Command, Stdio};
+use mio;
+use mio::net::{TcpListener, TcpStream, UdpSocket};
+use mio::{Events, Interest, Poll, Token, Waker};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use mio;
-use mio::{Events, Interest, Poll, Registry, Token, Waker};
-use mio::net::{TcpStream, UdpSocket, TcpListener};
-use crate::drone_interface::Drone;
 
+
+#[allow(dead_code)]
 #[derive(Debug)]
 enum Connection
 {
@@ -63,7 +64,7 @@ fn main() -> Result<(), Error> {
 
 	// Start heartbeat
 	{
-		let mut heartbeat = Waker::new(poll.lock()?.registry(), HEARTBEAT)?;
+		let heartbeat = Waker::new(poll.lock()?.registry(), HEARTBEAT)?;
 		thread::spawn(move || { loop {
 			thread::sleep(heartbeat_time);
 			heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
@@ -76,7 +77,7 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
-	//let drone = crate::drone_interface::drone_pro::drone::Drone::init(poll.clone(), ownership_map.clone(), server_address);
+	//let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
 
 	// Some multiplexing
 	let status = loop
@@ -145,11 +146,20 @@ fn drain_events(event_buffer	: &mut Events,
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
-				for mut connection in ownership_map.lock()?.iter_mut() {
+				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
+				for connection in ownership_map.lock()?.iter_mut() {
+					// This seems like a patchy solution. This combats sending multiple pings per cycle.
 					match connection.1
 					{
 						// TODO: This is sorely in need of a refactor...
 						Connection::Drone(drone) => {
+							if contacted_drones.iter().find(|ptr| { Arc::ptr_eq(ptr, drone) }).is_some() {
+								continue
+							}
+							else {
+								contacted_drones.push(drone.clone())
+							}
+
 							let mut drone_lock = drone.lock()?;
 							let ping_result = drone_lock.send_heartbeat();
 							match ping_result {

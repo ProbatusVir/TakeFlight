@@ -1,17 +1,17 @@
 pub mod tello;
 pub mod drone_pro;
 
+use crate::Error;
 use std::fmt::Debug;
-use crate::{Error, Poll, Registry, Token, Arc, Mutex, HashMap, SocketAddr, Connection};
-use std::net::IpAddr;
 
 /// The unit corresponds to a centimeter, for now; even if the precision of the drone is not matched to the centimeter.
-type Unit = u64;
 
+#[allow(dead_code)]
+pub type Unit = u64;
 
+#[allow(dead_code)]
 pub trait Drone : Debug
 {
-
 	/// The init will establish whatever internal state is necessary.
 	/// This must include whatever network operations are necessary
 	/// for communicating with the drone. This may ***NOT*** include

@@ -1,8 +1,8 @@
 // https://datatracker.ietf.org/doc/html/rfc2435
 
-use crate::video::rtp::JpegMainHeader;
 use crate::error::Error;
 use crate::video::rfc2435::Markers::{DriHeaderMarker, EndOfImageMarker, HuffmanTableMarker, QuantizationTableMarker, StartOfFrameMarker, StartOfImageMarker, StartOfScanMarker};
+use crate::video::rtp::JpegMainHeader;
 use std::io::Write;
 use zerocopy::IntoBytes;
 
@@ -98,9 +98,11 @@ enum Markers
 	StartOfScanMarker		= 0xFFDA_u16.to_be(),
 
 	EndOfImageMarker		= 0xFFD9_u16.to_be(),
+	#[allow(dead_code)]
 	JfifApp0Marker			= 0xFFE0_u16.to_be(),
 }
 
+#[allow(dead_code)]
 pub struct Thumbnail<'a> 	// probably missing a whole 6 bytes on alignment or something.
 {
 	image_data	: &'a [u8],
@@ -108,7 +110,6 @@ pub struct Thumbnail<'a> 	// probably missing a whole 6 bytes on alignment or so
 	height		: u8,
 }
 
-type QuantizationHeader = [u8;132];
 
 /// I am assuming that the table number should be a byte, since the alternative (i32) makes no sense
 ///

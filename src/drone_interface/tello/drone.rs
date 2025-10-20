@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-use crate::{drone_interface, Connection};
-use std::net::IpAddr;
 use crate::drone_interface::Unit;
 use crate::error::Error;
-use local_ip_address::local_ip;
+use crate::{drone_interface, Connection};
+use mio::{Poll, Token};
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use mio::{Poll, Token};
 
-const WAIT_TIME : u64 = 3;
-
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Drone
 {
@@ -152,12 +150,14 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
+		dbg!(port);
 		todo!()
 	}
 }
 
 impl Drone
 {
+	#[allow(dead_code)]
 	fn init(registry: Arc<Mutex<Poll>>, map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> {
 		let command_sock = {
 			const COMMAND_PORT: u16 = 8889;
@@ -167,6 +167,8 @@ impl Drone
 
 			let command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
 			command_sock.connect(SocketAddrV4::new(CONN_ADDR, COMMAND_PORT))?;
+
+			dbg!(registry, map);
 
 			command_sock
 		};
