@@ -9,6 +9,7 @@ pub(crate) mod debug_utils;
 
 mod computer_vision;
 mod video;
+mod http_server;
 
 use std::collections::HashMap;
 use std::io::ErrorKind;
@@ -37,7 +38,8 @@ enum Connection
 
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
-
+//Main fn that executes the application within a localhost http with the return signature Result<(), Error>
+//Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
 	const MAX_EVENTS : usize = 1024;
 	let heartbeat_time: Duration = Duration::from_secs_f32(3.0);
