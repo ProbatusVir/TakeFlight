@@ -14,6 +14,7 @@ use std::io::{Cursor, Read, Write};
 use std::net::IpAddr;
 use std::ops::BitXor;
 use std::str::FromStr;
+use crate::drone_interface::drone_pro::drone::DroneCommandState::{BasicMovement, EmergencyLand, Takeoff};
 
 #[derive(Debug)]
 pub struct Drone
@@ -31,9 +32,19 @@ pub struct Drone
 	inner_raw_img_buf		: Vec<u8>,
 	inner_read_buf			: [u8;4096],
 	pub image				: Option<DynamicImage>,
+	dbg_cmd_send : usize,
+	landmarker : Box<HandLandmarker<'static>>,
 }
 
-
+#[repr(u8)]
+#[derive(Clone, Copy)]
+enum DroneCommandState
+{
+	BasicMovement	= 0,
+	Takeoff			= 1,
+	GracefulLand	= 2,
+	EmergencyLand	= 4,
+}
 
 // It appears that the packet structure uses [0x03 0x66] as an indicator
 //	that this is a command, and ends the transmission with [0x99]
@@ -64,33 +75,30 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn up(&mut self, x: Unit) -> Result<(), Error> {
-		dbg!(x);
-		todo!()
+		self.create_command(0, 0, -0x6b, 0, BasicMovement)
+
 	}
 
 	fn down(&mut self, x: Unit) -> Result<(), Error> {
-		dbg!(x);
-		todo!()
+		self.create_command(0, 0, -0x6a, 0, BasicMovement)
 	}
 
 	fn forward(&mut self, x: Unit) -> Result<(), Error> {
-		dbg!(x);
-		todo!()
+		self.create_command(0, -0x02, 0, 0, BasicMovement)
 	}
 
 	fn backward(&mut self, x: Unit) -> Result<(), Error> {
-		dbg!(x);
-		todo!()
+		self.create_command(0, 0x1e, 0, 0, BasicMovement)
+
 	}
 
 	fn left(&mut self, x: Unit) -> Result<(), Error> {
-		dbg!(x);
-		todo!()
+		self.create_command(-0x15, 0, 0, 0, BasicMovement)
+
 	}
 
 	fn right(&mut self, x: Unit) -> Result<(), Error> {
-		dbg!(x);
-		todo!()
+		self.create_command(0x25, 0, 0, 0, BasicMovement)
 	}
 
 	fn backflip(&mut self) -> Result<(), Error> {
@@ -102,13 +110,11 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn clockwise_rot(&mut self, rads: f32) -> Result<(), Error> {
-		dbg!(rads);
-		todo!()
+		self.create_command(0, 0, 0, 0x58, BasicMovement)
 	}
 
 	fn cclockwise_rot(&mut self, rads: f32) -> Result<(), Error> {
-		dbg!(rads);
-		todo!()
+		self.create_command(0, 0, 0,-0x79, BasicMovement)
 	}
 
 	fn snapshot(&mut self) -> Result<(), Error> {
@@ -130,16 +136,13 @@ impl drone_interface::Drone for Drone
 				let mut cursor = Cursor::new(&self.inner_read_buf);
 				// Strip the RTP header from the stream
 				let new_header = rtp::RTPHeader::from_stream(&mut cursor)?;
-				// FIXME: We must factor out 'ignore quant' somehow. Probably by making it part of the RTP thing
 
 				// we're gonna assume that the images are all sent in order.
 				{
 					// Add only the jpeg data. Markers and payload
 					let cursor_position = cursor.position() as usize;
 					// FIXME: this is debug only!
-					if cursor_position > bytes_read {
-						panic!("Something is very wrong!");
-					}
+					debug_assert!(cursor_position <= bytes_read);
 					self.inner_raw_img_buf.extend_from_slice(&self.inner_read_buf[cursor_position..bytes_read]);
 
 				}
@@ -185,7 +188,11 @@ impl drone_interface::Drone for Drone
 					let image_result = image::load_from_memory_with_format(&self.fin_image_buf, Jpeg);
 					match image_result
 					{
-						Ok(img) => { self.image = Some(img); }
+						Ok(img) => {
+							self.image = Some(img);
+							let output = self.landmarker.run_model(self.image.as_ref().unwrap().clone().into_rgb32f())?;
+							dbg!("Is a hand present: {}", HandLandmarker::hand_present(&output));
+						}
 						Err(_) => { self.image = None; }
 					};
 
@@ -201,16 +208,23 @@ impl drone_interface::Drone for Drone
 					self.cleanup_image();
 				}
 
-
 			}
 
 		}
-		else if port == self.rtp_sock.local_addr()?.port() { todo!() }
+		else if port == self.rtp_sock.local_addr()?.port() {
+			let bytes_read = self.rtp_sock.read(&mut self.inner_read_buf)?;
+			dbg!("RPT SOCKET: {}", &[..bytes_read]);
+			Ok(())
+		}
 		else if port == self.heartbeat_sock.local_addr()?.port() { todo!() }
 		else if port == self.handshake_sock.local_addr()?.port() {
+			dbg!("Received some bytes, put a command within this loop to execute it. Make sure to add some condition to stop it after certain number of times!");
 			loop {
 				let bytes_read = self.handshake_sock.recv(&mut self.inner_read_buf)?;
-				dbg!("Received some bytes, put a command below this line to execute it. Make sure to add some condition to stop it after certain number of times!");
+				if self.dbg_cmd_send < 30 { self.create_command(0, 0, 0, 0, Takeoff)? }
+				else if self.dbg_cmd_send < 100 { self.clockwise_rot(100.0)?  }
+				else { self.create_command(0, 0, 0, 0, EmergencyLand)?; panic!("shut down!"); }
+				self.dbg_cmd_send += 1;
 			}
 			Ok(())
 		}
@@ -346,7 +360,9 @@ impl Drone
 			poll			: poll.clone(),
 			connection_map	: connection_map.clone(),
 			inner_main_jpg_header: None,
-			image			: None
+			image			: None,
+			dbg_cmd_send: 0,
+			landmarker: Box::new(HandLandmarker::from_path("/src/model/hand_landmarks_detector.tflite")?),
 		}));
 
 		// Register all sockets to map
@@ -373,6 +389,31 @@ impl Drone
 		// Looks like the number xor the last bit...
 		let unkn2 = unkn1.bitxor(0b1000_0000);
 		self.handshake_sock.send(&[0x03, 0x66, 0x80, 0x80, unkn1, 0x80, 0x00, unkn2, 0x099])?;
+
+		Ok(())
+	}
+
+	/// lr: left/right
+	///
+	/// fb: front/back
+	///
+	/// ud: up/down
+	///
+	/// r: rotate
+	fn create_command(&mut self, lr : i8, fb : i8, ud : i8, r : i8, cmd : DroneCommandState ) -> Result<(), Error>
+	{
+		const DEFAULT : i8 = 0x80u8 as i8;
+		let checksum = lr ^ fb ^ ud ^ r ^ (cmd as i8);
+
+		self.handshake_sock.send(
+			&[0x03, 0x66,
+			DEFAULT.wrapping_add(lr) as u8,
+			DEFAULT.wrapping_add(fb) as u8,
+			DEFAULT.wrapping_add(ud) as u8,
+			DEFAULT.wrapping_add(r ) as u8,
+			cmd as u8,
+			checksum as u8,
+			99])?;
 
 		Ok(())
 	}
