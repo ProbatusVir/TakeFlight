@@ -1,6 +1,5 @@
-use std::fmt::{Debug, Formatter};
 use crate::Error;
-use image::{DynamicImage, EncodableLayout, Rgb32FImage};
+use image::{EncodableLayout, Rgb32FImage};
 use tflitec::interpreter::{Interpreter, Options};
 use tflitec::model::Model;
 use tflitec::tensor::{Shape, Tensor};
@@ -32,20 +31,10 @@ pub enum DigitIndices
 	PinkyTip,
 }
 
-#[repr(usize)]
-enum HandLandmarkIndices
-{
-	ScreenSpace	= 0,
-	Presence	= 1,
-	Handedness	= 2,
-	WorldSpace	= 3,
-}
-
 const NUM_BATCHES: usize = 1;
 const WIDTH : usize = 224;
 const HEIGHT: usize = 224;
 const BIT_DEPTH : usize = 3;
-const PRESENCE_THRESHOLD : f32 = 0.5;
 
 
 #[ouroboros::self_referencing]
@@ -126,17 +115,4 @@ impl<'a> HandLandmarker<'a>
 		Ok(result)
 	}
 
-	pub fn hand_present(tensor : &Vec<Tensor<'a>>) -> bool
-	{
-		PRESENCE_THRESHOLD < tensor[HandLandmarkIndices::Presence as usize].data::<f32>()[0]
-	}
-
-}
-
-impl Debug for HandLandmarker<'_>
-{
-	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-		dbg!("Currently, the HandLandmarker is not debuggable...");
-		Ok(())
-	}
 }
