@@ -1,8 +1,23 @@
+mod cv_base;
+
+use std::fmt::{Debug, Formatter};
 use crate::Error;
 use image::{EncodableLayout, Rgb32FImage};
 use tflitec::interpreter::{Interpreter, Options};
 use tflitec::model::Model;
 use tflitec::tensor::{Shape, Tensor};
+use crate::computer_vision::HandLandmarkIndices::Presence;
+
+const PRESENCE_THRESHOLD : f32 = 0.3;
+
+#[repr(usize)]
+enum HandLandmarkIndices
+{
+	ScreenSpace	= 0,
+	Presence	= 1,
+	Handedness	= 2,
+	WorldSpace	= 3,
+}
 
 #[allow(dead_code)]
 // These acronyms are anatomical, and I lack better words for them
@@ -35,7 +50,6 @@ const NUM_BATCHES: usize = 1;
 const WIDTH : usize = 224;
 const HEIGHT: usize = 224;
 const BIT_DEPTH : usize = 3;
-
 
 #[ouroboros::self_referencing]
 pub struct HandLandmarker<'a>
@@ -115,4 +129,18 @@ impl<'a> HandLandmarker<'a>
 		Ok(result)
 	}
 
+	pub fn hand_present(tensor : &Vec<Tensor<'_>>) -> bool
+	{
+		tensor[Presence as usize].data::<f32>()[0] < PRESENCE_THRESHOLD
+	}
+
+}
+
+
+impl Debug for HandLandmarker<'_>
+{
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		dbg!("Debug is not implemented for HandLandmarker!");
+		Ok(())
+	}
 }
