@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::net::SocketAddr;
 use std::process::Command;
-//use tflitec as tf;
+use tflitec as tf;
 
 use crate::drone_interface::Drone;
 use error::Error;
