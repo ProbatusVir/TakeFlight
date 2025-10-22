@@ -1,6 +1,6 @@
 use crate::computer_vision::HandLandmarker;
 use crate::drone_interface;
-use crate::drone_interface::Unit;
+use crate::drone_interface::{IUnit, Unit};
 use crate::video::rtp;
 use crate::video::rtp::{JpegMainHeader, RTPContent};
 use crate::Interest;
@@ -14,6 +14,7 @@ use std::io::{Cursor, Read, Write};
 use std::net::IpAddr;
 use std::ops::BitXor;
 use std::str::FromStr;
+use image::imageops::CatmullRom;
 use crate::drone_interface::drone_pro::drone::DroneCommandState::{BasicMovement, EmergencyLand, Takeoff};
 
 #[derive(Debug)]
@@ -80,7 +81,7 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn down(&mut self, x: Unit) -> Result<(), Error> {
-		self.create_command(0, 0, -0x6a, 0, BasicMovement)
+		self.create_command(0, 0, 0x6a, 0, BasicMovement)
 	}
 
 	fn forward(&mut self, x: Unit) -> Result<(), Error> {
@@ -121,6 +122,10 @@ impl drone_interface::Drone for Drone
 		todo!()
 	}
 
+	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: IUnit) -> Result<(), Error> {
+		self.create_command(lr as i8, ud as i8, fb as i8, rot as i8, BasicMovement)
+	}
+
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
 		self.heartbeat_sock.send(&[0xef, 0x00, 0x04, 0x00])?;
 		self.handshake_sock.send(&[0x01, 0x01])?;
@@ -129,7 +134,9 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
+		dbg!("Received a signal to the drone.");
 		if port == self.video_sock.local_addr()?.port() {
+			dbg!("We're receiving images");
 			loop
 			{
 				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
@@ -151,8 +158,6 @@ impl drone_interface::Drone for Drone
 				{
 					match new_header.content_header.unwrap() {
 						RTPContent::Jpeg(jpeg_header) => {
-							// TODO: perhaps make this jpeg_header.is_image_start()
-							//if jpeg_header.fragment_offset == 0
 							if jpeg_header.is_image_start()
 							{
 								self.inner_main_jpg_header = Some(jpeg_header)
@@ -190,8 +195,6 @@ impl drone_interface::Drone for Drone
 					{
 						Ok(img) => {
 							self.image = Some(img);
-							let output = self.landmarker.run_model(self.image.as_ref().unwrap().clone().into_rgb32f())?;
-							dbg!("Is a hand present: {}", HandLandmarker::hand_present(&output));
 						}
 						Err(_) => { self.image = None; }
 					};
@@ -199,6 +202,13 @@ impl drone_interface::Drone for Drone
 					// FIXME: GET RID OF THIS ONCE THIS IS BRIDGED
 					if self.video_frame % 10 == 0
 					{
+						let output = self.landmarker.run_model(self.image
+							.as_ref()
+							.unwrap()
+							.clone()
+							.resize_exact(224, 224, CatmullRom)
+							.into_rgb32f())?;
+						dbg!("Is a hand present: {}", HandLandmarker::hand_present(&output));
 						File::create(format!("test_results/DroneImage{}.jpeg", self.video_frame))?.write_all(&self.fin_image_buf)?;
 					}
 
@@ -223,7 +233,7 @@ impl drone_interface::Drone for Drone
 				let bytes_read = self.handshake_sock.recv(&mut self.inner_read_buf)?;
 				if self.dbg_cmd_send < 30 { self.create_command(0, 0, 0, 0, Takeoff)? }
 				else if self.dbg_cmd_send < 100 { self.clockwise_rot(100.0)?  }
-				else { self.create_command(0, 0, 0, 0, EmergencyLand)?; panic!("shut down!"); }
+				else { self.create_command(0, 0, 0, 0, EmergencyLand)?; }
 				self.dbg_cmd_send += 1;
 			}
 			Ok(())
@@ -362,7 +372,7 @@ impl Drone
 			inner_main_jpg_header: None,
 			image			: None,
 			dbg_cmd_send: 0,
-			landmarker: Box::new(HandLandmarker::from_path("/src/model/hand_landmarks_detector.tflite")?),
+			landmarker: Box::new(HandLandmarker::from_path("src/model/hand_landmarks_detector.tflite")?),
 		}));
 
 		// Register all sockets to map
@@ -413,7 +423,7 @@ impl Drone
 			DEFAULT.wrapping_add(r ) as u8,
 			cmd as u8,
 			checksum as u8,
-			99])?;
+			0x99])?;
 
 		Ok(())
 	}

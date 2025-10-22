@@ -1,4 +1,4 @@
-use crate::drone_interface::Unit;
+use crate::drone_interface::{IUnit, Unit};
 use crate::error::Error;
 use crate::{drone_interface, Connection};
 use mio::{Poll, Token};
@@ -142,6 +142,10 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn snapshot(&mut self) -> Result<(), Error> {
+		todo!()
+	}
+
+	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: IUnit) -> Result<(), Error> {
 		todo!()
 	}
 

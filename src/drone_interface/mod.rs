@@ -8,6 +8,7 @@ use std::fmt::Debug;
 
 #[allow(dead_code)]
 pub type Unit = u64;
+pub type IUnit = i64;
 
 #[allow(dead_code)]
 pub trait Drone : Debug
@@ -72,6 +73,21 @@ pub trait Drone : Debug
 
 	/// Will return a picture from the drone's video feed.
 	fn snapshot(&mut self) -> Result<(), Error>;
+
+
+	/// The drone may be free to move on all axes simultaneously.
+	/// Relative to the drone's forward vector, these commands follow:
+	///
+	/// lr : left/right
+	///
+	/// ud : up/down
+	///
+	/// fb : forward/backward
+	///
+	/// rot : rotation about the yaw plane
+	///
+	/// There is no guarantee that these transformations must occur at the same time.
+	fn rc(&mut self, lr: IUnit, ud : IUnit, fb :  IUnit, rot :  IUnit) -> Result<(), Error>;
 
 	fn send_heartbeat(&mut self) -> Result<(), Error>;
 	fn receive_signal(&mut self, port : u16) -> Result<(), Error>;
