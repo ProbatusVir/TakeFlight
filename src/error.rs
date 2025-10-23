@@ -15,6 +15,14 @@ pub enum Error
 	PoisonError,
 	AddrParseError(std::net::AddrParseError),
 	RTPTypeNotImplemented(u8),
+	AnyhowError(anyhow::Error)
+}
+
+impl From<anyhow::Error> for Error
+{
+	fn from(value: anyhow::Error) -> Self {
+		Error::AnyhowError(value)
+	}
 }
 
 impl From<openh264::Error> for Error
@@ -89,6 +97,7 @@ impl Display for Error {
 			Error::PoisonError => { "Failed to acquire lock!".fmt(f) }
 			Error::AddrParseError(e) => { e.fmt(f) }
 			Error::RTPTypeNotImplemented(value) => { format!("RTP type {value} not implemented!").fmt(f) }
+			Error::AnyhowError(e) => { e.fmt(f) }
 		}
 	}
 }

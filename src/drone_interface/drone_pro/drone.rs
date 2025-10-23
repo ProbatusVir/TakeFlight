@@ -34,7 +34,7 @@ pub struct Drone
 	inner_read_buf			: [u8;4096],
 	pub image				: Option<DynamicImage>,
 	dbg_cmd_send : usize,
-	landmarker : Box<HandLandmarker<'static>>,
+	landmarker : HandLandmarker,
 }
 
 #[repr(u8)]
@@ -372,7 +372,7 @@ impl Drone
 			inner_main_jpg_header: None,
 			image			: None,
 			dbg_cmd_send: 0,
-			landmarker: Box::new(HandLandmarker::from_path("src/model/hand_landmarks_detector.tflite")?),
+			landmarker: HandLandmarker::from_path("src/model/hand_landmarks_detector.tflite")?,
 		}));
 
 		// Register all sockets to map

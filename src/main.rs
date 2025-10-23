@@ -7,7 +7,6 @@ mod tests;
 #[cfg(debug_assertions)]
 pub(crate) mod debug_utils;
 
-mod computer_vision;
 mod video;
 mod http_server;
 
@@ -26,6 +25,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use TakeFlightComputerVision as computer_vision;
 
 #[allow(dead_code)]
 #[derive(Debug)]
