@@ -1,5 +1,3 @@
-mod cv_base;
-
 use std::fmt::{Debug, Formatter};
 use crate::Error;
 use image::{EncodableLayout, Rgb32FImage};
