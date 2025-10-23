@@ -1,4 +1,5 @@
-mod computer_vision_test;
+mod landmarker_tests;
+mod identifier_tests;
 
 /// width is measured in pixels, and stride is the size of each pixel in bytes.
 fn get_mut_pixel<T>(image : &mut [T], x : usize, y : usize, width : usize, stride : usize) -> &mut [T]
