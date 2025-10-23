@@ -7,7 +7,6 @@ mod tests;
 #[cfg(debug_assertions)]
 pub(crate) mod debug_utils;
 
-mod computer_vision;
 mod video;
 
 
@@ -25,6 +24,8 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+
+use takeflight_computer_vision as computer_vision;
 use httparse::Status;
 use serde::{Deserialize, Serialize};
 
@@ -206,6 +207,70 @@ fn drain_events(event_buffer	: &mut Events,
 		}
 	}
 
+	Ok(())
+}
+
+fn handle_connection(stream: &mut TcpStream) -> Result<(), Error>{
+	//Initialize buffer
+	let mut buffer = [0; 1024];
+	let n = stream.read(&mut buffer)?;
+	//create a request object and a buffer for headers
+	let mut headers = [httparse::EMPTY_HEADER; 16];
+	let mut req = httparse::Request::new(&mut headers);
+
+	//Try parsing the HTTP request
+	match req.parse(&buffer[..n]) {
+		Ok(Status::Complete(_)) =>{
+			println!("Method: {:?}", req.method);
+			println!("Path: {:?}", req.path);
+			println!("Version: {:?}", req.version);
+			println!("Headers: {:?}", req.headers);
+		}
+		Ok(Status::Partial) => {
+			eprintln!("Request is Incomplete");
+		}
+		Err(e) => {
+			eprintln!("Parse error: {:?}", e);
+		}
+	}
+	//Grabs the type of request command
+	//let request = String::from_utf8_lossy(&buffer[..]);
+	//For Debugging: Converts bytes to string
+	//println!("Request: {}", request);
+
+	//GET handle for drone names
+	let (status, body) = if req.method == Some("GET")
+		&& req.path == Some("/drone_names"){
+		//populates drone vector with random string names
+		let data = DroneNames {
+			names: vec![
+				"Alpha".into(),
+				"Bravo".into(),
+				"Charlie".into(),
+				"Delta".into(),
+				"Echo".into(),
+				"Fern".into(),
+				"Germany".into(),
+			],
+		};
+		//Serializes the vector to JSON String
+		let json = serde_json::to_string(&data).unwrap();
+		("HTTP/1.1 200 OK", json)
+	}else{
+		let msg = serde_json::to_string(&DroneNames {
+			names: vec!["Invalid request".into()],
+		}).unwrap();
+		("HTTP/1.1 404 ERR", msg)
+	};
+	//Create HTTP response with proper formatting
+	let response = format!(
+		"{status}\r\nContent-Type: application/json
+        \r\nContent-Length: {}\r\n\r\n{body}", body.len()
+	);
+	//Send it to client
+	stream.write(response.as_bytes())?;
+	//Ensures anything using write/write_all is sent out
+	stream.flush()?;
 	Ok(())
 }
 

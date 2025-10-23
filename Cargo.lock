@@ -6,7 +6,6 @@ version = 4
 name = "TakeFlight"
 version = "0.1.0"
 dependencies = [
- "TakeFlightComputerVision",
  "anyhow",
  "httparse",
  "image",
@@ -19,19 +18,10 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "takeflight_computer_vision",
  "tflitec",
  "tiny_http",
  "zerocopy",
-]
-
-[[package]]
-name = "TakeFlightComputerVision"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image",
- "ouroboros",
- "tflitec",
 ]
 
 [[package]]
@@ -1855,6 +1845,16 @@ dependencies = [
  "pkg-config",
  "toml",
  "version-compare",
+]
+
+[[package]]
+name = "takeflight_computer_vision"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "ouroboros",
+ "tflitec",
 ]
 
 [[package]]

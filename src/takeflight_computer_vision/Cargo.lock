@@ -3,19 +3,6 @@
 version = 4
 
 [[package]]
-name = "TakeFlightComputerVision"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image",
- "nokhwa",
- "ouroboros",
- "rstest",
- "sdl",
- "tflitec",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1819,6 +1806,19 @@ dependencies = [
  "pkg-config",
  "toml",
  "version-compare",
+]
+
+[[package]]
+name = "takeflight_computer_vision"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "nokhwa",
+ "ouroboros",
+ "rstest",
+ "sdl",
+ "tflitec",
 ]
 
 [[package]]
