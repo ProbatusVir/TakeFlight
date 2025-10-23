@@ -6,11 +6,12 @@ edition = "2024"
 [dependencies]
 image = "0.25.8"
 tflitec = "0.7.0"
+rstest = "0.26.1"
 
 ouroboros = "0.18.5"
 anyhow = "1.0.100"
+const_format = "0.2.35"
 
 [dev-dependencies]
 nokhwa = { version="0.10.9", features = ["input-native"] }
-rstest = "0.26.1"
 sdl = "0.3.6"

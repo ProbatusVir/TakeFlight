@@ -15,6 +15,7 @@ pub struct HandLandmarker
 
 const PRESENCE_THRESHOLD : f32 = 0.3;
 
+#[derive(Debug)]
 pub enum Hand
 {
 	Left,
@@ -110,7 +111,7 @@ impl<'a> HandLandmarker
 
 	pub fn hand_present(tensor : &Vec<Tensor<'_>>) -> bool
 	{
-		tensor[Presence as usize].data::<f32>()[0] == PRESENCE_THRESHOLD
+		tensor[Presence as usize].data::<f32>()[0] >= PRESENCE_THRESHOLD
 	}
 
 	pub fn hand_screen_coords(tensor : &Vec<Tensor<'_>>) -> [Coord3D;21]

@@ -1,11 +1,16 @@
 mod cv_base;
 pub mod hand_landmarker;
 
-use anyhow::Error;
-use cv_base::CVBase;
-use tflitec::tensor::Tensor;
 pub use hand_landmarker::HandLandmarker;
 
+#[cfg(test)]
+mod tests;
+
+
+pub(crate) use anyhow::Error;
+pub(crate) use cv_base::CVBase;
+pub(crate) use tflitec::tensor::Tensor;
+pub(crate) use tflitec as tf;
 
 #[derive(Copy, Clone)]
 pub struct Coord3D
