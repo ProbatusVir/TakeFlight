@@ -7,11 +7,12 @@ mod tests;
 #[cfg(debug_assertions)]
 pub(crate) mod debug_utils;
 
+mod computer_vision;
 mod video;
-mod http_server;
+
 
 use std::collections::HashMap;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read, Write};
 use std::net::SocketAddr;
 use std::process::Command;
 use tflitec as tf;
@@ -24,8 +25,8 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-
-use TakeFlightComputerVision as computer_vision;
+use httparse::Status;
+use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -35,7 +36,10 @@ enum Connection
 	UDP(UdpSocket),
 	Drone(Arc<Mutex<dyn Drone>>)
 }
-
+#[derive(Serialize, Deserialize)]
+struct DroneNames{
+	names: Vec<String>
+}
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
@@ -58,7 +62,7 @@ fn main() -> Result<(), Error> {
 	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
 
 	// Start the application
-	let mut application_status = Command::new("cmd")
+	let mut application_status  = Command::new("cmd")
 		.args(["/C",
 			&format!("start http://localhost:{port}")])
 		.spawn()?;
@@ -187,9 +191,11 @@ fn drain_events(event_buffer	: &mut Events,
 			token => {
 				match ownership_map.lock()?.get_mut(&token)
 				{
+
 					Some(found) => {
 						match found {
 							Connection::Drone(drone) => { drone.lock()?.receive_signal(token.0 as u16)?; }
+							Connection::TCP(stream) => { handle_connection(stream)? }
 							_ => { /* noop until we get the application connected */ }
 						}
 					}
@@ -200,5 +206,69 @@ fn drain_events(event_buffer	: &mut Events,
 		}
 	}
 
+	Ok(())
+}
+
+fn handle_connection(stream: &mut TcpStream) -> Result<(), Error>{
+	//Initialize buffer
+	let mut buffer = [0; 1024];
+	let n = stream.read(&mut buffer)?;
+	//create a request object and a buffer for headers
+	let mut headers = [httparse::EMPTY_HEADER; 16];
+	let mut req = httparse::Request::new(&mut headers);
+
+	//Try parsing the HTTP request
+	match req.parse(&buffer[..n]) {
+		Ok(Status::Complete(_)) =>{
+			println!("Method: {:?}", req.method);
+			println!("Path: {:?}", req.path);
+			println!("Version: {:?}", req.version);
+			println!("Headers: {:?}", req.headers);
+		}
+		Ok(Status::Partial) => {
+			eprintln!("Request is Incomplete");
+		}
+		Err(e) => {
+			eprintln!("Parse error: {:?}", e);
+		}
+	}
+	//Grabs the type of request command
+	//let request = String::from_utf8_lossy(&buffer[..]);
+	//For Debugging: Converts bytes to string
+	//println!("Request: {}", request);
+
+	//GET handle for drone names
+	let (status, body) = if req.method == Some("GET")
+		&& req.path == Some("/drone_names"){
+		//populates drone vector with random string names
+		let data = DroneNames {
+			names: vec![
+				"Alpha".into(),
+				"Bravo".into(),
+				"Charlie".into(),
+				"Delta".into(),
+				"Echo".into(),
+				"Fern".into(),
+				"Germany".into(),
+			],
+		};
+		//Serializes the vector to JSON String
+		let json = serde_json::to_string(&data).unwrap();
+		("HTTP/1.1 200 OK", json)
+	}else{
+		let msg = serde_json::to_string(&DroneNames {
+			names: vec!["Invalid request".into()],
+		}).unwrap();
+		("HTTP/1.1 404 ERR", msg)
+	};
+	//Create HTTP response with proper formatting
+	let response = format!(
+		"{status}\r\nContent-Type: application/json
+        \r\nContent-Length: {}\r\n\r\n{body}", body.len()
+	);
+	//Send it to client
+	stream.write(response.as_bytes())?;
+	//Ensures anything using write/write_all is sent out
+	stream.flush()?;
 	Ok(())
 }
