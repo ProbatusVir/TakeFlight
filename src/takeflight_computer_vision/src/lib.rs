@@ -5,7 +5,7 @@ pub use hand_landmarker::HandLandmarker;
 
 #[cfg(test)]
 mod tests;
-
+mod hand_identifier;
 
 pub(crate) use anyhow::Error;
 pub(crate) use cv_base::CVBase;
@@ -15,9 +15,9 @@ pub(crate) use tflitec as tf;
 #[derive(Copy, Clone)]
 pub struct Coord3D
 {
-	x : f32,
-	y : f32,
-	z : f32,
+	pub x : f32,
+	pub y : f32,
+	pub z : f32,
 }
 
 
