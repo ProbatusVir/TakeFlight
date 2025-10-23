@@ -1,4 +1,4 @@
-use crate::{error, LISTENER};
+/*use crate::{error, LISTENER};
 use error::Error;
 use std::{
     collections::HashMap,
@@ -144,3 +144,4 @@ fn handle_connection(mut stream: &mut TcpStream) -> Result<(), Error>{
     stream.flush()?;
     Ok(())
 }
+*/
