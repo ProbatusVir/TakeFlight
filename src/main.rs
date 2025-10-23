@@ -54,19 +54,10 @@ fn main() -> Result<(), Error> {
 	// Start the server
 	let server_address = local_ip_address::local_ip()?;
 	let mut poll = Arc::new(Mutex::new(Poll::new()?));
-	let mut listener = mio::net::TcpListener::bind(SocketAddr::new(server_address, 0))?;
+	let mut listener = TcpListener::bind(SocketAddr::new(server_address, 0))?;
 
 
-	// TODO: The application should not try to be the server. This will be cleaner when we sort this out.
-	//let port = listener.local_addr()?.port();
-	let port = 5173;
 	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
-
-	// Start the application
-	let mut application_status  = Command::new("cmd")
-		.args(["/C",
-			&format!("start http://localhost:{port}")])
-		.spawn()?;
 
 	// Start heartbeat
 	{
