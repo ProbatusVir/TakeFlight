@@ -1,15 +1,60 @@
 use image::EncodableLayout;
-use crate::CVBase;
+use crate::{CVBase, Coord3D};
 use std::fmt::{Debug, Formatter};
 use image::Rgb32FImage;
 use tflitec::tensor::{Shape, Tensor};
-use crate::{cv_base, ComputerVision, PRESENCE_THRESHOLD};
-use crate::HandLandmarkIndices::Presence;
+use crate::{cv_base, ComputerVision};
+use HandLandmarkIndices::Presence;
 use crate::Error;
+use crate::hand_landmarker::HandLandmarkIndices::{Handedness, ScreenSpace, WorldSpace};
 
 pub struct HandLandmarker
 {
 	base : cv_base::CVBase<'static>,
+}
+
+const PRESENCE_THRESHOLD : f32 = 0.3;
+
+pub enum Hand
+{
+	Left,
+	Right,
+}
+
+#[repr(usize)]
+enum HandLandmarkIndices
+{
+	ScreenSpace	= 0,
+	Presence	= 1,
+	Handedness	= 2,
+	WorldSpace	= 3,
+}
+
+#[allow(dead_code)]
+// These acronyms are anatomical, and I lack better words for them
+pub enum DigitIndices
+{
+	Wrist = 0,
+	ThumbCMC,
+	ThumbMCP,
+	ThumbIP,
+	ThumbTip,
+	IndexFingerMCP = 5,
+	IndexFingerPIP,
+	IndexFingerDIP,
+	IndexFingerTip,
+	MiddleFingerMCP = 9,
+	MiddleFingerPIP,
+	MiddleFingerDIP,
+	MiddleFingerTip,
+	RingFingerMCP=13,
+	RingFingerPIP,
+	RingFingerDIP,
+	RingFingerTIP,
+	PinkyMCP = 17,
+	PinkyPIP,
+	PinkyDIP,
+	PinkyTip,
 }
 
 
@@ -65,8 +110,56 @@ impl<'a> HandLandmarker
 
 	pub fn hand_present(tensor : &Vec<Tensor<'_>>) -> bool
 	{
-		tensor[Presence as usize].data::<f32>()[0] < PRESENCE_THRESHOLD
+		tensor[Presence as usize].data::<f32>()[0] == PRESENCE_THRESHOLD
 	}
+
+	pub fn hand_screen_coords(tensor : &Vec<Tensor<'_>>) -> [Coord3D;21]
+	{
+		let poi =  tensor[ScreenSpace as usize].data::<f32>();
+		debug_assert_eq!(poi.len() % 3, 0);
+
+		let mut result= [Coord3D {x : 0.0, y : 0.0, z : 0.0};21];
+		let mut i = 0;
+		for point in poi.chunks_exact(3)
+		{
+			result[i] = Coord3D {
+				x: point[0],
+				y: point[1],
+				z: point[2],
+			};
+			i += 1;
+		}
+
+		result
+
+	}
+
+	pub fn hand_world_coords(tensor : &Vec<Tensor<'_>>) -> [Coord3D;21]
+	{
+		let poi =  tensor[WorldSpace as usize].data::<f32>();
+		debug_assert_eq!(poi.len() % 3, 0);
+
+		let mut result= [Coord3D {x : 0.0, y : 0.0, z : 0.0};21];
+		let mut i = 0;
+		for point in poi.chunks_exact(3)
+		{
+			result[i] = Coord3D {
+				x: point[0],
+				y: point[1],
+				z: point[2],
+			};
+			i += 1;
+		}
+
+		result
+
+	}
+
+	pub fn handedness(tensor : &Vec<Tensor<'_>>) -> Hand
+	{
+		if tensor[Handedness as usize].data::<f32>()[0] <= 0.5 { Hand::Left } else { Hand::Right }
+	}
+
 
 }
 

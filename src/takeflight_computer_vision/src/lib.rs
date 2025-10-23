@@ -6,42 +6,13 @@ use cv_base::CVBase;
 use tflitec::tensor::Tensor;
 pub use hand_landmarker::HandLandmarker;
 
-const PRESENCE_THRESHOLD : f32 = 0.3;
 
-#[repr(usize)]
-enum HandLandmarkIndices
+#[derive(Copy, Clone)]
+pub struct Coord3D
 {
-	ScreenSpace	= 0,
-	Presence	= 1,
-	Handedness	= 2,
-	WorldSpace	= 3,
-}
-
-#[allow(dead_code)]
-// These acronyms are anatomical, and I lack better words for them
-pub enum DigitIndices
-{
-	Wrist = 0,
-	ThumbCMC,
-	ThumbMCP,
-	ThumbIP,
-	ThumbTip,
-	IndexFingerMCP = 5,
-	IndexFingerPIP,
-	IndexFingerDIP,
-	IndexFingerTip,
-	MiddleFingerMCP = 9,
-	MiddleFingerPIP,
-	MiddleFingerDIP,
-	MiddleFingerTip,
-	RingFingerMCP=13,
-	RingFingerPIP,
-	RingFingerDIP,
-	RingFingerTIP,
-	PinkyMCP = 17,
-	PinkyPIP,
-	PinkyDIP,
-	PinkyTip,
+	x : f32,
+	y : f32,
+	z : f32,
 }
 
 
