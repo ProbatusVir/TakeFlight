@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
+//import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
+import 'flight_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -28,7 +29,7 @@ class MyApp extends StatelessWidget {
           ),
           headlineMedium: TextStyle(color: Colors.black), //raw hex value til style file is created
         ),
-        scaffoldBackgroundColor: Colors.black45,
+        scaffoldBackgroundColor: Colors.black,
       ),
       debugShowCheckedModeBanner: false, //gets rid of debug sash
       home: const MyHomePage(title: 'TakeFlight'),
@@ -49,8 +50,8 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      //TODO::Fix screen background color and change out logo text with svg text
-      backgroundColor: Colors.black45,//changes the overall scaffold color which is the background of the screen itself
+      //TODO::Change out logo text with SVG text
+      backgroundColor: Colors.black,//changes the overall scaffold color which is the background of the screen itself
       // settings button
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
@@ -76,7 +77,12 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             FloatingActionButton.extended( //extends the button to fit its contents
               backgroundColor: Colors.grey.shade400, //grey with a shade value of 400 that gives the creamy look
-                onPressed: (){},
+                onPressed: (){
+                //moving to drone connection list
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (BuildContext context) => DroneList())
+                  );
+                },
                 label: Text(
                     'CONNECT...',
                     style: Theme.of(context).textTheme.headlineMedium, //default text size and theme
@@ -86,6 +92,45 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       ),
       // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+}
+
+//Drone list screen
+class DroneList extends StatelessWidget{
+  DroneList({super.key});
+  //creates list this will later be the get call for drone names
+  final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
+  //widget containing list of drones
+  @override
+  Widget build(BuildContext context){
+    return Scaffold(
+      body: ListView.separated(
+          itemCount: items.length,
+          itemBuilder: (context, index){
+            return ListTile(
+              title: Text(items[index]),
+              trailing: Icon(Icons.wifi_outlined, color: Colors.white),
+              textColor: Colors.white,
+              onTap: (){
+                //notifies user they connected
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Connecting to...Drone${index +1}'))
+                );
+                //goes to main screen after connection
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (BuildContext context) => FlightScreen())
+                );
+              },
+            );
+          },
+        separatorBuilder: (BuildContext context, int index){
+            return Divider(
+              thickness: 2,
+              color: Colors.white,
+            );
+        },
+      ),
     );
   }
 }
