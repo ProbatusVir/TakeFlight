@@ -19,7 +19,6 @@ dependencies = [
  "serde",
  "serde_json",
  "takeflight_computer_vision",
- "tflitec",
  "tiny_http",
  "zerocopy",
 ]

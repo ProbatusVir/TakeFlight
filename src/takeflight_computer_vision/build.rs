@@ -1,3 +1,4 @@
+use std::env;
 use std::io::Error;
 fn main() -> Result<(), Error>
 {
@@ -10,5 +11,6 @@ fn main() -> Result<(), Error>
 		}
 	}
 
+	println!("cargo:rustc-link-search=3rd_party/");
 	Ok(())
 }

@@ -15,7 +15,7 @@ itertools = "0.14.0"
 
 [dev-dependencies]
 nokhwa = { version="0.10.9", features = ["input-native"] }
-sdl = "0.3.6"
+sdl3 = "0.16.1"
 
 [[test]]
 name="geometry_tests"
@@ -28,3 +28,7 @@ path="tests/identifier_tests.rs"
 [[test]]
 name="landmarker_tests"
 path="tests/landmarker_tests.rs"
+
+[[example]]
+name="draw_fingers"
+path="example/draw_fingers.rs"

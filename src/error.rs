@@ -8,7 +8,6 @@ pub enum Error
 	Custom(&'static str),
 	LocalIPError,
 	ImageError(image::ImageError),
-	TFLiteC(tflitec::Error),
 	H264Error(openh264::Error),
 	Infallible(std::convert::Infallible),
 	MutexError,
@@ -36,13 +35,6 @@ impl From<std::convert::Infallible> for Error
 {
 	fn from(value: std::convert::Infallible) -> Self {
 		Error::Infallible(value)
-	}
-}
-
-impl From<tflitec::Error> for Error
-{
-	fn from(value: tflitec::Error) -> Self {
-		Error::TFLiteC(value)
 	}
 }
 
@@ -90,7 +82,6 @@ impl Display for Error {
 			Error::Custom(msg) => { msg.fmt(f) }
 			Error::LocalIPError => { "Failed to acquire local IP".fmt(f) }
 			Error::ImageError(e) => { e.fmt(f) }
-			Error::TFLiteC(e) => { e.fmt(f) }
 			Error::H264Error(e) => { e.fmt(f) }
 			Error::Infallible(e) => { e.fmt(f) }
 			Error::MutexError => { "Failed to acquire lock!".fmt(f) }
