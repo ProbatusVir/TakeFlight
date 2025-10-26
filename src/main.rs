@@ -101,7 +101,6 @@ fn main() -> Result<(), Error> {
 
 	};
 
-	println!("React application exited with status: {}", application_status.wait()?);
 
 	status
 }
