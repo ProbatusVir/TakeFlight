@@ -1,10 +1,17 @@
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Coord3D<T>
 {
 	pub x : T,
 	pub y : T,
 	pub z : T,
 }
+
+pub struct Coord2D<T>
+{
+	pub x : T,
+	pub y : T,
+}
+
 
 #[derive(Debug)]
 pub struct BoundBox<T>
