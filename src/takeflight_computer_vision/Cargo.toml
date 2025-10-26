@@ -31,4 +31,4 @@ path="tests/landmarker_tests.rs"
 
 [[example]]
 name="draw_fingers"
-path="example/draw_fingers.rs"
+path="examples/draw_fingers.rs"
