@@ -1,9 +1,10 @@
-use crate::hand_landmarker::HandLandmarker as Landmarker;
-use crate::tests::get_mut_pixel;
-use crate::tf::interpreter::Interpreter;
-use crate::tf::interpreter::Options;
-use crate::tf::model::Model;
-use crate::tf::tensor::Shape;
+mod shared;
+
+use shared::{BLANK, TWO_HANDS, OPEN_PALM, load_image_data, get_mut_pixel};
+use takeflight_computer_vision::HandLandmarker;
+use tflitec::interpreter::{Interpreter, Options};
+use tflitec::model::Model;
+use tflitec::tensor::Shape;
 use anyhow::Error;
 use image::imageops::{CatmullRom, FilterType};
 use image::{EncodableLayout, Rgb32FImage};
@@ -11,22 +12,9 @@ use rstest::{fixture, rstest};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use const_format::concatcp;
 
 const MODEL_PATH : &str = "model/hand_landmarks_detector.tflite";
-const TEST_DATA : &str = "src/tests/test_data/";
-const OPEN_PALM : &str = concatcp!(TEST_DATA, "open_palm.png");
-const TWO_HANDS : &str = concatcp!(TEST_DATA, "two_hands.jpg");
-const BLANK : &str = concatcp!(TEST_DATA, "blank.png");
 
-fn load_image_data<P : AsRef<Path>>(path : P) -> Result<Rgb32FImage, Error>
-{
-	// Load in test data
-	let mut image = image::open(path)?;
-	Ok(
-		image.resize_exact(224, 224, FilterType::CatmullRom).into_rgb32f()
-	)
-}
 
 // This looks super ugly. The reference of Model is gonna live equally as long as the model will, and the interpreter will also live equally as long.
 //#[fixture]
@@ -47,8 +35,8 @@ fn setup_interpreter<'a>(model: &'a Model<'a>) -> Result<Interpreter<'a>, Error>
 #[rstest]
 fn hand_detector_runs() -> Result<(), Error>
 {
-	let input_image = load_image_data(OPEN_PALM)?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(OPEN_PALM)?;
 	let _output = instance.run_model(input_image)?;
 
 	Ok(())
@@ -58,8 +46,8 @@ fn hand_detector_runs() -> Result<(), Error>
 fn hand_detector_output() -> Result<(), Error>
 {
 	// Arrange model and put the image in the input.
-	let input_image = load_image_data(OPEN_PALM)?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(OPEN_PALM)?;
 
 	// Act
 	let _output = instance.run_model(input_image)?;
@@ -74,8 +62,8 @@ fn hand_detector_output() -> Result<(), Error>
 #[rstest]
 fn peek_at_hand_data() -> Result<(), Error>
 {
-	let input_image = load_image_data(OPEN_PALM)?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(OPEN_PALM)?;
 
 	// Act
 	let output = instance.run_model(input_image)?;
@@ -88,8 +76,8 @@ fn peek_at_hand_data() -> Result<(), Error>
 fn fail_peek_two_hands_data() -> Result<(), Error>
 {
 	// Arrange
-	let input_image = load_image_data(TWO_HANDS)?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(TWO_HANDS)?;
 
 	// Act
 	let output = instance.run_model(input_image)?;
@@ -108,8 +96,8 @@ fn fail_peek_two_hands_data() -> Result<(), Error>
 fn color_based_on_index() -> Result<(), Error>
 {
 	// Arrange model and put the image in the input.
-	let input_image = load_image_data(OPEN_PALM)?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(OPEN_PALM)?;
 
 	// Act
 	let output = instance.run_model(input_image)?;
@@ -140,12 +128,12 @@ fn color_based_on_index() -> Result<(), Error>
 fn determine_handedness() -> Result<(), Error>
 {
 	// Arrange
-	let input_image = load_image_data(OPEN_PALM)?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(OPEN_PALM)?;
 
 	// Act
 	let output = instance.run_model(input_image)?;
-	let handedness = Landmarker::handedness(&output);
+	let handedness = HandLandmarker::handedness(&output);
 
 	dbg!(handedness);
 
@@ -159,12 +147,12 @@ fn determine_hand_presence_false() -> Result<(), Error>
 {
 
 	// Arrange
-	let input_image = load_image_data("src/tests/test_data/blank.png")?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(BLANK)?;
 
 	// Act
 	let output = instance.run_model(input_image)?;
-	let is_present = Landmarker::hand_present(&output);
+	let is_present = HandLandmarker::hand_present(&output);
 
 	assert_eq!(is_present, false);
 
@@ -175,12 +163,12 @@ fn determine_hand_presence_false() -> Result<(), Error>
 fn determine_hand_presence_true() -> Result<(), Error>
 {
 	// Arrange
-	let input_image = load_image_data(OPEN_PALM)?;
-	let mut instance = Landmarker::from_path(MODEL_PATH)?;
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(OPEN_PALM)?;
 
 	// Act
 	let output = instance.run_model(input_image)?;
-	let is_present = Landmarker::hand_present(&output);
+	let is_present = HandLandmarker::hand_present(&output);
 
 	assert_eq!(is_present, true);
 

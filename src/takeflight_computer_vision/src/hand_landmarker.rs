@@ -1,12 +1,13 @@
 use image::EncodableLayout;
-use crate::{CVBase, Coord3D};
+use crate::CVBase;
 use std::fmt::{Debug, Formatter};
 use image::Rgb32FImage;
 use tflitec::tensor::{Shape, Tensor};
 use crate::{cv_base, ComputerVision};
 use HandLandmarkIndices::Presence;
 use crate::Error;
-use crate::hand_landmarker::HandLandmarkIndices::{Handedness, ScreenSpace, WorldSpace};
+use crate::geometry::Coord3D;
+use crate::hand_landmarker::HandLandmarkIndices::{Handedness, WorldSpace};
 
 pub struct HandLandmarker
 {
@@ -114,7 +115,7 @@ impl<'a> HandLandmarker
 		tensor[Presence as usize].data::<f32>()[0] >= PRESENCE_THRESHOLD
 	}
 
-	pub fn hand_screen_coords(tensor : &Vec<Tensor<'_>>) -> [Coord3D;21]
+	/*pub fn hand_screen_coords(tensor : &Vec<Tensor<'_>>) -> [Coord3D;21]
 	{
 		let poi =  tensor[ScreenSpace as usize].data::<f32>();
 		debug_assert_eq!(poi.len() % 3, 0);
@@ -133,9 +134,9 @@ impl<'a> HandLandmarker
 
 		result
 
-	}
+	}*/
 
-	pub fn hand_world_coords(tensor : &Vec<Tensor<'_>>) -> [Coord3D;21]
+	pub fn hand_world_coords(tensor : &Vec<Tensor<'_>>) -> [Coord3D<f32>;21]
 	{
 		let poi =  tensor[WorldSpace as usize].data::<f32>();
 		debug_assert_eq!(poi.len() % 3, 0);
