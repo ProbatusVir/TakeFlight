@@ -46,11 +46,13 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+//creates list this will later be the get call for drone names
+  final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      //TODO::Change out logo text with SVG text
+      //TODO::Change out logo text with SVG text fix logo size for mobile
       backgroundColor: Colors.black,//changes the overall scaffold color which is the background of the screen itself
       // settings button
       floatingActionButton: FloatingActionButton(
@@ -70,7 +72,7 @@ class _MyHomePageState extends State<MyHomePage> {
           //returns multiple child widgets to place in the center
           children: <Widget>[
             //Logo image
-            Image.asset('../Images/drone_icon.png'),
+            Image.asset('assets/Images/drone_icon.png'),
             Text(
               'TAKEFLIGHT',
               style: Theme.of(context).textTheme.displayLarge,
@@ -78,9 +80,50 @@ class _MyHomePageState extends State<MyHomePage> {
             FloatingActionButton.extended( //extends the button to fit its contents
               backgroundColor: Colors.grey.shade400, //grey with a shade value of 400 that gives the creamy look
                 onPressed: (){
-                //moving to drone connection list
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (BuildContext context) => DroneList())
+                //pop up for drone connection list
+                  showDialog(
+                      context: context,
+                      builder: (BuildContext context){
+                        return SimpleDialog(
+                          title: const Text('Select Drone'),
+                          children: [
+                            Container( //using container instead of sized box for more options
+                              width: 280,
+                              height: 280,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: ListView.separated(//allows the creation of a list with seperators
+                                itemCount: items.length,
+                                itemBuilder: (context, index){
+                                  return ListTile(
+                                    title: Text(items[index]),
+                                    trailing: Icon(Icons.wifi_outlined, color: Colors.white),
+                                    textColor: Colors.white,
+                                    onTap: (){
+                                      //notifies user they connected
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Connecting to...Drone${index +1}'))
+                                      );
+                                      //goes to main screen after connection
+                                      Navigator.of(context).push(
+                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen())
+                                      );
+                                    },
+                                  );
+                                },
+                                separatorBuilder: (BuildContext context, int index){
+                                  return Divider(
+                                    thickness: 2,
+                                    color: Colors.white,
+                                  );
+                                },
+                              ),
+                            )
+                          ],
+                        );
+                      }
                   );
                 },
                 label: Text(
@@ -92,45 +135,6 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       ),
       // This trailing comma makes auto-formatting nicer for build methods.
-    );
-  }
-}
-
-//Drone list screen
-class DroneList extends StatelessWidget{
-  DroneList({super.key});
-  //creates list this will later be the get call for drone names
-  final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
-  //widget containing list of drones
-  @override
-  Widget build(BuildContext context){
-    return Scaffold(
-      body: ListView.separated(
-          itemCount: items.length,
-          itemBuilder: (context, index){
-            return ListTile(
-              title: Text(items[index]),
-              trailing: Icon(Icons.wifi_outlined, color: Colors.white),
-              textColor: Colors.white,
-              onTap: (){
-                //notifies user they connected
-                ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Connecting to...Drone${index +1}'))
-                );
-                //goes to main screen after connection
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (BuildContext context) => FlightScreen())
-                );
-              },
-            );
-          },
-        separatorBuilder: (BuildContext context, int index){
-            return Divider(
-              thickness: 2,
-              color: Colors.white,
-            );
-        },
-      ),
     );
   }
 }
