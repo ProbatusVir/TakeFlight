@@ -1,13 +1,17 @@
 use image::EncodableLayout;
 use crate::CVBase;
 use std::fmt::{Debug, Formatter};
+use std::path::Path;
 use image::Rgb32FImage;
+use tflitec::model::Model;
 use tflitec::tensor::{Shape, Tensor};
 use crate::{cv_base, ComputerVision};
 use HandLandmarkIndices::Presence;
 use crate::Error;
-use crate::geometry::Coord3D;
-use crate::hand_landmarker::HandLandmarkIndices::{Handedness, WorldSpace};
+use crate::geometry::{Coord2D, Coord3D};
+use crate::hand_landmarker::DigitIndices::{Index, Middle, Pinky, Ring, Thumb};
+use crate::hand_landmarker::HandLandmarkIndices::{Handedness, ScreenSpace, WorldSpace};
+use crate::hand_landmarker::PointIndices::{IndexFingerMCP, MiddleFingerMCP, PinkyMCP, RingFingerMCP, ThumbCMC};
 
 pub struct HandLandmarker
 {
@@ -34,7 +38,7 @@ enum HandLandmarkIndices
 
 #[allow(dead_code)]
 // These acronyms are anatomical, and I lack better words for them
-pub enum DigitIndices
+pub enum PointIndices
 {
 	Wrist = 0,
 	ThumbCMC,
@@ -59,10 +63,27 @@ pub enum DigitIndices
 	PinkyTip,
 }
 
+pub enum DigitIndices
+{
+	Pinky,
+	Ring,
+	Middle,
+	Index,
+	Thumb,
+}
 
 #[allow(dead_code)]
 impl<'a> HandLandmarker
 {
+	pub fn new() -> Result<Self, Error>
+	{
+		let input_shape = Shape::new(vec![Self::NUM_BATCHES, Self::WIDTH, Self::HEIGHT, Self::BIT_DEPTH]);
+		let path = Path::new("model/hand_landmarks_detector.tflite");
+		let base = CVBase::from_path(path.to_str().unwrap(), input_shape)?;
+		Ok(Self { base })
+	}
+
+
 	pub fn from_path(model_path : &str) -> Result<Self, Error>
 	{
 		let input_shape = Shape::new(vec![Self::NUM_BATCHES, Self::WIDTH, Self::HEIGHT, Self::BIT_DEPTH]);
@@ -162,6 +183,32 @@ impl<'a> HandLandmarker
 		if tensor[Handedness as usize].data::<f32>()[0] <= 0.5 { Hand::Left } else { Hand::Right }
 	}
 
+
+	pub fn get_digits(tensors: &Vec<Tensor<'_>>) -> [[Coord3D<f32>;4];5]
+	{
+		// x, y, c
+		let (raw_data, remainder) = tensors[ScreenSpace as usize].data::<f32>().as_chunks::<3>();
+		debug_assert_eq!(remainder.len(), 0);
+		debug_assert_eq!(raw_data.len(), 21);
+		let sc: Vec<Coord3D<f32>> = raw_data.into_iter().map(|coord| { Coord3D { x: coord[0], y: coord[1], z: coord[2]} } ).collect();
+
+		const P : usize = PinkyMCP as usize;
+		const R : usize = RingFingerMCP as usize;
+		const M : usize = MiddleFingerMCP as usize;
+		const I : usize = IndexFingerMCP as usize;
+		const T : usize = ThumbCMC as usize;
+
+
+		// Don't wanna complicate things too much, so instead of using all the indices as they appear on the enum, we'll just use basic offsets...
+		[
+			[sc[P + 0], sc[P + 1], sc[P + 2], sc[P + 3]],
+			[sc[R + 0], sc[R + 1], sc[R + 2], sc[R + 3]],
+			[sc[M + 0], sc[M + 1], sc[M + 2], sc[M + 3]],
+			[sc[I + 0], sc[I + 1], sc[I + 2], sc[I + 3]],
+			[sc[T + 0], sc[T + 1], sc[T + 2], sc[T + 3]],
+		]
+
+	}
 
 }
 
