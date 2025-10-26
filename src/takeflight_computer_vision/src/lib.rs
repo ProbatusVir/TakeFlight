@@ -9,7 +9,6 @@ pub mod geometry;
 pub use anyhow::Error;
 pub(crate) use cv_base::CVBase;
 pub(crate) use tflitec::tensor::Tensor;
-pub(crate) use tflitec as tf;
 
 
 pub trait ComputerVision
@@ -22,4 +21,7 @@ pub trait ComputerVision
 	fn output(&self, idx : usize) -> Result<Tensor<'_>, Error>;
 	fn invoke(&self) -> Result<(), Error>;
 	fn input(&self, idx : usize) -> Result<Tensor<'_>, Error>;
+
+	fn width() -> usize { Self::WIDTH }
+	fn height() -> usize { Self::HEIGHT }
 }
