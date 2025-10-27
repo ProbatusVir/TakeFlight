@@ -1,14 +1,14 @@
 extern crate sdl3 as sdl;
 
-use std::thread::sleep;
-use sdl3::rect::Rect;
-use sdl3::pixels::Color;
-use std::path::Path;
-use std::time::Duration;
+use cv::{ComputerVision, Error};
 use image::imageops::CatmullRom;
-use image::{GenericImage, Pixel, RgbImage};
+use image::{Pixel, RgbImage};
+use sdl3::pixels::Color;
+use sdl3::rect::Rect;
+use std::path::Path;
+use std::thread::sleep;
+use std::time::Duration;
 use takeflight_computer_vision as cv;
-use cv::{Error, ComputerVision};
 use takeflight_computer_vision::HandLandmarker;
 
 fn main() -> Result<(), Error>

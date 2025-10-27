@@ -1,12 +1,12 @@
 mod shared;
 
-use std::process::Output;
-use rstest::rstest;
-use takeflight_computer_vision::hand_identifier::HandIdentifier;
-use shared::{load_image_data, OPEN_PALM, BLANK};
-use takeflight_computer_vision::{Error, HandLandmarker};
-use takeflight_computer_vision::hand_identifier::_IdentifierComponent::{Boxes, Confidences};
 use crate::shared::TWO_HANDS;
+use rstest::rstest;
+use shared::{load_image_data, BLANK, OPEN_PALM};
+use std::process::Output;
+use takeflight_computer_vision::hand_identifier::HandIdentifier;
+use takeflight_computer_vision::hand_identifier::_IdentifierComponent::{Boxes, Confidences};
+use takeflight_computer_vision::{Error, HandLandmarker};
 
 const MODEL_PATH : &str = "model/hand_detector.tflite";
 

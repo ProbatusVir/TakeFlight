@@ -10,25 +10,25 @@ pub(crate) mod debug_utils;
 mod video;
 pub(crate) mod logger;
 
+use crate::drone_interface::Drone;
+use error::Error;
+use mio;
+use mio::net::{TcpListener, TcpStream, UdpSocket};
+use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write};
 use std::net::SocketAddr;
 use std::process::Command;
 use std::str::FromStr;
-use crate::drone_interface::Drone;
-use error::Error;
-use mio;
-use mio::net::{TcpListener, TcpStream, UdpSocket};
-use mio::{Events, Interest, Poll, Token, Waker};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use takeflight_computer_vision as computer_vision;
+use crate::logger::{do_logging, Logger};
 use httparse::Status;
 use serde::{Deserialize, Serialize};
-use crate::logger::{do_logging, Logger};
+use takeflight_computer_vision as computer_vision;
 
 #[allow(dead_code)]
 #[derive(Debug)]

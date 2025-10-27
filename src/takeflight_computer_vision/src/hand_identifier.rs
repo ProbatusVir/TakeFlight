@@ -1,10 +1,10 @@
-use anyhow::Error;
-use image::{EncodableLayout, Rgb32FImage};
-use tflitec::tensor::{Shape, Tensor};
-use crate::{CVBase, ComputerVision};
 use crate::geometry::{BoundBox, IndexBoundBox};
 use crate::hand_identifier::_IdentifierComponent::{Boxes, Confidences};
+use crate::{CVBase, ComputerVision};
+use anyhow::Error;
+use image::{EncodableLayout, Rgb32FImage};
 use itertools::Itertools;
+use tflitec::tensor::{Shape, Tensor};
 
 pub struct HandIdentifier
 {

@@ -1,17 +1,16 @@
-use image::EncodableLayout;
-use crate::CVBase;
-use std::fmt::{Debug, Formatter};
-use std::path::Path;
-use image::Rgb32FImage;
-use tflitec::model::Model;
-use tflitec::tensor::{Shape, Tensor};
-use crate::{cv_base, ComputerVision};
-use HandLandmarkIndices::Presence;
-use crate::Error;
-use crate::geometry::{Coord2D, Coord3D};
-use crate::hand_landmarker::DigitIndices::{Index, Middle, Pinky, Ring, Thumb};
+use crate::geometry::Coord3D;
+use crate::hand_landmarker::DigitIndices::{Index, Middle, Pinky, Ring};
 use crate::hand_landmarker::HandLandmarkIndices::{Handedness, ScreenSpace, WorldSpace};
 use crate::hand_landmarker::PointIndices::{IndexFingerMCP, MiddleFingerMCP, PinkyMCP, RingFingerMCP, ThumbCMC};
+use crate::CVBase;
+use crate::Error;
+use crate::{cv_base, ComputerVision};
+use image::EncodableLayout;
+use image::Rgb32FImage;
+use std::fmt::{Debug, Formatter};
+use std::path::Path;
+use tflitec::tensor::{Shape, Tensor};
+use HandLandmarkIndices::Presence;
 
 pub struct HandLandmarker
 {

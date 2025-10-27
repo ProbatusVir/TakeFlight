@@ -1,11 +1,14 @@
 use crate::computer_vision::HandLandmarker;
 use crate::drone_interface;
+use crate::drone_interface::drone_pro::drone::DroneCommandState::{BasicMovement, EmergencyLand, Takeoff};
 use crate::drone_interface::{IUnit, Unit};
+use crate::logger::Logger;
 use crate::video::rtp;
 use crate::video::rtp::{JpegMainHeader, RTPContent};
 use crate::Interest;
 use crate::SocketAddr;
 use crate::{Arc, Connection, Error, HashMap, Mutex, Poll, TcpStream, Token, UdpSocket};
+use image::imageops::CatmullRom;
 use image::DynamicImage;
 use image::ImageFormat::Jpeg;
 use mio::event::Source;
@@ -14,9 +17,6 @@ use std::io::{Cursor, Read, Write};
 use std::net::IpAddr;
 use std::ops::BitXor;
 use std::str::FromStr;
-use image::imageops::CatmullRom;
-use crate::drone_interface::drone_pro::drone::DroneCommandState::{BasicMovement, EmergencyLand, Takeoff};
-use crate::logger::Logger;
 
 #[derive(Debug)]
 pub struct Drone

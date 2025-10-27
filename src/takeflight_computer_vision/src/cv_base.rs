@@ -1,8 +1,8 @@
+use crate::Error;
+use ouroboros;
 use tflitec::interpreter::{Interpreter, Options};
 use tflitec::model::Model;
-use ouroboros;
 use tflitec::tensor::{Shape, Tensor};
-use crate::Error;
 
 #[ouroboros::self_referencing]
 pub(crate) struct CVBase<'a>

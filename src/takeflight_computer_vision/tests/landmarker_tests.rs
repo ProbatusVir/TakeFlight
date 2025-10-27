@@ -1,18 +1,18 @@
 mod shared;
 
-use shared::{BLANK, TWO_HANDS, OPEN_PALM, load_image_data, get_mut_pixel};
-use takeflight_computer_vision::HandLandmarker;
-use tflitec::interpreter::{Interpreter, Options};
-use tflitec::model::Model;
-use tflitec::tensor::Shape;
+use crate::shared::MIDDLE_INDEX_UP;
 use anyhow::Error;
 use image::imageops::{CatmullRom, FilterType};
 use image::{EncodableLayout, Rgb32FImage};
 use rstest::{fixture, rstest};
+use shared::{get_mut_pixel, load_image_data, BLANK, OPEN_PALM, TWO_HANDS};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use crate::shared::MIDDLE_INDEX_UP;
+use takeflight_computer_vision::HandLandmarker;
+use tflitec::interpreter::{Interpreter, Options};
+use tflitec::model::Model;
+use tflitec::tensor::Shape;
 
 const MODEL_PATH : &str = "model/hand_landmarks_detector.tflite";
 

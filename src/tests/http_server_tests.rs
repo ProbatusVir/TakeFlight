@@ -1,6 +1,6 @@
+use crate::error::Error;
 use httparse::Status;
 use std::io::{Cursor, Read, Write};
-use crate::error::Error;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 struct DroneNames {

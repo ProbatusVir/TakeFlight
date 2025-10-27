@@ -1,9 +1,9 @@
-use std::fs::File;
-use std::io::{ Write};
-use std::sync::{Arc, Mutex,};
-use std::sync::mpsc::{Receiver, Sender};
-use chrono::{Local, Timelike};
 use crate::error::Error;
+use chrono::{Local, Timelike};
+use std::fs::File;
+use std::io::Write;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex, };
 
 enum LoggingLevel
 {

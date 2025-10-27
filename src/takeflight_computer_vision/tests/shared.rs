@@ -1,10 +1,10 @@
-use std::path::Path;
 use anyhow::Error;
 use const_format::concatcp;
 use image::imageops::FilterType;
 use image::Rgb32FImage;
-use tflitec::model::Model;
+use std::path::Path;
 use takeflight_computer_vision::ComputerVision;
+use tflitec::model::Model;
 
 pub const TEST_DATA : &str = "tests/test_data/";
 pub const OPEN_PALM : &str = concatcp!(TEST_DATA, "open_palm.png");
