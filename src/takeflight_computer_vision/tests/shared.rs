@@ -10,6 +10,7 @@ pub const TEST_DATA : &str = "tests/test_data/";
 pub const OPEN_PALM : &str = concatcp!(TEST_DATA, "open_palm.png");
 pub const TWO_HANDS : &str = concatcp!(TEST_DATA, "two_hands.jpg");
 pub const BLANK : &str = concatcp!(TEST_DATA, "blank.png");
+pub const MIDDLE_INDEX_UP : &str = concatcp!(TEST_DATA, "middle_index_up.png");
 
 pub fn load_image_data<P, CV>(path : P) -> Result<Rgb32FImage, Error>
 where

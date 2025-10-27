@@ -25,7 +25,7 @@ fn main() -> Result<(), Error>
 	canvas.present();
 
 	// Load image
-	let image = image::open("tests/test_data/open_palm.png")?.resize_exact(HandLandmarker::WIDTH as u32, HandLandmarker::HEIGHT as u32, CatmullRom);
+	let image = image::open("tests/test_data/middle_index_up.png")?.resize_exact(HandLandmarker::WIDTH as u32, HandLandmarker::HEIGHT as u32, CatmullRom);
 	let hand_image = image.clone().into_rgb32f();
 	Path::new("model/hand_detector.tflite");
 	let mut landmarker = HandLandmarker::new()?;

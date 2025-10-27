@@ -65,11 +65,11 @@ pub enum PointIndices
 
 pub enum DigitIndices
 {
-	Pinky,
-	Ring,
-	Middle,
-	Index,
 	Thumb,
+	Index,
+	Middle,
+	Ring,
+	Pinky,
 }
 
 #[allow(dead_code)]
@@ -184,6 +184,9 @@ impl<'a> HandLandmarker
 	}
 
 
+	/// Each finger has 4 points
+	/// 0 is the radix
+	/// 3 is the tip
 	pub fn get_digits(tensors: &Vec<Tensor<'_>>) -> [[Coord3D<f32>;4];5]
 	{
 		// x, y, c
@@ -201,13 +204,25 @@ impl<'a> HandLandmarker
 
 		// Don't wanna complicate things too much, so instead of using all the indices as they appear on the enum, we'll just use basic offsets...
 		[
-			[sc[P + 0], sc[P + 1], sc[P + 2], sc[P + 3]],
-			[sc[R + 0], sc[R + 1], sc[R + 2], sc[R + 3]],
-			[sc[M + 0], sc[M + 1], sc[M + 2], sc[M + 3]],
-			[sc[I + 0], sc[I + 1], sc[I + 2], sc[I + 3]],
 			[sc[T + 0], sc[T + 1], sc[T + 2], sc[T + 3]],
+			[sc[I + 0], sc[I + 1], sc[I + 2], sc[I + 3]],
+			[sc[M + 0], sc[M + 1], sc[M + 2], sc[M + 3]],
+			[sc[R + 0], sc[R + 1], sc[R + 2], sc[R + 3]],
+			[sc[P + 0], sc[P + 1], sc[P + 2], sc[P + 3]],
 		]
 
+	}
+
+	/// Counts the fingers that aren't the thumb on a hand.
+	pub fn digits_down(fingies : &[[Coord3D<f32>;4];5]) -> [bool;4]
+	{
+		let mut result = [false, false, false, false];
+		for (idx, finger) in [fingies[Index as usize], fingies[Middle as usize], fingies[Ring as usize], fingies[Pinky as usize]].iter().enumerate()
+		{
+			result[idx] = finger[0].y > finger[3].y;
+		}
+
+		result
 	}
 
 }

@@ -12,6 +12,7 @@ use rstest::{fixture, rstest};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use crate::shared::MIDDLE_INDEX_UP;
 
 const MODEL_PATH : &str = "model/hand_landmarks_detector.tflite";
 
@@ -171,6 +172,24 @@ fn determine_hand_presence_true() -> Result<(), Error>
 	let is_present = HandLandmarker::hand_present(&output);
 
 	assert_eq!(is_present, true);
+
+	Ok(())
+}
+
+#[rstest]
+fn count_fingers() -> Result<(), Error>
+{
+	// Arrange
+	let mut instance = HandLandmarker::from_path(MODEL_PATH)?;
+	let input_image = load_image_data::<_, HandLandmarker>(MIDDLE_INDEX_UP)?;
+	let output = instance.run_model(input_image)?;
+	let fingers = HandLandmarker::get_digits(&output);
+
+	// Act
+	let digits_up = HandLandmarker::digits_down(&fingers);
+
+
+	assert_eq!(digits_up, [true, true, false, false]);
 
 	Ok(())
 }
