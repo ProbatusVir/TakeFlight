@@ -8,13 +8,14 @@ mod tests;
 pub(crate) mod debug_utils;
 
 mod video;
-
+pub(crate) mod logger;
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::{ErrorKind, Read, Write};
 use std::net::SocketAddr;
 use std::process::Command;
-
+use std::str::FromStr;
 use crate::drone_interface::Drone;
 use error::Error;
 use mio;
@@ -27,6 +28,7 @@ use std::time::Duration;
 use takeflight_computer_vision as computer_vision;
 use httparse::Status;
 use serde::{Deserialize, Serialize};
+use crate::logger::{do_logging, Logger};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -42,6 +44,8 @@ struct DroneNames{
 }
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
+const LOG_DIR : &str = "logs/";
+
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
@@ -50,11 +54,24 @@ fn main() -> Result<(), Error> {
 
 	println!("Hello, world!");
 
+	// TODO: Add logic for determining log file.
+	let log_file = "log_file";
+	std::fs::create_dir(LOG_DIR).unwrap_or_default(); // Make sure the file directory exists
+	let file = Arc::new(Mutex::new(Some(File::create(format!("{LOG_DIR}{log_file}"))?)));
+	let (logger, receiver) = logger::Logger::new();
+
+	// Start the logger
+	{
+		let cloned_file = file.clone();
+		thread::spawn(move | | { do_logging(receiver, file).unwrap() });
+	}
+
+	logger.info(String::from_str("Logger started!")?)?;
+
 	// Start the server
 	let server_address = local_ip_address::local_ip()?;
 	let mut poll = Arc::new(Mutex::new(Poll::new()?));
 	let mut listener = TcpListener::bind(SocketAddr::new(server_address, 0))?;
-
 
 	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
 
@@ -75,12 +92,14 @@ fn main() -> Result<(), Error> {
 	// test
 	//let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
 
+	logger.info(String::from_str("Server starting!!!")?)?;
+
 	// Some multiplexing
 	let status = loop
 	{
 		// Receive and handle events
 		poll.lock()?.poll(&mut event_buffer, None)?;
-		let events_result = drain_events(&mut event_buffer, &mut listener, &mut ownership_map, &mut poll);
+		let events_result = drain_events(&mut event_buffer, &mut listener, &mut ownership_map, &mut poll, &logger);
 
 		if events_result.is_ok() { continue }
 		let return_error = events_result.err().unwrap();
@@ -107,7 +126,8 @@ fn main() -> Result<(), Error> {
 fn drain_events(event_buffer	: &mut Events,
 				listener		: &mut TcpListener,
 				ownership_map	: &mut Arc<Mutex<HashMap<Token, Connection>>>,
-				registry 		: &mut Arc<Mutex<Poll>>)
+				registry 		: &mut Arc<Mutex<Poll>>,
+				logger			: &Logger)
 	-> Result<(), Error>
 {
 	for event in event_buffer.iter()
@@ -141,6 +161,7 @@ fn drain_events(event_buffer	: &mut Events,
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
+				logger.info(String::from_str("Sending out keep-alives!")?)?;
 				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
 				for connection in ownership_map.lock()?.iter_mut() {
 					// This seems like a patchy solution. This combats sending multiple pings per cycle.

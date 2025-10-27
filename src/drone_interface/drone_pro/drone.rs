@@ -16,6 +16,7 @@ use std::ops::BitXor;
 use std::str::FromStr;
 use image::imageops::CatmullRom;
 use crate::drone_interface::drone_pro::drone::DroneCommandState::{BasicMovement, EmergencyLand, Takeoff};
+use crate::logger::Logger;
 
 #[derive(Debug)]
 pub struct Drone
@@ -35,6 +36,7 @@ pub struct Drone
 	pub image				: Option<DynamicImage>,
 	dbg_cmd_send : usize,
 	landmarker : HandLandmarker,
+	logger : Logger
 }
 
 #[repr(u8)]
@@ -134,9 +136,8 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
-		dbg!("Received a signal to the drone.");
 		if port == self.video_sock.local_addr()?.port() {
-			dbg!("We're receiving images");
+			self.logger.info(String::from_str("Drone Pro is receiving video packets")?)?;
 			loop
 			{
 				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
@@ -222,13 +223,14 @@ impl drone_interface::Drone for Drone
 
 		}
 		else if port == self.rtp_sock.local_addr()?.port() {
+			self.logger.info(String::from_str("Received out-of-band video information from RTP protocol.")?)?;
 			let bytes_read = self.rtp_sock.read(&mut self.inner_read_buf)?;
 			dbg!("RPT SOCKET: {}", &[..bytes_read]);
 			Ok(())
 		}
-		else if port == self.heartbeat_sock.local_addr()?.port() { todo!() }
+		else if port == self.heartbeat_sock.local_addr()?.port() { self.logger.warn(String::from_str("Received unexpected packet from handshake socket...")?)?; Ok(()) }
 		else if port == self.handshake_sock.local_addr()?.port() {
-			dbg!("Received some bytes, put a command within this loop to execute it. Make sure to add some condition to stop it after certain number of times!");
+			self.logger.warn(String::from_str("Received unexpected packet from handshake socket...")?)?;
 			loop {
 				let bytes_read = self.handshake_sock.recv(&mut self.inner_read_buf)?;
 				if self.dbg_cmd_send < 30 { self.create_command(0, 0, 0, 0, Takeoff)? }
@@ -269,7 +271,7 @@ impl Drop for Drone
 
 impl Drone
 {
-	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr, /*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
+	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr, logger : Logger/*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
 	where
 		Self: Sized
 	{
@@ -373,6 +375,7 @@ impl Drone
 			image			: None,
 			dbg_cmd_send: 0,
 			landmarker: HandLandmarker::from_path("src/model/hand_landmarks_detector.tflite")?,
+			logger,
 		}));
 
 		// Register all sockets to map
