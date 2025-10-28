@@ -124,7 +124,8 @@ impl drone_interface::Drone for Drone
 		todo!()
 	}
 
-	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: IUnit) -> Result<(), Error> {
+	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
+		// FIXME: rot *should* always be 0 right now. We obviously values from -128 to 127
 		self.create_command(lr as i8, ud as i8, fb as i8, rot as i8, BasicMovement)
 	}
 

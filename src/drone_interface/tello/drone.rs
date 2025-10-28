@@ -145,7 +145,7 @@ impl drone_interface::Drone for Drone
 		todo!()
 	}
 
-	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: IUnit) -> Result<(), Error> {
+	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
 		todo!()
 	}
 
