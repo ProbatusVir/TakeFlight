@@ -1,12 +1,9 @@
 use std::collections::HashMap;
-use crate::ClientSocketType::Control;
+use crate::ClientSocketType::{Control, Video};
 use num_enum::{IntoPrimitive, FromPrimitive};
 use std::io::Read;
-use std::sync::{Arc, Mutex};
 use mio::Token;
 use crate::{TcpStream, Error, Connection};
-use crate::app_network::ClientSocketType::Video;
-//use crate::app_network::ClientSocketType::Control;
 
 #[derive(Debug, IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
