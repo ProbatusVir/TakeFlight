@@ -1,12 +1,84 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'joy_stick.dart';
 
 class FlightScreen extends StatelessWidget{
   const FlightScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement flight screen
-    throw UnimplementedError();
+    return Scaffold(
+      backgroundColor: Colors.grey,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: Text('H: 48m', style: TextStyle(color: Colors.white, fontSize: 25.0),),
+        actions: [
+          Icon(Icons.wifi_outlined, color: Colors.white, size: 35.0,),
+          SizedBox(width: 50,), //for spacing between objects
+          Text('12m 34s', style: TextStyle(color: Colors.white, fontSize: 25.0),),
+          SizedBox(width: 50,),
+          Icon(Icons.battery_6_bar_sharp, color: Colors.green,size: 35.0,),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Center(child: Text('Video Feed will be here', style: TextStyle(color: Colors.white, fontSize: 25.0)),),
+          Align( //Aligns user menu to bottom center of the screen
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+                padding: const EdgeInsets.only(bottom: 30), //spacing needed so it isn't touching bottom of the screen
+                child: Container( //The actual circular box
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(50)
+                  ),
+                  child: Row( //Organization of Icons in the box
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
+                    mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
+                    children: [
+                      IconButton(
+                          onPressed: (){},
+                          icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 50.0,)
+                      ),
+                      //TODO::Implement actual recording logic here
+                      IconButton(
+                          onPressed: () {},
+                          icon: Icon(Icons.fiber_manual_record_rounded, color: Colors.red, size: 50.0,)
+                      ),
+                      IconButton(
+                          onPressed: () {},
+                          icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
+                      ),
+                    ],
+                  ),
+                ),
+            ),
+          ),
+          //TODO::Fix joystick UI for android
+          Align( //Joy sticks bottom left
+            alignment: Alignment.bottomLeft,
+            child: Padding(
+                padding: const EdgeInsets.all(150),
+                child: ThumbStickController(
+                  onChange: (x, y){
+                    //Will be movement logic here
+                  },
+                ),
+            ),
+          ),
+          Align( //Joy sticks bottom right
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.all(150),
+              child: ThumbStickController(
+                onChange: (x, y){
+                  //Will be height/axis control logic
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
 }
