@@ -87,7 +87,7 @@ pub trait Drone : Debug
 	/// rot : rotation about the yaw plane
 	///
 	/// There is no guarantee that these transformations must occur at the same time.
-	fn rc(&mut self, lr: IUnit, ud : IUnit, fb :  IUnit, rot :  IUnit) -> Result<(), Error>;
+	fn rc(&mut self, lr: IUnit, ud : IUnit, fb :  IUnit, rot :  f32) -> Result<(), Error>;
 
 	fn send_heartbeat(&mut self) -> Result<(), Error>;
 	fn receive_signal(&mut self, port : u16) -> Result<(), Error>;
