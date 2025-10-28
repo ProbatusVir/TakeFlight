@@ -9,6 +9,7 @@ pub(crate) mod debug_utils;
 
 mod video;
 pub(crate) mod logger;
+mod app_network;
 
 use crate::drone_interface::Drone;
 use error::Error;
@@ -18,6 +19,7 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write};
+use std::io::ErrorKind::ConnectionAborted;
 use std::net::SocketAddr;
 use std::process::Command;
 use std::str::FromStr;
@@ -29,15 +31,30 @@ use crate::logger::{do_logging, Logger};
 use httparse::Status;
 use serde::{Deserialize, Serialize};
 use takeflight_computer_vision as computer_vision;
+use crate::app_network::{handle_connection, ClientSocketType};
 
 #[allow(dead_code)]
 #[derive(Debug)]
-enum Connection
+pub(crate) enum Connection
 {
 	TCP(TcpStream),
 	UDP(UdpSocket),
-	Drone(Arc<Mutex<dyn Drone>>)
+	Client(ClientSocketType, TcpStream),
+	Video(ClientSocketType, TcpStream),
+	Drone(Arc<Mutex<dyn Drone>>),
 }
+impl TryInto<TcpStream> for Connection
+{
+	type Error = crate::Error;
+
+	fn try_into(self) -> Result<TcpStream, Self::Error> {
+		match self {
+			Connection::TCP(stream) => Ok(stream),
+			_ => Err(Error::Custom("Not a TCP stream buddy...")),
+		}
+	}
+}
+
 #[derive(Serialize, Deserialize)]
 struct DroneNames{
 	names: Vec<String>
@@ -125,10 +142,10 @@ fn main() -> Result<(), Error> {
 
 fn drain_events(event_buffer	: &mut Events,
 				listener		: &mut TcpListener,
-				ownership_map	: &mut Arc<Mutex<HashMap<Token, Connection>>>,
+				ownership_map: &mut Arc<Mutex<HashMap<Token, Connection>>>,
 				registry 		: &mut Arc<Mutex<Poll>>,
 				logger			: &Logger)
-	-> Result<(), Error>
+				-> Result<(), Error>
 {
 	for event in event_buffer.iter()
 	{
@@ -200,13 +217,15 @@ fn drain_events(event_buffer	: &mut Events,
 				}
 			}
 			token => {
-				match ownership_map.lock()?.get_mut(&token)
+				let mut ownership_map_lock = ownership_map.lock()?;
+				match ownership_map_lock.get_mut(&token)
 				{
-
 					Some(found) => {
 						match found {
 							Connection::Drone(drone) => { drone.lock()?.receive_signal(token.0 as u16)?; }
-							Connection::TCP(stream) => { handle_connection(stream)? }
+							Connection::TCP(stream) => {
+								let stream = ownership_map_lock.remove(&token).unwrap();
+								handle_connection(stream.try_into()?, &mut *ownership_map_lock)?; }
 							_ => { /* noop until we get the application connected */ }
 						}
 					}
@@ -217,70 +236,5 @@ fn drain_events(event_buffer	: &mut Events,
 		}
 	}
 
-	Ok(())
-}
-
-
-fn handle_connection(stream: &mut TcpStream) -> Result<(), Error>{
-	//Initialize buffer
-	let mut buffer = [0; 1024];
-	let n = stream.read(&mut buffer)?;
-	//create a request object and a buffer for headers
-	let mut headers = [httparse::EMPTY_HEADER; 16];
-	let mut req = httparse::Request::new(&mut headers);
-
-	//Try parsing the HTTP request
-	match req.parse(&buffer[..n]) {
-		Ok(Status::Complete(_)) =>{
-			println!("Method: {:?}", req.method);
-			println!("Path: {:?}", req.path);
-			println!("Version: {:?}", req.version);
-			println!("Headers: {:?}", req.headers);
-		}
-		Ok(Status::Partial) => {
-			eprintln!("Request is Incomplete");
-		}
-		Err(e) => {
-			eprintln!("Parse error: {:?}", e);
-		}
-	}
-	//Grabs the type of request command
-	//let request = String::from_utf8_lossy(&buffer[..]);
-	//For Debugging: Converts bytes to string
-	//println!("Request: {}", request);
-
-	//GET handle for drone names
-	let (status, body) = if req.method == Some("GET")
-		&& req.path == Some("/drone_names"){
-		//populates drone vector with random string names
-		let data = DroneNames {
-			names: vec![
-				"Alpha".into(),
-				"Bravo".into(),
-				"Charlie".into(),
-				"Delta".into(),
-				"Echo".into(),
-				"Fern".into(),
-				"Germany".into(),
-			],
-		};
-		//Serializes the vector to JSON String
-		let json = serde_json::to_string(&data).unwrap();
-		("HTTP/1.1 200 OK", json)
-	}else{
-		let msg = serde_json::to_string(&DroneNames {
-			names: vec!["Invalid request".into()],
-		}).unwrap();
-		("HTTP/1.1 404 ERR", msg)
-	};
-	//Create HTTP response with proper formatting
-	let response = format!(
-		"{status}\r\nContent-Type: application/json
-        \r\nContent-Length: {}\r\n\r\n{body}", body.len()
-	);
-	//Send it to client
-	stream.write(response.as_bytes())?;
-	//Ensures anything using write/write_all is sent out
-	stream.flush()?;
 	Ok(())
 }
