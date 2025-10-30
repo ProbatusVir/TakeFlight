@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'record_button.dart';
 import 'joy_stick.dart';
 
 class FlightScreen extends StatelessWidget{
@@ -40,10 +41,7 @@ class FlightScreen extends StatelessWidget{
                           icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 50.0,)
                       ),
                       //TODO::Implement actual recording logic here
-                      IconButton(
-                          onPressed: () {},
-                          icon: Icon(Icons.fiber_manual_record_rounded, color: Colors.red, size: 50.0,)
-                      ),
+                      RecordButton(),
                       IconButton(
                           onPressed: () {},
                           icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
