@@ -13,7 +13,7 @@ void main() {
     try{
       socket = await Socket.connect('127.0.0.1', 4000);
       //Prints are for debugging
-      print('Connected to erver: ${socket.remoteAddress}:${socket.remotePort}');
+      print('Connected to Server: ${socket.remoteAddress}:${socket.remotePort}');
     }on SocketException catch (e){
       print("Error connecting to server: $e");
     }
