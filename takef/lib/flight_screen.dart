@@ -5,6 +5,11 @@ import 'joy_stick.dart';
 class FlightScreen extends StatelessWidget{
   const FlightScreen({super.key});
 
+  void rc(double lr, double ud, double fb, double rot){
+    //TODO::Change to future async once server connection is there
+    //simulate movement to drone til connection to server is established
+    print('RC Commands: left/right$lr:up/down$ud:forward/backward$fb:rotation$rot'); //debug
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -59,6 +64,9 @@ class FlightScreen extends StatelessWidget{
                 child: ThumbStickController(
                   onChange: (x, y){
                     //Will be movement logic here
+                    final lr = x;
+                    final fb = y;
+                    rc(x,0,y,0);
                   },
                 ),
             ),
@@ -68,8 +76,12 @@ class FlightScreen extends StatelessWidget{
             child: Padding(
               padding: const EdgeInsets.all(150),
               child: ThumbStickController(
+                input: 1,
                 onChange: (x, y){
                   //Will be height/axis control logic
+                  final rot = x;
+                  final ud = y;
+                  rc(0,y,0,x);
                 },
               ),
             ),
