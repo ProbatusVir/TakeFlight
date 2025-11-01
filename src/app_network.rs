@@ -33,7 +33,7 @@ pub fn handle_connection(mut stream : TcpStream, ownership_map : &mut HashMap<To
 	match handshake_buffer[2].into()
 	{
 		Control => {Ok(Connection::Client(Control, stream))}
-		Video => { Ok(Connection::Video(Video, stream)) }
+		Video => { Ok(Connection::VideoOut(Video, stream)) }
 		_ => { Err(Error::Custom("Invalid socket handshake."))? }
 	}
 
