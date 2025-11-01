@@ -98,7 +98,7 @@ fn main() -> Result<(), Error> {
 
 	// Start the server
 	let server_address = local_ip_address::local_ip()?;
-	let mut poll = Arc::new(Mutex::new(Poll::new()?));
+	let poll = Arc::new(Mutex::new(Poll::new()?));
 	let mut listener = TcpListener::bind(SocketAddr::new(server_address, 0))?;
 
 	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
@@ -114,8 +114,8 @@ fn main() -> Result<(), Error> {
 
 
 	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
-	let mut ownership_map = Arc::new(Mutex::new(HashMap::<Token, Connection>::new()));
-	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
+	let ownership_map = Arc::new(Mutex::new(HashMap::<Token, Connection>::new()));
+	let event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
