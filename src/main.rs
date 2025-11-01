@@ -40,7 +40,7 @@ pub(crate) enum Connection
 	TCP(TcpStream),
 	UDP(UdpSocket),
 	Client(ClientSocketType, TcpStream),
-	Video(ClientSocketType, TcpStream),
+	VideoOut(ClientSocketType, TcpStream), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
 	Drone(Arc<Mutex<dyn Drone>>),
 }
 impl TryInto<TcpStream> for Connection
@@ -62,6 +62,17 @@ struct DroneNames{
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
 const LOG_DIR : &str = "logs/";
+
+// TODO: Let's make a more accurate name for this.
+struct ServerInstance
+{
+	// video_stream : //TODO: let's make an enum where it can be a drone, or a separate TCP
+	event_buffer	: Events,
+	listener		: TcpListener,
+	ownership_map	: Arc<Mutex<HashMap<Token, Connection>>>,
+	poll 			: Arc<Mutex<Poll>>,
+	logger			: Logger
+}
 
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
 //Allowing for proper error handling in case the application can not be opened
@@ -111,12 +122,20 @@ fn main() -> Result<(), Error> {
 
 	logger.info(String::from_str("Server starting!!!")?)?;
 
+	let mut server = ServerInstance {
+		event_buffer,
+		listener,
+		ownership_map,
+		poll,
+		logger,
+	};
+
 	// Some multiplexing
 	let status = loop
 	{
 		// Receive and handle events
-		poll.lock()?.poll(&mut event_buffer, None)?;
-		let events_result = drain_events(&mut event_buffer, &mut listener, &mut ownership_map, &mut poll, &logger);
+		server.poll.lock()?.poll(&mut server.event_buffer, None)?;
+		let events_result = drain_events(&mut server);
 
 		if events_result.is_ok() { continue }
 		let return_error = events_result.err().unwrap();
@@ -136,35 +155,29 @@ fn main() -> Result<(), Error> {
 
 	};
 
-
 	status
 }
-
-fn drain_events(event_buffer	: &mut Events,
-				listener		: &mut TcpListener,
-				ownership_map: &mut Arc<Mutex<HashMap<Token, Connection>>>,
-				registry 		: &mut Arc<Mutex<Poll>>,
-				logger			: &Logger)
+fn drain_events(server: &mut ServerInstance)
 				-> Result<(), Error>
 {
-	for event in event_buffer.iter()
+	for event in server.event_buffer.iter()
 	{
 		match event.token()
 		{
 			LISTENER => {
 				// Accept all incoming streams.
 				loop {
-					let incoming = listener.accept();
+					let incoming = server.listener.accept();
 					match incoming
 					{
 						Ok((mut stream, address)) => {
 							let token = Token(address.port() as usize);
-								registry.lock()?.registry().register(
+								server.poll.lock()?.registry().register(
 									&mut stream,
 									token.clone(),
 									Interest::READABLE)?;
 
-								ownership_map.lock()?.insert(
+								server.ownership_map.lock()?.insert(
 									token,
 									Connection::TCP(stream),
 								);
@@ -178,9 +191,9 @@ fn drain_events(event_buffer	: &mut Events,
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
-				logger.info(String::from_str("Sending out keep-alives!")?)?;
+				server.logger.info(String::from_str("Sending out keep-alives!")?)?;
 				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
-				for connection in ownership_map.lock()?.iter_mut() {
+				for connection in server.ownership_map.lock()?.iter_mut() {
 					// This seems like a patchy solution. This combats sending multiple pings per cycle.
 					match connection.1
 					{
@@ -217,7 +230,7 @@ fn drain_events(event_buffer	: &mut Events,
 				}
 			}
 			token => {
-				let mut ownership_map_lock = ownership_map.lock()?;
+				let mut ownership_map_lock = server.ownership_map.lock()?;
 				match ownership_map_lock.get_mut(&token)
 				{
 					Some(found) => {
