@@ -66,7 +66,7 @@ pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<Fi
 
 		// Format our message
 		let message_out = {
-				format!("[{}] ({}:{}:{}): \"{}\"",
+				format!("[{}] ({:02}:{:02}:{:02}): \"{}\"",
 						match log_message.logging_level {
 							LoggingLevel::Info => { "INFO" }
 							LoggingLevel::Warning => { "WARN" }

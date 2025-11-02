@@ -159,17 +159,6 @@ impl HandIdentifier
 
 }
 
-/// Credit to steffahn
-/// https://users.rust-lang.org/t/get-indices-of-sorted-vec-of-structs-with-float-fields/73025/2
-fn argsort_by<T, F>(data: &[T], mut compare: F) -> Vec<usize>
-where
-	F: FnMut(&T, &T) -> std::cmp::Ordering,
-{
-	let mut indices = (0..data.len()).collect::<Vec<_>>();
-	indices.sort_by(|&i, &j| compare(&data[i], &data[j]));
-	indices
-}
-
 
 impl ComputerVision for HandIdentifier
 {
