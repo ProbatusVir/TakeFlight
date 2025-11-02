@@ -15,12 +15,10 @@ use mio;
 use mio::net::{TcpListener, TcpStream, UdpSocket};
 use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, };
 use std::fs::File;
-use std::io::ErrorKind::ConnectionAborted;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{ErrorKind, Write};
 use std::net::SocketAddr;
-use std::process::Command;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -28,10 +26,6 @@ use std::time::Duration;
 
 use crate::app_network::{handle_connection, ClientSocketType};
 use crate::logger::{do_logging, Logger};
-use crate::video_stream::VideoStream;
-use httparse::Status;
-use image::DynamicImage;
-use serde::{Deserialize, Serialize};
 use takeflight_computer_vision as computer_vision;
 
 #[allow(dead_code)]
@@ -57,10 +51,6 @@ impl TryInto<TcpStream> for Connection
 	}
 }
 
-#[derive(Serialize, Deserialize)]
-struct DroneNames{
-	names: Vec<String>
-}
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
 const VID_WAKER : Token = Token(2);
@@ -100,7 +90,7 @@ fn main() -> Result<(), Error> {
 		let cloned_file = file.clone();
 		thread::Builder::new()
 			.name(String::from("Logger"))
-			.spawn(move || { do_logging(receiver, file).unwrap() })?;
+			.spawn(move || { do_logging(receiver, cloned_file).unwrap() })?;
 	}
 
 	logger.info(String::from_str("Logger started!")?)?;
@@ -132,7 +122,7 @@ fn main() -> Result<(), Error> {
 
 	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
 	let ownership_map = Arc::new(Mutex::new(HashMap::<Token, Connection>::new()));
-	let mut event_buffer = (Events::with_capacity(MAX_EVENTS));
+	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), server_address, logger.clone());
@@ -258,7 +248,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events)
 				}
 			}
 			token => {
-				let mut found_connection = server.ownership_map.lock()?.remove(&token);
+				let found_connection = server.ownership_map.lock()?.remove(&token);
 				match found_connection
 				{
 					Some(found) => {
@@ -287,7 +277,7 @@ impl ServerInstance
 		let video_src_token = self.video_src.ok_or(Error::NoVideoSource)?;
 
 		let mut ownership_lock = self.ownership_map.lock()?;
-		let mut src = ownership_lock.remove(&video_src_token).ok_or_else(|| {
+		let src = ownership_lock.remove(&video_src_token).ok_or_else(|| {
 			self.video_src = None;
 			Error::NoVideoSource
 		})?;
