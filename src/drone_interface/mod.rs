@@ -3,6 +3,7 @@ pub mod drone_pro;
 
 use crate::Error;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 /// The unit corresponds to a centimeter, for now; even if the precision of the drone is not matched to the centimeter.
 
@@ -72,7 +73,7 @@ pub trait Drone : Debug
 	fn cclockwise_rot(&mut self, rads : f32) -> Result<(), Error>;
 
 	/// Will return a picture from the drone's video feed.
-	fn snapshot(&mut self) -> Result<(), Error>;
+	fn snapshot(&mut self) -> Result<Option<Arc<[u8]>>, Error>;
 
 
 	/// The drone may be free to move on all axes simultaneously.

@@ -120,7 +120,7 @@ impl drone_interface::Drone for Drone
 		self.create_command(0, 0, 0,-0x79, BasicMovement)
 	}
 
-	fn snapshot(&mut self) -> Result<(), Error> {
+	fn snapshot(&mut self) -> Result<Option<Arc<[u8]>>, Error> {
 		todo!()
 	}
 
