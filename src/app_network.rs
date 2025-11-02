@@ -1,8 +1,8 @@
 use crate::ClientSocketType::{Control, Video};
-use num_enum::{IntoPrimitive, FromPrimitive};
-use std::io::Read;
+use crate::{Connection, Error, ServerInstance, TcpStream};
 use mio::Token;
-use crate::{TcpStream, Error, Connection, ServerInstance};
+use num_enum::{FromPrimitive, IntoPrimitive};
+use std::io::Read;
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]

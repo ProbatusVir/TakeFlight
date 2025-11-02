@@ -120,9 +120,13 @@ impl drone_interface::Drone for Drone
 		self.create_command(0, 0, 0,-0x79, BasicMovement)
 	}
 
-	fn snapshot(&mut self) -> Result<Option<Arc<[u8]>>, Error> {
-		todo!()
-	}
+	fn snapshot(&mut self) -> Option<Arc<Vec<u8>>> {
+		match &self.image
+		{
+			Some(img) => { Some(Arc::new(img.as_bytes().to_vec())) }
+			None => { None }
+		}
+}
 
 	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
 		// FIXME: rot *should* always be 0 right now. We obviously values from -128 to 127

@@ -141,7 +141,7 @@ impl drone_interface::Drone for Drone
 		Ok(())
 	}
 
-	fn snapshot(&mut self) -> Result<Option<Arc<[u8]>>, Error> {
+	fn snapshot(&mut self) -> Option<Arc<Vec<u8>>> {
 		todo!()
 	}
 

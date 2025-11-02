@@ -2,8 +2,6 @@ mod helper;
 mod video_stream;
 mod drone_interface;
 mod error;
-#[cfg(test)]
-mod tests;
 #[cfg(debug_assertions)]
 pub(crate) mod debug_utils;
 
@@ -19,8 +17,8 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
-use std::io::{ErrorKind, Read, Write};
 use std::io::ErrorKind::ConnectionAborted;
+use std::io::{ErrorKind, Read, Write};
 use std::net::SocketAddr;
 use std::process::Command;
 use std::str::FromStr;
@@ -28,12 +26,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::app_network::{handle_connection, ClientSocketType};
 use crate::logger::{do_logging, Logger};
+use crate::video_stream::VideoStream;
 use httparse::Status;
+use image::DynamicImage;
 use serde::{Deserialize, Serialize};
 use takeflight_computer_vision as computer_vision;
-use crate::app_network::{handle_connection, ClientSocketType};
-use crate::video_stream::VideoStream;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -136,7 +135,7 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = (Events::with_capacity(MAX_EVENTS));
 
 	// test
-	//let drone = crate::drone_interface::drone_pro::drone::Drone::new(poll.clone(), ownership_map.clone(), server_address);
+	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), server_address, logger.clone());
 
 	logger.info(String::from_str("Server starting!!!")?)?;
 
@@ -299,8 +298,11 @@ impl ServerInstance
 
 		let image = match &src {
 			Connection::Drone(source) => {
-				let mut source_lock = source.lock()?;
-				source_lock.snapshot()?.ok_or(Error::Custom("Could not obtain image from drone!"))?
+				{
+					let mut source_lock = source.lock()?;
+					source_lock.snapshot().clone().ok_or(Error::Custom("Could not obtain image from drone!"))?.clone()
+				}
+
 			}
 			Connection::Camera() => todo!(),
 			_ => { Err(Error::NoVideoSource)? }

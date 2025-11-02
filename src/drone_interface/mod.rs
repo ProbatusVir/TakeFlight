@@ -73,7 +73,7 @@ pub trait Drone : Debug
 	fn cclockwise_rot(&mut self, rads : f32) -> Result<(), Error>;
 
 	/// Will return a picture from the drone's video feed.
-	fn snapshot(&mut self) -> Result<Option<Arc<[u8]>>, Error>;
+	fn snapshot(&mut self) -> Option<Arc<Vec<u8>>>;
 
 
 	/// The drone may be free to move on all axes simultaneously.
