@@ -72,6 +72,8 @@ fn main() -> Result<(), Error> {
 	let server_address = local_ip_address::local_ip()?;
 	let mut poll = Arc::new(Mutex::new(Poll::new()?));
 	let mut listener = TcpListener::bind(SocketAddr::new(server_address, 0))?;
+	//test
+	println!("Listening on {}, port {}", server_address, listener.local_addr()?.port());
 
 	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
 

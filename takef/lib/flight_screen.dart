@@ -91,7 +91,7 @@ class _FlightScreenState extends State<FlightScreen>{
                   //Will be movement logic here
                   final lr = x;
                   final fb = y;
-                  rc(x,0,y,0);
+                  rc(lr,0,fb,0);
                 },
               ),
             ),
@@ -106,7 +106,7 @@ class _FlightScreenState extends State<FlightScreen>{
                   //Will be height/axis control logic
                   final rot = x;
                   final ud = y;
-                  rc(0,y,0,x);
+                  rc(0,ud,0,rot);
                 },
               ),
             ),
