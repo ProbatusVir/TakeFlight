@@ -2,6 +2,7 @@ import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
 import 'flight_screen.dart';
+import 'settings_screen.dart';
 
 void main() async {
   //WidgetsFlutterBinding.ensureInitialized(); //ensures flutter is initialized
@@ -69,7 +70,11 @@ class _MyHomePageState extends State<MyHomePage> {
       // settings button
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
-          onPressed: (){},
+          onPressed: (){
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (BuildContext context) => Settings())
+            );
+          },
           child: Icon(
             Icons.settings_outlined,
             color: Colors.white,

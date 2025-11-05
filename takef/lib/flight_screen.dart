@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'record_button.dart';
 import 'package:flutter/services.dart';
 import 'joy_stick.dart';
+import 'settings_screen.dart';
 
 class FlightScreen extends StatefulWidget{
   const FlightScreen({super.key});
@@ -73,7 +74,11 @@ class _FlightScreenState extends State<FlightScreen>{
                     //TODO::Implement actual recording logic here
                     RecordButton(),
                     IconButton(
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.of(context).push(
+                              MaterialPageRoute(builder: (BuildContext context) => Settings())
+                          );
+                        },
                         icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
                     ),
                   ],
