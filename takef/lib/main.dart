@@ -1,64 +1,12 @@
-import 'dart:io';
-import 'dart:convert'; //For encoding/decoding
-import 'dart:typed_data'; //For Uint8List
+import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
 import 'flight_screen.dart';
 
-Future<void> connectToServer() async{
-  //Need to detect platform first to determine correct socket creation
-  Socket? socket;
-  try{
-    socket = await Socket.connect('192.168.1.137', 57585);
-    //Prints are for debugging
-    print('Connected to Server: ${socket.remoteAddress}:${socket.remotePort}');
-  }on SocketException catch (e){
-    print("Error connecting to server: $e");
-  }
-  //send data to server
-  if(socket != null){
-    socket.add([0x42, 0x42, 2]); //sends the header bytes along with the ID of video stream
-    socket.flush(); //ensures all data is sent
-  }
-  List<int> imageDataBytes = [];
-  int? imageLength;
-  //receiving image data
-  if(socket != null){
-    socket.listen(
-            (Uint8List data){
-          if(imageLength == null && data.length >= 4){ //Assuming 4 bytes for length
-            imageLength = ByteData.view(data.buffer).getInt32(0, Endian.big); //Read length
-            imageDataBytes.addAll(data.sublist(4)); //read the rest of data after first 4
-          } else if(imageLength != null){
-            imageDataBytes.addAll(data);
-          }
-          if(imageLength != null && imageDataBytes.length >= imageLength!){
-            //image data fully received
-            Uint8List receivedImage = Uint8List.fromList(imageDataBytes.sublist(0, imageLength!));
-            print('Image received with ${receivedImage.length} bytes.');
-
-            // Can now use this function (e.g., display it using Image.memory)
-            // Reset for next image if multiple images are expected
-            imageDataBytes.clear();
-            imageLength = null;
-          }
-        },
-        onDone: (){
-          print('Server disconnected');
-          socket?.destroy();
-        },
-        onError: (error){
-          print('Error on socket: $error');
-          socket?.destroy();
-        }
-    );
-  }
-}
-
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); //ensures flutter is initialized
+  //WidgetsFlutterBinding.ensureInitialized(); //ensures flutter is initialized
   //Connect to rust server
-  await connectToServer();
+  //await connectToServer();
   runApp(const MyApp());
 }
 
@@ -104,6 +52,14 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
 //creates list this will later be the get call for drone names
   final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
+
+  @override
+  void initState(){
+    super.initState();
+    Future.microtask(() async {
+      await connectToServer();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
