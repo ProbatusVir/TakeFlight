@@ -6,6 +6,7 @@ class Settings extends StatelessWidget{
   @override
   Widget build(BuildContext context){
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       home: DefaultTabController(
           length: 4,
           child: Scaffold(
@@ -13,20 +14,24 @@ class Settings extends StatelessWidget{
               children: [
                 //Left side tab bar
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 100,
+                  height: double.maxFinite,
                   color: Colors.black,
                   child: RotatedBox(
-                      quarterTurns: 3, //Rotate the TabBar for vertical look
+                      quarterTurns: -3, //Rotate the TabBar for vertical look
                     child: TabBar(
                         tabs: [
-                          Tab(text: 'Drone Information'),
-                          Tab(text: 'Settings'),
-                          Tab(text: 'Gesture Settings'),
-                          Tab(text: 'Flight logs'),
+                          Tab(child: RotatedBox(quarterTurns: -1, child: Text('Drone Information', maxLines: 1,))),
+                          Tab(child: RotatedBox(quarterTurns: -1, child: Text('Settings', maxLines: 1,))),
+                          Tab(child: RotatedBox(quarterTurns: -1, child: Text('Gesture Settings', maxLines: 2, overflow: TextOverflow.visible,))),
+                          Tab(child: RotatedBox(quarterTurns: -1, child: Text('Flight logs', maxLines: 2,))),
                         ],
                       labelColor: Colors.white,
-                      unselectedLabelColor: Colors.black,
+                      unselectedLabelColor: Colors.grey,
+                      indicator: BoxDecoration(
+                        color: Colors.grey.shade700,
+                        shape: BoxShape.rectangle,
+                      ),
                       indicatorColor: Colors.grey.shade700,
                     ),
                   ),
