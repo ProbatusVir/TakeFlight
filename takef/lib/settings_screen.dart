@@ -14,9 +14,15 @@ class Settings extends StatelessWidget{
               children: [
                 //Left side tab bar
                 Container(
-                  width: 100,
+                  width: 125,
                   height: double.maxFinite,
-                  color: Colors.black,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    ),
+                    color: Colors.black,
+                  ),
                   child: RotatedBox(
                       quarterTurns: -3, //Rotate the TabBar for vertical look
                     child: TabBar(
@@ -40,8 +46,14 @@ class Settings extends StatelessWidget{
                     child: TabBarView(
                         children: [
                           //Drone info tab and down in order of tab creation
-                          Center(
-                            child: Text('Drone info content'),
+                          Container(
+                            color: Colors.grey.shade700,
+                            child: Text('Drone1:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 30.0,
+                              ),
+                            ),
                           ),
                           Center(
                             child: Text('Settings content'),
