@@ -10,28 +10,46 @@ takeflight_computer_vision = { path= "src/takeflight_computer_vision" }
 mio = { version="1.0.4", features = ["net", "os-poll"] }
 local-ip-address = "0.6.5"
 openh264 = "0.9.0"
-# actix = "0.13.5"      # This will be used to talk to the React server, should we choose to go that route.
-# rusqlite = "0.37.0"    # SQLite for Rust
 image = "0.25.8"
+rusqlite = { version="0.37.0", features = ["bundled"]}
 
 zerocopy = "0.8.27" # This is for low-level byte operations on primitive types
 lebe = "0.5.3"
-serde = { version = "1.0.228", features = ["derive"] } #For the use of Seralize and Deseralize framwork
-serde_json = "1.0.145"# for json to conversions
-httparse = "1.10.1"
-anyhow = "1.0.100"
 chrono = "0.4.42"
 num_enum = "0.7.5"
+anyhow = "1.0.100"
 
 [dev-dependencies]
 nokhwa = { version="0.10.9", features = ["input-native"] }
 rstest = "0.26.1"
 
+[build-dependencies]
+rusqlite = { version="0.37.0", features = ["bundled"]}
+anyhow = "1.0.100"
+const_format = "0.2.35"
 
 [profile.test]
 opt-level = 3
 
-# When we add support for android, if there are additional dependecies to consider, this is how we do that.
-#[target.aarch64-linux-android]
+#[[test]]
+#name="camera_conversion_tests"
+#path="src/tests/camera_conversion_test.rs"
+#
+#[[test]]
+#name="conversion_tests"
+#path="src/tests/conversion_tests.rs"
+#
+#[[test]]
+#name="http_server_tests"
+#path="src/tests/http_server_tests.rs"
+#
+#[[test]]
+#name="stream_tests"
+#path="src/tests/stream_tests.rs"
+#
+#[[test]]
+#name="drone_flight_tests"
+#path="src/tests/drone_flight_tests.rs"
+
 
 

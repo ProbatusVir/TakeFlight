@@ -8,6 +8,10 @@ pub(crate) mod debug_utils;
 mod video;
 pub(crate) mod logger;
 mod app_network;
+mod database;
+
+#[cfg(test)]
+mod tests;
 
 use crate::drone_interface::Drone;
 use error::Error;

@@ -1,6 +1,5 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
-
 #[derive(Debug)]
 pub enum Error
 {
@@ -18,6 +17,12 @@ pub enum Error
 	NoVideoTarget,
 	NoVideoSource,
 	ParseIntError(std::num::ParseIntError),
+	SqliteError(rusqlite::Error)
+}
+
+impl From<rusqlite::Error> for Error
+{
+	fn from(value: rusqlite::Error) -> Self { Error::SqliteError(value) }
 }
 
 impl From<std::num::ParseIntError> for Error
@@ -101,6 +106,7 @@ impl Display for Error {
 			Error::NoVideoSource => { "Server instance did not have a video source!".fmt(f) }
 			Error::NoVideoTarget => { "Server instance did not have a video target!".fmt(f) }
 			Error::ParseIntError(e) => { e.fmt(f) }
+			Error::SqliteError(e) => { e.fmt(f) }
 		}
 	}
 }
