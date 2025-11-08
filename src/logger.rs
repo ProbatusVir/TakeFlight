@@ -2,8 +2,10 @@ use crate::error::Error;
 use chrono::{Local, Timelike};
 use std::fs::File;
 use std::io::Write;
+use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, };
+use crate::logger::LoggingLevel::Info;
 
 enum LoggingLevel
 {
@@ -35,29 +37,30 @@ impl Logger
 		(Self { sender }, receiver)
 	}
 
-	pub fn info(&self, msg : String) -> Result<(), Error>
+	pub fn info(&self, msg : &str) -> Result<(), Error>
 	{
 		self.send_log_message(LoggingLevel::Info, msg).map_err(|_| Error::Custom("Unable send INFO message to logger!"))
 	}
 
-	pub fn warn(&self, msg : String) -> Result<(), Error>
+	pub fn warn(&self, msg : &str) -> Result<(), Error>
 	{
 		self.send_log_message(LoggingLevel::Warning, msg).map_err(|_| Error::Custom("Unable send WARN message to logger!"))
 	}
 
-	pub fn error(&self, msg : String) -> Result<(), Error>
+	pub fn error(&self, msg : &str) -> Result<(), Error>
 	{
 		self.send_log_message(LoggingLevel::Error, msg).map_err(|_| Error::Custom("Unable send ERROR message to logger!"))
 	}
 
-	fn send_log_message(&self, logging_level: LoggingLevel, msg : String) -> Result<(), Error>
+	fn send_log_message(&self, logging_level: LoggingLevel, msg : &str) -> Result<(), Error>
 	{
 		let time = chrono::Local::now();
-
+		let msg = String::from_str(msg)?;
 		self.sender.send(LogMessage { logging_level, time, msg, }).map_err(|_| Error::Custom("Failed to send message to logger!"))
 	}
 }
 
+/// I would love to make this return Result<!, Error> once it becomes stable.
 pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>) -> Result<(), Error>
 {
 	loop {
@@ -80,7 +83,12 @@ pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<Fi
 			};
 
 		// Actually write out the message
-		println!("{message_out}");
+		match log_message.logging_level {
+			LoggingLevel::Info		=> {  println!("{message_out}"); }
+			LoggingLevel::Warning	=> { eprintln!("{message_out}"); }
+			LoggingLevel::Error		=> { eprintln!("{message_out}"); }
+		}
+
 		{
 			let mut log_file_lock = log_file.lock().map_err(|_| Error::Custom("Logger unable to get a lock on the log_file pointer!"))?;
 

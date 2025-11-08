@@ -17,7 +17,14 @@ pub enum Error
 	AnyhowError(anyhow::Error),
 	NoVideoTarget,
 	NoVideoSource,
+	ParseIntError(std::num::ParseIntError),
 }
+
+impl From<std::num::ParseIntError> for Error
+{
+	fn from(value: std::num::ParseIntError) -> Self { Error::ParseIntError(value) }
+}
+
 
 impl From<anyhow::Error> for Error
 {
@@ -93,6 +100,7 @@ impl Display for Error {
 			Error::AnyhowError(e) => { e.fmt(f) }
 			Error::NoVideoSource => { "Server instance did not have a video source!".fmt(f) }
 			Error::NoVideoTarget => { "Server instance did not have a video target!".fmt(f) }
+			Error::ParseIntError(e) => { e.fmt(f) }
 		}
 	}
 }

@@ -142,7 +142,7 @@ impl drone_interface::Drone for Drone
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
 		if port == self.video_sock.local_addr()?.port() {
-			self.logger.info(String::from_str("Drone Pro is receiving video packets")?)?;
+			self.logger.info("Drone Pro is receiving video packets")?;
 			loop
 			{
 				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
@@ -228,14 +228,14 @@ impl drone_interface::Drone for Drone
 
 		}
 		else if port == self.rtp_sock.local_addr()?.port() {
-			self.logger.info(String::from_str("Received out-of-band video information from RTP protocol.")?)?;
+			self.logger.info("Received out-of-band video information from RTP protocol.")?;
 			let bytes_read = self.rtp_sock.read(&mut self.inner_read_buf)?;
 			dbg!("RPT SOCKET: {}", &[..bytes_read]);
 			Ok(())
 		}
-		else if port == self.heartbeat_sock.local_addr()?.port() { self.logger.warn(String::from_str("Received unexpected packet from handshake socket...")?)?; Ok(()) }
+		else if port == self.heartbeat_sock.local_addr()?.port() { self.logger.warn("Received unexpected packet from handshake socket...")?; Ok(()) }
 		else if port == self.handshake_sock.local_addr()?.port() {
-			self.logger.warn(String::from_str("Received unexpected packet from handshake socket...")?)?;
+			self.logger.warn("Received unexpected packet from handshake socket...")?;
 			loop {
 				let bytes_read = self.handshake_sock.recv(&mut self.inner_read_buf)?;
 				if self.dbg_cmd_send < 30 { self.create_command(0, 0, 0, 0, Takeoff)? }
