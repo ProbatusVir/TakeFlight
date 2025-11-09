@@ -3,6 +3,7 @@ import 'record_button.dart';
 import 'package:flutter/services.dart';
 import 'joy_stick.dart';
 import 'settings_screen.dart';
+import 'video_feed.dart';
 
 class FlightScreen extends StatefulWidget{
   const FlightScreen({super.key});
@@ -53,7 +54,7 @@ class _FlightScreenState extends State<FlightScreen>{
       ),
       body: Stack(
         children: [
-          Center(child: Text('Video Feed will be here', style: TextStyle(color: Colors.white, fontSize: 25.0)),),
+          Center(child: VideoFeed(),), //placement for video feed
           Align( //Aligns user menu to bottom center of the screen
             alignment: Alignment.bottomCenter,
             child: Padding(
