@@ -13,7 +13,7 @@ class ThumbStickController extends StatelessWidget{
       width: size, // same size to keep symmetry
       height: size,
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: Colors.transparent,
         shape: BoxShape.rectangle,
       ),
       child: Joystick(

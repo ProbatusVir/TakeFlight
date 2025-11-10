@@ -91,7 +91,7 @@ class _FlightScreenState extends State<FlightScreen>{
           Align( //Joy sticks bottom left
             alignment: Alignment.bottomLeft,
             child: Padding(
-              padding: const EdgeInsets.all(150),
+              padding: const EdgeInsets.all(100),
               child: ThumbStickController(
                 onChange: (x, y){
                   //Will be movement logic here
@@ -105,7 +105,7 @@ class _FlightScreenState extends State<FlightScreen>{
           Align( //Joy sticks bottom right
             alignment: Alignment.bottomRight,
             child: Padding(
-              padding: const EdgeInsets.all(150),
+              padding: const EdgeInsets.all(100),
               child: ThumbStickController(
                 input: 1,
                 onChange: (x, y){
