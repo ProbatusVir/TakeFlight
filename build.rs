@@ -1,4 +1,6 @@
 use std::io::{Read, Write};
+use std::path;
+use std::path::Path;
 use rusqlite as sql;
 use anyhow::Error;
 use const_format::{formatcp};
@@ -6,6 +8,7 @@ use const_format::{formatcp};
 const TEST_RESULT_FOLDER : &str = "test_results";
 const LOGS_FOLDER : &str = "logs";
 const FLIGHT_DB : &str = formatcp!("{LOGS_FOLDER}/flightdb.db3");
+const SQL_SCRIPTS : &str = "src/sql_scripts";
 const TABLE_SCRIPTS : &str = "src/sql_scripts/create_tables";
 
 fn main() -> Result<(), Error>
@@ -17,12 +20,17 @@ fn main() -> Result<(), Error>
 
 	if !std::fs::exists(FLIGHT_DB)? { setup_database()? }
 
+	let path_buf = path::absolute(SQL_SCRIPTS)?;	// scripts_dir is a reference to this, so we need a binding to keep it alive... boring...
+ 	let scripts_dir = path_buf.to_str().unwrap();
+	println!("cargo::rustc-env=TABLE_SCRIPTS={scripts_dir}/create_tables");
+	println!("cargo::rustc-env=SCRIPTS_DIR={}", scripts_dir);
+	println!("cargo::rustc-env=SQL_ENTRY_DIR={scripts_dir}/entry");
+
 	Ok(())
 }
 
 fn setup_database() -> Result<(), Error>
 {
-
 	const DRONE_DATA : &str = formatcp!("{TABLE_SCRIPTS}/drone_data_tb.sql");
 	const FLIGHT_LOG : &str = formatcp!("{TABLE_SCRIPTS}/flight_log_tb.sql");
 	const FLIGHT_MODEL : &str = formatcp!("{TABLE_SCRIPTS}/flight_model_tb.sql");
