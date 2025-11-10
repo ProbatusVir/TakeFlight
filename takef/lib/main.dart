@@ -1,8 +1,13 @@
+import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
 import 'flight_screen.dart';
+import 'settings_screen.dart';
 
-void main() {
+void main() async {
+  //WidgetsFlutterBinding.ensureInitialized(); //ensures flutter is initialized
+  //Connect to rust server
+  //await connectToServer();
   runApp(const MyApp());
 }
 
@@ -50,6 +55,14 @@ class _MyHomePageState extends State<MyHomePage> {
   final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
 
   @override
+  void initState(){
+    super.initState();
+    Future.microtask(() async {
+      await connectToServer();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       //TODO::Change out logo text with SVG text fix logo size for mobile
@@ -57,7 +70,11 @@ class _MyHomePageState extends State<MyHomePage> {
       // settings button
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
-          onPressed: (){},
+          onPressed: (){
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (BuildContext context) => Settings())
+            );
+          },
           child: Icon(
             Icons.settings_outlined,
             color: Colors.white,

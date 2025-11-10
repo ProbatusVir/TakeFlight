@@ -8,6 +8,10 @@ pub(crate) mod debug_utils;
 mod video;
 pub(crate) mod logger;
 mod app_network;
+mod database;
+
+#[cfg(test)]
+mod tests;
 
 use crate::drone_interface::Drone;
 use error::Error;
@@ -18,12 +22,12 @@ use std::collections::HashMap;
 use std::fmt::{Debug, };
 use std::fs::File;
 use std::io::{ErrorKind, Write};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-
+use local_ip_address::local_ip;
 use crate::app_network::{handle_connection, ClientSocketType};
 use crate::logger::{do_logging, Logger};
 use takeflight_computer_vision as computer_vision;
@@ -74,10 +78,8 @@ struct ServerInstance
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
 	const MAX_EVENTS : usize = 1024;
-	let heartbeat_time: Duration = Duration::from_secs_f32(3.0);
-	let frame_time = Duration::from_secs_f32(1.0 / 20.0); // 20 fps doesn't seem bad for now.
-
-	println!("Hello, world!");
+	const HEARTBEAT_TIME: Duration = Duration::from_millis(3000);
+	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
 
 	// TODO: Add logic for determining log file.
 	let log_file = "log_file";
@@ -93,12 +95,27 @@ fn main() -> Result<(), Error> {
 			.spawn(move || { do_logging(receiver, cloned_file).unwrap() })?;
 	}
 
-	logger.info(String::from_str("Logger started!")?)?;
+	logger.info("Logger started!")?;
 
 	// Start the server
-	let server_address = local_ip_address::local_ip()?;
 	let poll = Arc::new(Mutex::new(Poll::new()?));
-	let mut listener = TcpListener::bind(SocketAddr::new(server_address, 0))?;
+	let mut listener = TcpListener::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
+	let server_address = listener.local_addr()?;
+
+	// Handle arguments
+	{
+		let mut args = std::env::args();
+		if args.len() == 2
+		{
+			let port : u16 = args.nth(1).unwrap().parse()?;
+			let negotiator = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
+			negotiator.send_to(&server_address.port().to_be_bytes(), SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)))?;
+			logger.info("Client asked for server socket.")?;
+		}
+	}
+
+	//test
+	logger.info(&format!("Listening on all IPv4 interfaces. Network address: {}, port {}", local_ip()?, server_address.port()))?;
 
 	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
 
@@ -106,7 +123,7 @@ fn main() -> Result<(), Error> {
 	{
 		let heartbeat = Waker::new(poll.lock()?.registry(), HEARTBEAT)?;
 		thread::spawn(move || { loop {
-			thread::sleep(heartbeat_time);
+			thread::sleep(HEARTBEAT_TIME);
 			heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
 		} });
 	}
@@ -114,7 +131,7 @@ fn main() -> Result<(), Error> {
 	{
 		let video_waker = Waker::new(poll.lock()?.registry(), VID_WAKER)?;
 		thread::spawn(move || loop {
-			thread::sleep(frame_time);
+			thread::sleep(FRAME_TIME);
 			video_waker.wake().unwrap_or(());
 		});
 	}
@@ -125,9 +142,10 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
-	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), server_address, logger.clone());
+	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), logger.clone());
+	//let drone = crate::drone_interface::tello::drone::Drone::init(poll.clone(), ownership_map.clone());
 
-	logger.info(String::from_str("Server starting!!!")?)?;
+	logger.info("Server starting!!!")?;
 
 	let mut server = ServerInstance {
 		listener,
@@ -200,7 +218,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events)
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
-				server.logger.info(String::from_str("Sending out keep-alives!")?)?;
+				server.logger.info("Sending out keep-alives!")?;
 				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
 				for connection in server.ownership_map.lock()?.iter_mut() {
 					// This seems like a patchy solution. This combats sending multiple pings per cycle.

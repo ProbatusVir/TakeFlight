@@ -1,0 +1,1 @@
+INSERT INTO DroneDataTb (SDK) VALUES (?1);

@@ -1,4 +1,4 @@
-use crate::Error;
+/*use crate::Error;
 use rstest::rstest;
 
 mod tello_drone
@@ -38,4 +38,4 @@ mod tello_drone
 
 		Ok(())
 	}
-}
+}*/

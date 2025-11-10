@@ -32,6 +32,7 @@ dependencies:
     sdk: flutter
   flutter_svg: ^2.0.5 # Use the latest version from pub.dev
   flutter_joystick: ^0.2.2 #joystick library
+  web_socket_channel: ^3.0.3 #Websocket communication
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -55,6 +56,8 @@ dev_dependencies:
 flutter:
   assets:
     - assets/Images/drone_icon.png
+    - assets/Images/record_icon.svg
+    - assets/Images/Stop_Circle.svg
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

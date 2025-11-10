@@ -1,0 +1,1 @@
+INSERT INTO FlightModelTb (DroneModelID) VALUES (?1)
