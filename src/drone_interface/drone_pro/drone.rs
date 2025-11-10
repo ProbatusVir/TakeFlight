@@ -362,6 +362,10 @@ impl Drone
 			poll_lock.registry().register(&mut handshake_sock,	handshake_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut heartbeat_sock,	heartbeat_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut rtp_sock,		rtp_token,			Interest::READABLE)?;
+
+			// If you're wondering why this is commented out, look at the top of the function.
+			// This is still here to make it apparent that this is not an oversight.
+			// -- original line written 10/18/25. -- this line was written on 11/9/25.
 			//poll_lock.registry().register(&mut video_sock,		video_token,		Interest::READABLE)?;
 		}
 
