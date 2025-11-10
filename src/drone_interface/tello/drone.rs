@@ -8,6 +8,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
+use crate::drone_interface::tello::packet::set_sticks;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -16,9 +17,13 @@ pub struct Drone
 	command_sock	: UdpSocket,
 	video_sock		: UdpSocket,
 	info_sock		: UdpSocket,
-	#[allow(dead_code)]
-	seq_number		: u16,			// Not in use right now.
+	seq_number		: u16,
 	response_buffer	: Vec<u8>,
+
+	forward_percent	: i16,
+	sideway_percent	: i16,
+	rotate_percent	: i16,
+	updown_percent	: i16,
 }
 
 impl drone_interface::Drone for Drone
@@ -150,7 +155,10 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
-		todo!()
+		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+		self.seq_number += 1;
+
+		Ok(())
 	}
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
@@ -208,6 +216,7 @@ impl Drone
 
 		sleep(Duration::from_secs(1));
 
-		Ok(Arc::new(Mutex::new(Self { command_sock, video_sock, info_sock, seq_number, response_buffer })))
+		Ok(Arc::new(Mutex::new(Self { command_sock, video_sock, info_sock, seq_number, response_buffer,
+		forward_percent: 0, sideway_percent: 0, rotate_percent: 0, updown_percent: 0})))
 	}
 }
