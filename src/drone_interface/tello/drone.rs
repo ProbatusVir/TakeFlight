@@ -3,7 +3,6 @@ use crate::error::Error;
 use crate::{drone_interface, Connection};
 use mio::{Poll, Token};
 use std::collections::HashMap;
-use std::net::IpAddr;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -170,14 +169,13 @@ impl drone_interface::Drone for Drone
 impl Drone
 {
 	#[allow(dead_code)]
-	fn init(registry: Arc<Mutex<Poll>>, map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> {
+	pub(crate) fn init(registry: Arc<Mutex<Poll>>, map: Arc<Mutex<HashMap<Token, Connection>>>) -> Result<Arc<Mutex<Self>>, Error> {
 		let command_sock = {
 			const COMMAND_PORT: u16 = 8889;
-			const ARBITRARY_PORT: u16 = 8889; // Operator
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, COMMAND_PORT);
 
-			let command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let command_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 			command_sock.connect(SocketAddrV4::new(CONN_ADDR, COMMAND_PORT))?;
 
 			dbg!(registry, map);
@@ -187,10 +185,9 @@ impl Drone
 
 		let info_sock = {
 			const INFO_PORT: u16 = 8890;
-			const ARBITRARY_PORT: u16 = 8886;
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, INFO_PORT);
-			let info_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let info_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 			info_sock.connect(CONN_SOCK)?;
 
 			info_sock
@@ -202,7 +199,7 @@ impl Drone
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, VIDEO_PORT);
 
-			let video_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let video_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 			video_sock.connect(CONN_SOCK)?;
 
 			video_sock
