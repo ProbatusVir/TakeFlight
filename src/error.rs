@@ -1,5 +1,6 @@
-use std::fmt;
+use std::{fmt};
 use std::fmt::{Display, Formatter};
+
 #[derive(Debug)]
 pub enum Error
 {
@@ -17,7 +18,19 @@ pub enum Error
 	NoVideoTarget,
 	NoVideoSource,
 	ParseIntError(std::num::ParseIntError),
-	SqliteError(rusqlite::Error)
+	SqliteError(rusqlite::Error),
+	SerdeJSON(serde_json::Error),
+	FromUtf8Error(std::string::FromUtf8Error),
+}
+
+impl From<std::string::FromUtf8Error> for Error
+{
+	fn from(value: std::string::FromUtf8Error) -> Self { Error::FromUtf8Error(value) }
+}
+
+impl From<serde_json::Error> for Error
+{
+	fn from(value: serde_json::Error) -> Self { Error::SerdeJSON(value) }
 }
 
 impl From<rusqlite::Error> for Error
@@ -107,6 +120,8 @@ impl Display for Error {
 			Error::NoVideoTarget => { "Server instance did not have a video target!".fmt(f) }
 			Error::ParseIntError(e) => { e.fmt(f) }
 			Error::SqliteError(e) => { e.fmt(f) }
+			Error::SerdeJSON(e) => { e.fmt(f) }
+			Error::FromUtf8Error(e) => { e.fmt(f) }
 		}
 	}
 }
