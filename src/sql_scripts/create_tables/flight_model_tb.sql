@@ -1,6 +1,6 @@
 CREATE TABLE "FlightModelTb" (
-	"FlightID"	INTEGER,
-	"DroneModelID"	INTEGER,
-	PRIMARY KEY("FlightID" AUTOINCREMENT),
-	CONSTRAINT "DroneModelID" FOREIGN KEY("DroneModelID") REFERENCES ""
+    "FlightID"	INTEGER,
+    "DroneModelID"	INTEGER,
+    PRIMARY KEY("FlightID" AUTOINCREMENT),
+    CONSTRAINT "DroneModelID" FOREIGN KEY("DroneModelID") REFERENCES "DroneDataTb"("DroneModelID")
 )
