@@ -14,7 +14,7 @@ use image::ImageFormat::Jpeg;
 use mio::event::Source;
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
-use std::net::IpAddr;
+use std::net::{ Ipv4Addr, SocketAddrV4 };
 use std::ops::BitXor;
 use std::str::FromStr;
 
@@ -276,7 +276,7 @@ impl Drop for Drone
 
 impl Drone
 {
-	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr, logger : Logger/*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
+	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger/*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
 	where
 		Self: Sized
 	{
@@ -284,18 +284,18 @@ impl Drone
 		let video_sock = {
 			let poll_lock = poll.lock()?;
 			let registry = poll_lock.registry();
-			let mut video_sock = UdpSocket::bind(SocketAddr::new(local_ip, 30732))?;
+			let mut video_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 30732)))?;
 			let port = video_sock.local_addr()?.port() as usize;
 			registry.register(&mut video_sock, Token(port), Interest::READABLE)?;
 
 			video_sock
 		};
 
-		let mut handshake_sock = UdpSocket::bind(SocketAddr::new(local_ip, 0))?;
+		let mut handshake_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 		handshake_sock.connect("192.168.1.1:7099".parse()?)?;
 		handshake_sock.send(&[0x01, 0x01])?;
 
-		let mut heartbeat_sock = UdpSocket::bind(SocketAddr::new(local_ip, 0))?;
+		let mut heartbeat_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 		heartbeat_sock.connect("192.168.169.1:8800".parse()?)?;
 
 		// TODO: Make this properly non-blocking
@@ -343,7 +343,7 @@ impl Drone
 
 		/* Just for one send, it looks like. */
 		{
-			let video_start = UdpSocket::bind(SocketAddr::new(local_ip, 0))?; // this number matters since the drone initiates
+			let video_start = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?; // this number matters since the drone initiates
 			video_start.connect("192.168.1.1:52612".parse()?)?;
 			video_start.send(&[0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0])?;
 		}

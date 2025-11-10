@@ -3,11 +3,11 @@ use crate::error::Error;
 use crate::{drone_interface, Connection};
 use mio::{Poll, Token};
 use std::collections::HashMap;
-use std::net::IpAddr;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
+use crate::drone_interface::tello::packet::set_sticks;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -16,9 +16,13 @@ pub struct Drone
 	command_sock	: UdpSocket,
 	video_sock		: UdpSocket,
 	info_sock		: UdpSocket,
-	#[allow(dead_code)]
-	seq_number		: u16,			// Not in use right now.
+	seq_number		: u16,
 	response_buffer	: Vec<u8>,
+
+	forward_percent	: i16,
+	sideway_percent	: i16,
+	rotate_percent	: i16,
+	updown_percent	: i16,
 }
 
 impl drone_interface::Drone for Drone
@@ -150,7 +154,10 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
-		todo!()
+		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+		self.seq_number += 1;
+
+		Ok(())
 	}
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
@@ -162,14 +169,13 @@ impl drone_interface::Drone for Drone
 impl Drone
 {
 	#[allow(dead_code)]
-	fn init(registry: Arc<Mutex<Poll>>, map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr) -> Result<Arc<Mutex<Self>>, Error> {
+	pub(crate) fn init(registry: Arc<Mutex<Poll>>, map: Arc<Mutex<HashMap<Token, Connection>>>) -> Result<Arc<Mutex<Self>>, Error> {
 		let command_sock = {
 			const COMMAND_PORT: u16 = 8889;
-			const ARBITRARY_PORT: u16 = 8889; // Operator
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, COMMAND_PORT);
 
-			let command_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let command_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 			command_sock.connect(SocketAddrV4::new(CONN_ADDR, COMMAND_PORT))?;
 
 			dbg!(registry, map);
@@ -179,10 +185,9 @@ impl Drone
 
 		let info_sock = {
 			const INFO_PORT: u16 = 8890;
-			const ARBITRARY_PORT: u16 = 8886;
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, INFO_PORT);
-			let info_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let info_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 			info_sock.connect(CONN_SOCK)?;
 
 			info_sock
@@ -194,7 +199,7 @@ impl Drone
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, VIDEO_PORT);
 
-			let video_sock = UdpSocket::bind(SocketAddr::new(local_ip, ARBITRARY_PORT))?;
+			let video_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 			video_sock.connect(CONN_SOCK)?;
 
 			video_sock
@@ -208,6 +213,7 @@ impl Drone
 
 		sleep(Duration::from_secs(1));
 
-		Ok(Arc::new(Mutex::new(Self { command_sock, video_sock, info_sock, seq_number, response_buffer })))
+		Ok(Arc::new(Mutex::new(Self { command_sock, video_sock, info_sock, seq_number, response_buffer,
+		forward_percent: 0, sideway_percent: 0, rotate_percent: 0, updown_percent: 0})))
 	}
 }

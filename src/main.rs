@@ -8,6 +8,10 @@ pub(crate) mod debug_utils;
 mod video;
 pub(crate) mod logger;
 mod app_network;
+mod database;
+
+#[cfg(test)]
+mod tests;
 
 use crate::drone_interface::Drone;
 use error::Error;
@@ -138,7 +142,8 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
-	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), server_address, logger.clone());
+	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), logger.clone());
+	//let drone = crate::drone_interface::tello::drone::Drone::init(poll.clone(), ownership_map.clone());
 
 	logger.info("Server starting!!!")?;
 
