@@ -52,10 +52,30 @@ impl Logger
 		self.send_log_message(LoggingLevel::Error, msg).map_err(|_| Error::Custom("Unable send ERROR message to logger!"))
 	}
 
+	pub fn error_from_string(&self, msg : String) -> Result<(), Error>
+	{
+		self.send_log_message_string(LoggingLevel::Error, msg)
+	}
+
+	pub fn warn_from_string(&self, msg : String) -> Result<(), Error>
+	{
+		self.send_log_message_string(LoggingLevel::Warning, msg)
+	}
+
+	pub fn info_from_string(&self, msg : String) -> Result<(), Error>
+	{
+		self.send_log_message_string(LoggingLevel::Info, msg)
+	}
+
 	fn send_log_message(&self, logging_level: LoggingLevel, msg : &str) -> Result<(), Error>
 	{
-		let time = chrono::Local::now();
 		let msg = String::from_str(msg)?;
+		self.send_log_message_string(logging_level, msg)
+	}
+
+	fn send_log_message_string(&self, logging_level: LoggingLevel, msg : String) -> Result<(), Error>
+	{
+		let time = chrono::Local::now();
 		self.sender.send(LogMessage { logging_level, time, msg, }).map_err(|_| Error::Custom("Failed to send message to logger!"))
 	}
 }
