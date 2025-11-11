@@ -2,7 +2,7 @@ mod helper;
 mod video_stream;
 mod drone_interface;
 mod error;
-#[cfg(debug_assertions)]
+//#[cfg(debug_assertions)]
 pub(crate) mod debug_utils;
 
 mod video;
@@ -26,6 +26,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::sleep;
 use std::time::Duration;
 use local_ip_address::local_ip;
 use crate::app_network::{handle_connection, ClientSocketType};
@@ -143,7 +144,10 @@ fn main() -> Result<(), Error> {
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), logger.clone());
-	//let drone = crate::drone_interface::tello::drone::Drone::init(poll.clone(), ownership_map.clone());
+	let drone = crate::drone_interface::tello::drone::TelloDrone::new(poll.clone(), ownership_map.clone(), logger.clone())?;
+	drone.lock()?.takeoff()?;
+	sleep(Duration::from_secs(5));
+	drone.lock()?.graceful_land()?;
 
 	logger.info("Server starting!!!")?;
 
@@ -151,7 +155,7 @@ fn main() -> Result<(), Error> {
 		listener,
 		ownership_map,
 		poll,
-		logger,
+		logger 			: logger.clone(),
 		video_src		: None,
 		video_out		: None,
 		drone_control	: None,
@@ -162,7 +166,7 @@ fn main() -> Result<(), Error> {
 	{
 		// Receive and handle events
 		server.poll.lock()?.poll(&mut event_buffer, None)?;
-		let events_result = drain_events(&mut server, &mut event_buffer);
+		let events_result = drain_events(&mut server, &mut event_buffer, &logger);
 
 		if events_result.is_ok() { continue }
 		let return_error = events_result.err().unwrap();
@@ -184,7 +188,7 @@ fn main() -> Result<(), Error> {
 
 	status
 }
-fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events)
+fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger : &Logger)
 				-> Result<(), Error>
 {
 	for event in event_buffer.iter()
@@ -266,18 +270,38 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events)
 				}
 			}
 			token => {
+				// FIXME: If we can do this without removing, that would be really cool.
 				let found_connection = server.ownership_map.lock()?.remove(&token);
 				match found_connection
 				{
 					Some(found) => {
-						match found {
-							Connection::Drone(drone) => { drone.lock()?.receive_signal(token.0 as u16)?; }
-							Connection::TCP(stream) => { handle_connection(stream, server)?; }
-							_ => { /* noop until we get the application connected */ }
-						}
+						let connection = match found {
+							Connection::Drone(drone) => {
+								// Receive signal will always go until an error is encountered.
+								// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
+								match drone.lock()?.receive_signal(token.0 as u16) {
+									Err(e) => {
+										match e
+										{
+											Error::IOError(io_error) => {
+												if io_error.kind() == ErrorKind::WouldBlock { /* noop */ }
+												else { Err(io_error)? }
+											}
+											_ => { Err(e)? }
+										}
+									}
+									_ => { /* noop */ }
+								}
+								Connection::Drone(drone)
+							}
+							Connection::TCP(stream) => { handle_connection(stream, server)? }
+							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
+						};
+
+						server.ownership_map.lock()?.insert(token, connection);
 					}
 					// This seems like it should be an unrecoverable error, so I'm putting this here.
-					None => { return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!")) }
+					None => { logger.error_from_string(format!("Unmapped port: {}", token.0))?; return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!")) }
 				}
 			}
 		}
