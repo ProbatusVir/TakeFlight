@@ -149,7 +149,7 @@ fn main() -> Result<(), Error> {
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
-	/*let drone = crate::drone_interface::tello::drone::TelloDrone::new(poll.clone(), ownership_map.clone(), logger.clone())?;
+	/*let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone())?;
 	drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
 	drone.lock()?.graceful_land()?;*/
