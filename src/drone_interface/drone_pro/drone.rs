@@ -1,5 +1,5 @@
 use crate::computer_vision::HandLandmarker;
-use crate::drone_interface;
+use crate::{drone_interface, send_image};
 use crate::drone_interface::drone_pro::drone::DroneCommandState::{BasicMovement, EmergencyLand, Takeoff};
 use crate::drone_interface::{IUnit, Unit};
 use crate::logger::Logger;
@@ -17,24 +17,31 @@ use std::io::{Cursor, Read, Write};
 use std::net::{ Ipv4Addr, SocketAddrV4 };
 use std::ops::BitXor;
 use std::str::FromStr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Drone
 {
-	video_frame		: usize,
 	// I am assuming this is the handshake socket. I can't recall if I've seen other activity on this socket.
 	handshake_sock			: UdpSocket,
 	heartbeat_sock			: UdpSocket,
 	video_sock				: UdpSocket,
 	rtp_sock				: TcpStream,
+
+	pub image				: Option<DynamicImage>,
 	pub fin_image_buf		: Vec<u8>,
-	pub poll				: Arc<Mutex<Poll>>,
-	pub connection_map		: Arc<Mutex<HashMap<Token, Connection>>>,
+	last_frame_sent_time	: SystemTime,
+	frame_time				: Arc<Duration>,
 	inner_main_jpg_header	: Option<JpegMainHeader>,
 	inner_raw_img_buf		: Vec<u8>,
 	inner_read_buf			: [u8;4096],
-	pub image				: Option<DynamicImage>,
-	dbg_cmd_send : usize,
+
+
+	poll				: Arc<Mutex<Poll>>,
+	connection_map		: Arc<Mutex<HashMap<Token, Connection>>>,
+	curr_video_src		: Arc<Mutex<Option<Token>>>,
+	curr_video_dst		: Arc<Mutex<Option<Token>>>,
+
 	landmarker : HandLandmarker,
 	logger : Logger
 }
@@ -205,21 +212,22 @@ impl drone_interface::Drone for Drone
 						Err(_) => { self.image = None; }
 					};
 
-					// FIXME: GET RID OF THIS ONCE THIS IS BRIDGED
-					if self.video_frame % 10 == 0
+					// Send the image to the client, if possible.
+					let now = SystemTime::now();
+					if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
 					{
-						let output = self.landmarker.run_model(self.image
-							.as_ref()
-							.unwrap()
-							.clone()
-							.resize_exact(224, 224, CatmullRom)
-							.into_rgb32f())?;
-						dbg!("Is a hand present: {}", HandLandmarker::hand_present(&output));
-						File::create(format!("test_results/DroneImage{}.jpeg", self.video_frame))?.write_all(&self.fin_image_buf)?;
+						match send_image(self.curr_video_dst.clone(), self.curr_video_src.clone(), self.connection_map.clone())
+						{
+							Err(Error::NoVideoSource) => { }
+							Err(Error::NoVideoTarget) => { }
+							Ok(_) => {  }
+							e => { e? }
+						}
 					}
 
-					self.video_frame += 1;
-					/* TODO: add logic here */
+					self.last_frame_sent_time = now;
+
+					/* TODO: image processing code goes here. */
 
 					self.cleanup_image();
 				}
@@ -236,13 +244,7 @@ impl drone_interface::Drone for Drone
 		else if port == self.heartbeat_sock.local_addr()?.port() { self.logger.warn("Received unexpected packet from handshake socket...")?; Ok(()) }
 		else if port == self.handshake_sock.local_addr()?.port() {
 			self.logger.warn("Received unexpected packet from handshake socket...")?;
-			loop {
-				let bytes_read = self.handshake_sock.recv(&mut self.inner_read_buf)?;
-				if self.dbg_cmd_send < 30 { self.create_command(0, 0, 0, 0, Takeoff)? }
-				else if self.dbg_cmd_send < 100 { self.clockwise_rot(100.0)?  }
-				else { self.create_command(0, 0, 0, 0, EmergencyLand)?; }
-				self.dbg_cmd_send += 1;
-			}
+
 			Ok(())
 		}
 		else { return Err(Error::Custom("DronePro: Requested socket not found in DronePro!")) }
@@ -276,7 +278,8 @@ impl Drop for Drone
 
 impl Drone
 {
-	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger/*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
+	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger,
+					  curr_video_src : Arc<Mutex<Option<Token>>>, curr_video_dst : Arc<Mutex<Option<Token>>>,  frame_time : Arc<Duration>, /*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
 	where
 		Self: Sized
 	{
@@ -370,7 +373,6 @@ impl Drone
 		}
 
 		let this_drone = Arc::new(Mutex::new(Self {
-			video_frame		: 0,
 			handshake_sock,
 			heartbeat_sock,
 			video_sock,
@@ -380,11 +382,14 @@ impl Drone
 			inner_read_buf,
 			poll			: poll.clone(),
 			connection_map	: connection_map.clone(),
+			curr_video_src,
 			inner_main_jpg_header: None,
 			image			: None,
-			dbg_cmd_send: 0,
 			landmarker: HandLandmarker::from_path("src/model/hand_landmarks_detector.tflite")?,
 			logger,
+			last_frame_sent_time : UNIX_EPOCH,
+			curr_video_dst,
+			frame_time,
 		}));
 
 		// Register all sockets to map

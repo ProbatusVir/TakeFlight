@@ -72,7 +72,7 @@ struct ServerInstance
 	video_out		: Arc<Mutex<Option<Token>>>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
 	video_src		: Arc<Mutex<Option<Token>>>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
 	drone_control	: Option<Token>,				// If this is None, we will travel the whole map and send signals to every found drone.
-
+	frame_time		: Arc<Duration>,
 }
 
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
@@ -128,14 +128,6 @@ fn main() -> Result<(), Error> {
 			heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
 		} });
 	}
-	/*// Start frame timer
-	{
-		let video_waker = Waker::new(poll.lock()?.registry(), VID_WAKER)?;
-		thread::spawn(move || loop {
-			thread::sleep(FRAME_TIME);
-			video_waker.wake().unwrap_or(());
-		});
-	}*/
 
 
 	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
@@ -159,6 +151,7 @@ fn main() -> Result<(), Error> {
 		video_src		: Arc::new(Mutex::new(None)),
 		video_out		: Arc::new(Mutex::new(None)),
 		drone_control	: None,
+		frame_time		: Arc::new(FRAME_TIME),
 	};
 
 	// Some multiplexing
@@ -258,15 +251,6 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 						}
 						_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
 					}
-				}
-			}
-			VID_WAKER => {
-				match server.send_image()
-				{
-					Err(Error::NoVideoSource) => { }
-					Err(Error::NoVideoTarget) => { }
-					Ok(_) => {  }
-					e => { e? }
 				}
 			}
 			token => {
