@@ -134,13 +134,6 @@ fn main() -> Result<(), Error> {
 	let ownership_map = Arc::new(Mutex::new(HashMap::<Token, Connection>::new()));
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
-	// test
-	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), logger.clone());
-	let drone = crate::drone_interface::tello::drone::TelloDrone::new(poll.clone(), ownership_map.clone(), logger.clone())?;
-	drone.lock()?.takeoff()?;
-	sleep(Duration::from_secs(5));
-	drone.lock()?.graceful_land()?;
-
 	logger.info("Server starting!!!")?;
 
 	let mut server = ServerInstance {
@@ -153,6 +146,14 @@ fn main() -> Result<(), Error> {
 		drone_control	: None,
 		frame_time		: Arc::new(FRAME_TIME),
 	};
+
+	// test
+	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
+	/*let drone = crate::drone_interface::tello::drone::TelloDrone::new(poll.clone(), ownership_map.clone(), logger.clone())?;
+	drone.lock()?.takeoff()?;
+	sleep(Duration::from_secs(5));
+	drone.lock()?.graceful_land()?;*/
+
 
 	// Some multiplexing
 	let status = loop
