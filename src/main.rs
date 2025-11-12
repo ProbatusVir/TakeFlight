@@ -69,9 +69,9 @@ struct ServerInstance
 	ownership_map	: Arc<Mutex<HashMap<Token, Connection>>>,
 	poll 			: Arc<Mutex<Poll>>,
 	logger			: Logger,
-	video_out		: Option<Token>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
-	video_src		: Option<Token>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
-	drone_control	: Option<Token>,	// If this is None, we will travel the whole map and send signals to every found drone.
+	video_out		: Arc<Mutex<Option<Token>>>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
+	video_src		: Arc<Mutex<Option<Token>>>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
+	drone_control	: Option<Token>,				// If this is None, we will travel the whole map and send signals to every found drone.
 
 }
 
@@ -128,14 +128,14 @@ fn main() -> Result<(), Error> {
 			heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
 		} });
 	}
-	// Start frame timer
+	/*// Start frame timer
 	{
 		let video_waker = Waker::new(poll.lock()?.registry(), VID_WAKER)?;
 		thread::spawn(move || loop {
 			thread::sleep(FRAME_TIME);
 			video_waker.wake().unwrap_or(());
 		});
-	}
+	}*/
 
 
 	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
@@ -156,8 +156,8 @@ fn main() -> Result<(), Error> {
 		ownership_map,
 		poll,
 		logger 			: logger.clone(),
-		video_src		: None,
-		video_out		: None,
+		video_src		: Arc::new(Mutex::new(None)),
+		video_out		: Arc::new(Mutex::new(None)),
 		drone_control	: None,
 	};
 
@@ -315,45 +315,59 @@ impl ServerInstance
 {
 	fn send_image(&mut self) -> Result<(), Error>
 	{
-		let video_out_token = self.video_out.ok_or(Error::NoVideoTarget)?;
-		let video_src_token = self.video_src.ok_or(Error::NoVideoSource)?;
-
-		let mut ownership_lock = self.ownership_map.lock()?;
-		let src = ownership_lock.remove(&video_src_token).ok_or_else(|| {
-			self.video_src = None;
-			Error::NoVideoSource
-		})?;
-		let mut out = ownership_lock.remove(&video_out_token).ok_or_else(|| {
-			self.video_out = None;
-			Error::NoVideoTarget
-		})?;
-
-		let image = match &src {
-			Connection::Drone(source) => {
-				{
-					let mut source_lock = source.lock()?;
-					source_lock.snapshot().clone().ok_or(Error::Custom("Could not obtain image from drone!"))?.clone()
-				}
-
-			}
-			Connection::Camera() => todo!(),
-			_ => { Err(Error::NoVideoSource)? }
-		};
-
-		match out
-		{
-			Connection::VideoOut(cnx_type, ref mut stream) => {
-				stream.write(&[u8::from(cnx_type.clone())])?;
-				stream.write(&(image.len() as u16).to_be_bytes())?;
-				stream.write_all(&image)?
-			}
-			_ => { Err(Error::NoVideoTarget)? }
-		}
-
-		ownership_lock.insert(video_src_token, src);
-		ownership_lock.insert(video_out_token, out);
-
-		Ok(())
+		// The only pessimization to this wrapper is the arc increment
+		send_image(self.video_out.clone(), self.video_src.clone(), self.ownership_map.clone())
 	}
+
 }
 
+pub(crate) fn send_image(
+	out				: Arc<Mutex<Option<Token>>>,
+	src				: Arc<Mutex<Option<Token>>>,
+	ownership_map	: Arc<Mutex<HashMap<Token, Connection>>>,
+) -> Result<(), Error>
+{
+	// While this is a large critical section, I actually think it's for the best, due to all the validations and possible reassignments of our streams.
+	let mut video_out = out.lock()?;
+	let mut video_src = src.lock()?;
+
+	let video_out_token = video_out.ok_or(Error::NoVideoTarget)?;
+	let video_src_token = video_src.ok_or(Error::NoVideoSource)?;
+
+	let mut ownership_lock = ownership_map.lock()?;
+	let src = ownership_lock.remove(&video_src_token).ok_or_else(|| {
+		*video_src = None;
+		Error::NoVideoSource
+	})?;
+	let mut out = ownership_lock.remove(&video_out_token).ok_or_else(|| {
+		*video_out = None;
+		Error::NoVideoTarget
+	})?;
+
+	let image = match &src {
+		Connection::Drone(source) => {
+			{
+				let mut source_lock = source.lock()?;
+				source_lock.snapshot().clone().ok_or(Error::Custom("Could not obtain image from drone!"))?.clone()
+			}
+
+		}
+		Connection::Camera() => todo!(),
+		_ => { Err(Error::NoVideoSource)? }
+	};
+
+	match out
+	{
+		Connection::VideoOut(cnx_type, ref mut stream) => {
+			stream.write(&[u8::from(cnx_type.clone())])?;
+			stream.write(&(image.len() as u16).to_be_bytes())?;
+			stream.write_all(&image)?
+		}
+		_ => { Err(Error::NoVideoTarget)? }
+	}
+
+	ownership_lock.insert(video_src_token, src);
+	ownership_lock.insert(video_out_token, out);
+
+	Ok(())
+}
