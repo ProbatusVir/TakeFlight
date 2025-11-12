@@ -1,5 +1,6 @@
 pub mod tello;
 pub mod drone_pro;
+mod crc;
 
 use crate::Error;
 use std::fmt::Debug;

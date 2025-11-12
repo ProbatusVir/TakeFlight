@@ -2,12 +2,16 @@ mod helper;
 mod video_stream;
 mod drone_interface;
 mod error;
-#[cfg(debug_assertions)]
+//#[cfg(debug_assertions)]
 pub(crate) mod debug_utils;
 
 mod video;
 pub(crate) mod logger;
 mod app_network;
+mod database;
+
+#[cfg(test)]
+mod tests;
 
 use crate::drone_interface::Drone;
 use error::Error;
@@ -18,12 +22,13 @@ use std::collections::HashMap;
 use std::fmt::{Debug, };
 use std::fs::File;
 use std::io::{ErrorKind, Write};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::sleep;
 use std::time::Duration;
-
+use local_ip_address::local_ip;
 use crate::app_network::{handle_connection, ClientSocketType};
 use crate::logger::{do_logging, Logger};
 use takeflight_computer_vision as computer_vision;
@@ -74,10 +79,8 @@ struct ServerInstance
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
 	const MAX_EVENTS : usize = 1024;
-	let heartbeat_time: Duration = Duration::from_secs_f32(3.0);
-	let frame_time = Duration::from_secs_f32(1.0 / 20.0); // 20 fps doesn't seem bad for now.
-
-	println!("Hello, world!");
+	const HEARTBEAT_TIME: Duration = Duration::from_millis(3000);
+	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
 
 	// TODO: Add logic for determining log file.
 	let log_file = "log_file";
@@ -93,14 +96,27 @@ fn main() -> Result<(), Error> {
 			.spawn(move || { do_logging(receiver, cloned_file).unwrap() })?;
 	}
 
-	logger.info(String::from_str("Logger started!")?)?;
+	logger.info("Logger started!")?;
 
 	// Start the server
-	let server_address = local_ip_address::local_ip()?;
 	let poll = Arc::new(Mutex::new(Poll::new()?));
-	let mut listener = TcpListener::bind(SocketAddr::new(server_address, 0))?;
+	let mut listener = TcpListener::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
+	let server_address = listener.local_addr()?;
+
+	// Handle arguments
+	{
+		let mut args = std::env::args();
+		if args.len() == 2
+		{
+			let port : u16 = args.nth(1).unwrap().parse()?;
+			let negotiator = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
+			negotiator.send_to(&server_address.port().to_be_bytes(), SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)))?;
+			logger.info("Client asked for server socket.")?;
+		}
+	}
+
 	//test
-	println!("Listening on {}, port {}", server_address, listener.local_addr()?.port());
+	logger.info(&format!("Listening on all IPv4 interfaces. Network address: {}, port {}", local_ip()?, server_address.port()))?;
 
 	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
 
@@ -108,7 +124,7 @@ fn main() -> Result<(), Error> {
 	{
 		let heartbeat = Waker::new(poll.lock()?.registry(), HEARTBEAT)?;
 		thread::spawn(move || { loop {
-			thread::sleep(heartbeat_time);
+			thread::sleep(HEARTBEAT_TIME);
 			heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
 		} });
 	}
@@ -116,7 +132,7 @@ fn main() -> Result<(), Error> {
 	{
 		let video_waker = Waker::new(poll.lock()?.registry(), VID_WAKER)?;
 		thread::spawn(move || loop {
-			thread::sleep(frame_time);
+			thread::sleep(FRAME_TIME);
 			video_waker.wake().unwrap_or(());
 		});
 	}
@@ -127,15 +143,19 @@ fn main() -> Result<(), Error> {
 	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	// test
-	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), server_address, logger.clone());
+	//let drone = crate::drone_interface::drone_pro::Drone::new(poll.clone(), ownership_map.clone(), logger.clone());
+	let drone = crate::drone_interface::tello::drone::TelloDrone::new(poll.clone(), ownership_map.clone(), logger.clone())?;
+	drone.lock()?.takeoff()?;
+	sleep(Duration::from_secs(5));
+	drone.lock()?.graceful_land()?;
 
-	logger.info(String::from_str("Server starting!!!")?)?;
+	logger.info("Server starting!!!")?;
 
 	let mut server = ServerInstance {
 		listener,
 		ownership_map,
 		poll,
-		logger,
+		logger 			: logger.clone(),
 		video_src		: None,
 		video_out		: None,
 		drone_control	: None,
@@ -146,7 +166,7 @@ fn main() -> Result<(), Error> {
 	{
 		// Receive and handle events
 		server.poll.lock()?.poll(&mut event_buffer, None)?;
-		let events_result = drain_events(&mut server, &mut event_buffer);
+		let events_result = drain_events(&mut server, &mut event_buffer, &logger);
 
 		if events_result.is_ok() { continue }
 		let return_error = events_result.err().unwrap();
@@ -168,7 +188,7 @@ fn main() -> Result<(), Error> {
 
 	status
 }
-fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events)
+fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger : &Logger)
 				-> Result<(), Error>
 {
 	for event in event_buffer.iter()
@@ -202,7 +222,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events)
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
-				server.logger.info(String::from_str("Sending out keep-alives!")?)?;
+				server.logger.info("Sending out keep-alives!")?;
 				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
 				for connection in server.ownership_map.lock()?.iter_mut() {
 					// This seems like a patchy solution. This combats sending multiple pings per cycle.
@@ -250,18 +270,38 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events)
 				}
 			}
 			token => {
+				// FIXME: If we can do this without removing, that would be really cool.
 				let found_connection = server.ownership_map.lock()?.remove(&token);
 				match found_connection
 				{
 					Some(found) => {
-						match found {
-							Connection::Drone(drone) => { drone.lock()?.receive_signal(token.0 as u16)?; }
-							Connection::TCP(stream) => { handle_connection(stream, server)?; }
-							_ => { /* noop until we get the application connected */ }
-						}
+						let connection = match found {
+							Connection::Drone(drone) => {
+								// Receive signal will always go until an error is encountered.
+								// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
+								match drone.lock()?.receive_signal(token.0 as u16) {
+									Err(e) => {
+										match e
+										{
+											Error::IOError(io_error) => {
+												if io_error.kind() == ErrorKind::WouldBlock { /* noop */ }
+												else { Err(io_error)? }
+											}
+											_ => { Err(e)? }
+										}
+									}
+									_ => { /* noop */ }
+								}
+								Connection::Drone(drone)
+							}
+							Connection::TCP(stream) => { handle_connection(stream, server)? }
+							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
+						};
+
+						server.ownership_map.lock()?.insert(token, connection);
 					}
 					// This seems like it should be an unrecoverable error, so I'm putting this here.
-					None => { return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!")) }
+					None => { logger.error_from_string(format!("Unmapped port: {}", token.0))?; return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!")) }
 				}
 			}
 		}

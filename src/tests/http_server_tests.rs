@@ -1,4 +1,4 @@
-use crate::error::Error;
+/*use crate::error::Error;
 use httparse::Status;
 use std::io::{Cursor, Read, Write};
 
@@ -185,4 +185,4 @@ fn test_handle_connection_invalid(){
     let output = String::from_utf8(stream.get_ref().clone()).unwrap();
     //Verify 404
     assert!(output.contains("HTTP/1.1 404 ERR"));
-}
+}*/

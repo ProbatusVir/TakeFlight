@@ -25,14 +25,12 @@ enum VideoCode
 
 /// This will only be called when a socket initiates connection.
 /// This will not reacquire a lock on the ownership map.
-pub fn handle_connection(mut stream : TcpStream, server : &mut ServerInstance) -> Result<(), Error>
+pub fn handle_connection(mut stream : TcpStream, server : &mut ServerInstance) -> Result<Connection, Error>
 {
 	let mut handshake_buffer = [0;3];
 	stream.read_exact(&mut handshake_buffer)?;
 
 	let token = Token(stream.local_addr()?.port() as usize);
-
-	let mut ownership_map_lock = server.ownership_map.lock()?;
 
 	let new_connection =
 		match handshake_buffer[2].into() {
@@ -49,7 +47,6 @@ pub fn handle_connection(mut stream : TcpStream, server : &mut ServerInstance) -
 
 	// Good to note: when we insert a new key-map pair, if the key exists, the value will just be overwritten.
 	// Implementation note: right now, the value is being removed from the map anyway, so the above is slightly null.
-	ownership_map_lock.insert(token, new_connection);
 
-	Ok(())
+	Ok(new_connection)
 }

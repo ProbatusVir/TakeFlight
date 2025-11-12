@@ -14,7 +14,7 @@ use image::ImageFormat::Jpeg;
 use mio::event::Source;
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
-use std::net::IpAddr;
+use std::net::{ Ipv4Addr, SocketAddrV4 };
 use std::ops::BitXor;
 use std::str::FromStr;
 
@@ -142,7 +142,7 @@ impl drone_interface::Drone for Drone
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
 		if port == self.video_sock.local_addr()?.port() {
-			self.logger.info(String::from_str("Drone Pro is receiving video packets")?)?;
+			self.logger.info("Drone Pro is receiving video packets")?;
 			loop
 			{
 				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
@@ -228,14 +228,14 @@ impl drone_interface::Drone for Drone
 
 		}
 		else if port == self.rtp_sock.local_addr()?.port() {
-			self.logger.info(String::from_str("Received out-of-band video information from RTP protocol.")?)?;
+			self.logger.info("Received out-of-band video information from RTP protocol.")?;
 			let bytes_read = self.rtp_sock.read(&mut self.inner_read_buf)?;
 			dbg!("RPT SOCKET: {}", &[..bytes_read]);
 			Ok(())
 		}
-		else if port == self.heartbeat_sock.local_addr()?.port() { self.logger.warn(String::from_str("Received unexpected packet from handshake socket...")?)?; Ok(()) }
+		else if port == self.heartbeat_sock.local_addr()?.port() { self.logger.warn("Received unexpected packet from handshake socket...")?; Ok(()) }
 		else if port == self.handshake_sock.local_addr()?.port() {
-			self.logger.warn(String::from_str("Received unexpected packet from handshake socket...")?)?;
+			self.logger.warn("Received unexpected packet from handshake socket...")?;
 			loop {
 				let bytes_read = self.handshake_sock.recv(&mut self.inner_read_buf)?;
 				if self.dbg_cmd_send < 30 { self.create_command(0, 0, 0, 0, Takeoff)? }
@@ -276,7 +276,7 @@ impl Drop for Drone
 
 impl Drone
 {
-	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, local_ip: IpAddr, logger : Logger/*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
+	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger/*hand_landmarker : Arc<Mutex<HandLandmarker>>*/) -> Result<Arc<Mutex<Self>>, Error>
 	where
 		Self: Sized
 	{
@@ -284,18 +284,18 @@ impl Drone
 		let video_sock = {
 			let poll_lock = poll.lock()?;
 			let registry = poll_lock.registry();
-			let mut video_sock = UdpSocket::bind(SocketAddr::new(local_ip, 30732))?;
+			let mut video_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 30732)))?;
 			let port = video_sock.local_addr()?.port() as usize;
 			registry.register(&mut video_sock, Token(port), Interest::READABLE)?;
 
 			video_sock
 		};
 
-		let mut handshake_sock = UdpSocket::bind(SocketAddr::new(local_ip, 0))?;
+		let mut handshake_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 		handshake_sock.connect("192.168.1.1:7099".parse()?)?;
 		handshake_sock.send(&[0x01, 0x01])?;
 
-		let mut heartbeat_sock = UdpSocket::bind(SocketAddr::new(local_ip, 0))?;
+		let mut heartbeat_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
 		heartbeat_sock.connect("192.168.169.1:8800".parse()?)?;
 
 		// TODO: Make this properly non-blocking
@@ -343,7 +343,7 @@ impl Drone
 
 		/* Just for one send, it looks like. */
 		{
-			let video_start = UdpSocket::bind(SocketAddr::new(local_ip, 0))?; // this number matters since the drone initiates
+			let video_start = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?; // this number matters since the drone initiates
 			video_start.connect("192.168.1.1:52612".parse()?)?;
 			video_start.send(&[0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0])?;
 		}
@@ -362,6 +362,10 @@ impl Drone
 			poll_lock.registry().register(&mut handshake_sock,	handshake_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut heartbeat_sock,	heartbeat_token,	Interest::READABLE)?;
 			poll_lock.registry().register(&mut rtp_sock,		rtp_token,			Interest::READABLE)?;
+
+			// If you're wondering why this is commented out, look at the top of the function.
+			// This is still here to make it apparent that this is not an oversight.
+			// -- original line written 10/18/25. -- this line was written on 11/9/25.
 			//poll_lock.registry().register(&mut video_sock,		video_token,		Interest::READABLE)?;
 		}
 
