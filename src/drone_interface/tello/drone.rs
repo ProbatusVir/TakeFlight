@@ -1,12 +1,13 @@
 use crate::drone_interface::{Drone, IUnit, Unit};
 use crate::error::Error;
-use crate::{drone_interface, Connection, Poll, Token, UdpSocket};
+use crate::{debug_utils, drone_interface, Connection, Poll, Token, UdpSocket};
 use std::collections::HashMap;
+use std::io;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use crate::drone_interface::tello::packet::{land, set_sticks};
+use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command};
 use mio::Interest;
 use zerocopy::IntoBytes;
 use crate::logger::Logger;
@@ -164,11 +165,41 @@ impl drone_interface::Drone for TelloDrone
 	}
 
 	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
-		todo!()
+		debug_assert!(lr >= -100 && lr <= 100);
+		debug_assert!(ud >= -100 && ud <= 100);
+		debug_assert!(fb >= -100 && fb <= 100);
+		debug_assert!(rot >= -100.0 && rot <= 100.0);
+
+		let pack = packet::set_sticks(self.seq_number, lr as i16, rot as i16, fb as i16, ud as i16);
+
+		self.command_sock.send(&pack)?;
+		self.seq_number += 1;
+
+		self.logger.info_from_string(format!("Just sent out the string: {}", crate::debug_utils::raw_hex_to_string(&pack)))?;
+
+		Ok(())
 	}
 
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
-		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+		static mut DEBUG_NUMBER : usize = 0;
+
+		let debug_number = unsafe { DEBUG_NUMBER };
+
+		if debug_number == 0 {
+			self.takeoff()?;
+		}
+		else if debug_number == 11 {
+			self.graceful_land()?;
+		} else {
+			//self.rotate_percent = 0;
+			self.logger.info_from_string(format!("rotation: {}\tvertical: {}\tsideways: {}\tforward: {}", self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+			self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+		}
+
+		unsafe {
+			DEBUG_NUMBER += 1;
+		}
+
 		self.seq_number += 1;
 
 		Ok(())
@@ -184,26 +215,8 @@ impl drone_interface::Drone for TelloDrone
 				let packet_end = [self.inner_read_buf[bytes_read-2], self.inner_read_buf[bytes_read-1]];
 
 				// This means that it's not formatted like the usual ones, and is probably plain text.
-				if self.inner_read_buf[0] != 0xCC
-				{
-					let message = String::from_utf8_lossy(&self.inner_read_buf[..bytes_read]);
-					self.logger.info_from_string(format!("[[Command Sock Message]]: {}" , crate::debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
-
-					if message.contains("conn_ack:")
-					{
-						if self.secret.as_bytes() != packet_end { Err(Error::Custom("Received the wrong value as acknowledgment from Tello."))? }
-						else { self.logger.info("Received handshake acknowledgement from Tello!")? }
-					}
-					else if message.contains("unknown command: ")
-					{
-						self.logger.warn("We provided an unknown command to Tello.")?;
-					}
-					else {
-						println!("no clue what's going on...");
-						todo!("Non 0xCC packets from the Tello that weren't acknowledgement. The message: \"{}\"\t{}", message, message.len()) }
-
-					// TODO: put something here.
-				}
+				if self.inner_read_buf[0] != 0xCC {  self.handle_cmd_string(bytes_read)?; }
+				else { self.handle_cmd_bytes(bytes_read)?; }
 			}
 		}
 		else if port == self.video_sock.local_addr()?.port()
@@ -318,6 +331,93 @@ impl TelloDrone
 		let secret_bytes = self.secret.as_bytes();
 		let conn_string = format!("conn_req:{}{}", secret_bytes[0] as char, secret_bytes[1] as char);
 		self.command_sock.send(conn_string.as_bytes())?;
+
+		Ok(())
+	}
+
+	fn handle_cmd_bytes(&self, bytes_read : usize) -> Result<(), Error>
+	{
+		let debug  = u16::from_ne_bytes([self.inner_read_buf[5], self.inner_read_buf[6]]);
+		debug_utils::raw_hex_to_string(&debug);
+		let recvd_command : Command = debug.into();
+
+		match recvd_command {
+			Command::Error1 => {
+				self.logger.warn_from_string(format!("Error1: {}", debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
+			}
+			Command::Error2 => {
+				self.logger.warn_from_string(format!("Error2: {}", debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
+			}
+			Command::FlightStatus => {
+				//self.logger.error_from_string(format!("FlightStatus: {}", debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
+			}
+			Command::TakeOff => {
+				self.logger.info("Taking off...")?;
+			}
+			Command::SetSticks => {
+				self.logger.warn("It appears an error occurred when setting the movement.")?;
+			}
+			Command::Undefined => {
+				self.logger.error_from_string(format!("Unexpected message ID from Tello: 0x{:02x} 0x{:02x}\t(msg len: {})\t{}", self.inner_read_buf[5], self.inner_read_buf[6], bytes_read, debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
+				todo!()
+			}
+			Command::Land => {
+				self.logger.warn("Landing...")?;
+			}
+			Command::Flip => {
+				self.logger.warn("It appears a problem occurred while flipping.")?;
+
+			}
+			Command::SetDateTime => {
+				self.logger.warn_from_string(format!("SetDateTime packet: {}", debug_utils::raw_hex_to_string(strip_payload(&self.inner_read_buf[..bytes_read]))))?;
+			}
+			Command::LogHeader => {
+				self.logger.warn("Ignoring log header.")?;
+			}
+			Command::LogData => {
+				self.logger.warn("Ignoring log data.")?;
+			}
+			Command::LogConfig => {
+				self.logger.warn("Ignoring log config.")?;
+			}
+			Command::WifiStatus => {
+				// This packet is 13 bytes long.
+				let payload = strip_payload(&self.inner_read_buf[..13]);
+				if payload.len() != 2 { Err(io::Error::new(io::ErrorKind::InvalidData, "Malformed WifiStatus packet from Tello drone."))? }
+				self.logger.info_from_string(format!("Wifi Percent: {}\tInterference level: {}", payload[0], payload[1]))?;
+			}
+			Command::LightStrength => {
+				let payload = strip_payload(&self.inner_read_buf[..12]);
+				if payload.len() != 1 { Err(io::Error::new(io::ErrorKind::InvalidData, "Malformed LightStrength packet from Tello drone."))? }
+				let log = if payload[0] > 0 { "Light level good! "} else { "Light level poor. " };
+				self.logger.info(log)?;
+			}
+		}
+
+		Ok(())
+	}
+	fn handle_cmd_string(&self, bytes_read : usize) -> Result<(), Error>
+	{
+		let message = String::from_utf8_lossy(&self.inner_read_buf[..bytes_read]);
+		let packet_end = [self.inner_read_buf[bytes_read - 2], self.inner_read_buf[bytes_read - 1]];
+
+		if message.contains("conn_ack:")
+		{
+			if self.secret.as_bytes() != packet_end { self.logger.error_from_string(
+				format!("Expected acknowledgement: {:04x}\tGot: {:04x}", self.secret, u16::from_ne_bytes(packet_end)))?;
+				Err(Error::Custom("Received the wrong value as acknowledgment from Tello."))?
+			}
+			else { self.logger.info("Received handshake acknowledgement from Tello!")? }
+		}
+		else if message.contains("unknown command: ")
+		{
+			self.logger.warn("We provided an unknown command to Tello.")?;
+		}
+		else {
+			println!("no clue what's going on...");
+			todo!("Non 0xCC packets from the Tello that weren't acknowledgement. The message: \"{}\"\t{}", message, message.len()) }
+
+		// TODO: put something here.
 
 		Ok(())
 	}
