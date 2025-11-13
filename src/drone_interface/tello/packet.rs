@@ -1,3 +1,4 @@
+use chrono::Timelike;
 use concat_arrays::concat_arrays;
 use lebe::Endian;
 use zerocopy::IntoBytes;
@@ -6,6 +7,7 @@ use crate::drone_interface::tello::packet::Command::{Land, SetSticks, TakeOff};
 use crate::drone_interface::tello::packet::PacketType::{Data2, SetInfo};
 use crate::UdpSocket;
 use crate::Error;
+use num_enum::{Default, FromPrimitive, IntoPrimitive};
 
 #[allow(dead_code)]
 const HEADER : u8 = 0xCC;
@@ -24,14 +26,27 @@ enum PacketType
 	Unknown2	= 0x07,
 }
 
+
 #[repr(u16)]
-enum Command
+#[derive(FromPrimitive, IntoPrimitive)]
+pub enum Command
 {
+	#[default()]
 	Undefined,
+
+	Error1 = 0x4300_u16.to_be(),
+	Error2 = 0x4400_u16.to_be(),
+	SetDateTime = 0x4600_u16.to_be(),
 	SetSticks = 0x5000_u16.to_be(),
 	TakeOff = 0x5400_u16.to_be(),
 	Land = 0x5500_u16.to_be(),
+	FlightStatus = 0x5600_u16.to_be(),
 	Flip = 0x5c00_u16.to_be(),
+	LogHeader = 0x5010_u16.to_be(),
+	LogData = 0x5110_u16.to_be(),
+	LogConfig = 0x5210_u16.to_be(),
+	WifiStatus = 0x1a00_u16.to_be(),
+	LightStrength = 0x3500_u16.to_be(),
 }
 
 #[allow(dead_code)]
@@ -79,33 +94,6 @@ pub fn takeoff(sequence_number : u16) -> [u8;11]
 	// I want to make it this simple.
 	let (header, footer) = packet_header(&[], SetInfo, TakeOff, sequence_number);
 	concat_arrays!(header, footer)
-
-
-	// this implementation works right now.
-	/*let size = packet_size::<0>();
-	let seq : [u8;2] = sequence_number.to_le_bytes();
-
-
-	let mut array = [
-		0xCC,				// Constant
-		size[0], size[1],	// Size of whole packet
-		0,					// CRC-8
-		0x68,				// Packet type
-		(TakeOff as u16).as_bytes()[0], (TakeOff as u16).as_bytes()[1],			// Message ID
-		seq[0], seq[1],		// Sequence
-		0, 0,				// CRC-16
-	];
-
-	let header_and_count : [u8;3] = array[..3].try_into().unwrap();
-	let first_crc = crc8(header_and_count);
-	array[3] = first_crc;
-
-	let array_clone : [u8;9] = array[..9].try_into().unwrap();
-	let last_crc : [u8;2] = crc16(array_clone).to_le_bytes();
-	array[9] = last_crc[0];
-	array[10] = last_crc[1];
-
-	array*/
 }
 
 #[test]
@@ -117,21 +105,54 @@ fn test_takeoff()
 }
 
 // Each value must be between 0-100.
-pub fn set_sticks(sequence_number : u16, mut rot : i16, mut ud : i16, mut lr : i16, mut fb : i16) -> [u8;19]
+pub fn set_sticks(sequence_number : u16, mut rx : i16, mut ry : i16, mut lx : i16, mut ly : i16) -> [u8;22]
 {
 	const MULTIPLE : i16 = i16::MAX / 100;
-	debug_assert!(rot > 0 && rot < 100);
-	debug_assert!(ud > 0 && ud < 100);
-	debug_assert!(lr > 0 && lr < 100);
-	debug_assert!(fb > 0 && fb < 100);
+	debug_assert!(rx >= 0 && rx < 100);
+	debug_assert!(ry >= 0 && ry < 100);
+	debug_assert!(lx >= 0 && lx < 100);
+	debug_assert!(ly >= 0 && ly < 100);
 
 	// I wish SIMD wasn't just nightly...
-	rot *= MULTIPLE;
-	ud *= MULTIPLE;
-	lr *= MULTIPLE;
-	fb *= MULTIPLE;
+	/*rot	*= MULTIPLE;
+	ud	*= MULTIPLE;
+	lr	*= MULTIPLE;
+	fb	*= MULTIPLE;
+	 */
 
-	let payload : [u8;8] = concat_arrays!(rot.to_le_bytes(), ud.to_le_bytes(), lr.to_le_bytes(), fb.to_le_bytes());
+	let packed_axes= {
+	((rx & 0x07FF)	as i64)
+	| (((ry & 0x07FF)	as i64) << 11)
+	| (((lx & 0x07FF)	as i64) << 22)
+	| (((ly & 0x07FF)	as i64) << 33)}.to_be_bytes();
+
+
+
+	let now = chrono::Local::now();
+	/*let hour = now.hour() as u8;
+	let min = now.minute() as u8;
+	let sec = now.second() as u8;
+	let ms : [u8;2] = ((now.nanosecond() / 1_000_000) as u16).to_le_bytes();*/
+	let hour = 0;
+	let min = 0;
+	let sec = 0;
+	let ms = [0, 0];
+
+	let payload : [u8;11] = {[
+		packed_axes[0],
+		packed_axes[1],
+		packed_axes[2],
+		packed_axes[3],
+		packed_axes[4],
+		packed_axes[5],
+		hour,
+		min,
+		sec,
+		ms[0],
+		ms[1]
+	]};
+
+
 	let (header, footer) = packet_header(&payload, Data2, SetSticks, sequence_number);
 
 	concat_arrays!(header, payload, footer)
@@ -149,13 +170,6 @@ pub fn land(sequence_number : u16) -> [u8;12]
 {
 	const PAYLOAD : [u8;1] = [0x00];
 	let (header, footer) = packet_header(&PAYLOAD, SetInfo, Land, sequence_number);
-
-	/*[
-		0xCC,		// Constant
-		0x58, 0x00,	// Size of whole packet - the first byte, little endian, after its shifted 3 to the right.
-		0x7c, 0x68,
-		0x54, 0x00
-	]*/
 
 	concat_arrays!(header, PAYLOAD, footer)
 }
@@ -177,3 +191,60 @@ pub fn cancel_land(sequence_number : u16) -> [u8;12]
 		concat_arrays!(header, PAYLOAD, footer)
 }
 
+/// Zero-sized payloads are OK
+pub fn strip_payload(packet : &[u8]) -> &[u8]
+{
+	debug_assert!(packet.len() >= 11);
+	&packet[9..packet.len() - 2]
+}
+
+pub struct FlightData
+{
+	height			: u16, // DECIMETERS???
+	v_north			: u16,
+	v_east			: u16,
+	v_vert			: u16,
+	fly_time		: u16,
+
+	// Sensor states?
+	imu_state		: bool,
+	pressure_state	: bool,
+	below_state		: bool,
+	power_state		: bool,
+	battery_state	: bool,
+	gravity_state	: bool,
+	wind_state		: bool,
+
+	imu_calibration	: u8,	// not sure.
+	battery_percent	: u8,
+	time_remaining	: u16,	// In ms??
+	battery_mvolts	: u16,
+
+	is_flying		: bool,
+	is_on_ground	: bool,
+	is_em_open		: bool,	// Electromagnets?? Electrical machinery???
+	is_hovering		: bool,
+	outage_recording: bool,
+	is_battery_low	: bool,
+	is_battery_crit	: bool,
+	is_factory_mode	: bool,
+
+	fly_mode		: u8,
+	throw_fly_timer	: u8,
+	camera_state	: u8,
+	electrical_machinery_state : u8,
+
+	// I have NO clue what this means...
+	front_in		: bool,
+	front_out		: bool,
+	front_lsc		: bool,
+	error_state		: bool,
+}
+
+impl FlightData
+{
+	pub fn new(payload : &[u8])
+	{
+
+	}
+}
