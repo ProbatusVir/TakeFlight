@@ -3,6 +3,7 @@ use crate::{Connection, Error, ServerInstance, TcpStream};
 use mio::Token;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::Read;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]
@@ -39,7 +40,7 @@ pub fn handle_connection(mut stream : TcpStream, server : &mut ServerInstance) -
 				Connection::Client(Control, stream)
 			}
 			Video => {
-				server.video_out = Some(token);
+				*server.video_out.lock()? = Some(token);
 				Connection::VideoOut(Video, stream)
 			}
 			_ => { Err(Error::Custom("Invalid socket handshake."))? }
