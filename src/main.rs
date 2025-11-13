@@ -79,7 +79,8 @@ struct ServerInstance
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
 	const MAX_EVENTS : usize = 1024;
-	const HEARTBEAT_TIME: Duration = Duration::from_millis(3000);
+	//const HEARTBEAT_TIME: Duration = Duration::from_millis(40);
+	const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
 
 	// TODO: Add logic for determining log file.
@@ -149,11 +150,14 @@ fn main() -> Result<(), Error> {
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
-	/*let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone())?;
-	drone.lock()?.takeoff()?;
+	//let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone())?;
+	/*drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
-	drone.lock()?.graceful_land()?;*/
-
+	drone.lock()?.rc(0, 99, 0, 0.0)?;
+	sleep(Duration::from_secs(5));
+	print!("\x07");
+	drone.lock()?.graceful_land()?;
+	 */
 
 	// Some multiplexing
 	let status = loop
