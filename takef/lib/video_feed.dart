@@ -36,7 +36,7 @@ class _VideoFeedState extends State<VideoFeed>{
   }
 
   void start() {
-    timer = Timer.periodic(const Duration(milliseconds: 35), (_) {
+    timer = Timer.periodic(const Duration(milliseconds: 20), (_) {
       setState(() {
         frame = (frame + 1) % feed.length;
       });
