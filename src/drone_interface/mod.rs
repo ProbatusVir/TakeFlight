@@ -1,4 +1,6 @@
 pub mod tello;
+
+#[allow(dead_code)] // Doing this because we are going to deprecate this soon.
 pub mod drone_pro;
 mod crc;
 
