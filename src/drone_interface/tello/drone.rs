@@ -7,7 +7,9 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command};
+use concat_arrays::concat_arrays;
+use const_format::concatcp;
+use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
 use mio::Interest;
 use zerocopy::IntoBytes;
 use crate::logger::Logger;
@@ -22,7 +24,6 @@ pub struct TelloDrone
 	info_sock		: UdpSocket,
 	seq_number		: u16,
 	response_buffer	: Vec<u8>,
-	secret			: u16,		// This isn't actually encrypted, but its the value that the drone uses. Just for semantic use.
 
 	forward_percent	: i16,
 	sideway_percent	: i16,
@@ -186,7 +187,7 @@ impl drone_interface::Drone for TelloDrone
 		let debug_number = unsafe { DEBUG_NUMBER };
 
 		if debug_number == 0 {
-			self.takeoff()?;
+			//self.takeoff()?;
 		}
 		else if debug_number == 11 {
 			self.graceful_land()?;
@@ -206,12 +207,13 @@ impl drone_interface::Drone for TelloDrone
 	}
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
+		println!("Port: {}", port);
 		if port == self.command_sock.local_addr()?.port()
 		{
 			loop {
 				let bytes_read = self.command_sock.recv(&mut self.inner_read_buf)?;
 
-				// Nab the last two bytes. In most messages this is the CRC or the secret.
+				// Nab the last two bytes. In most messages this is the CRC. In the acknowledgement (text) packet, it's the port number.
 				let packet_end = [self.inner_read_buf[bytes_read-2], self.inner_read_buf[bytes_read-1]];
 
 				// This means that it's not formatted like the usual ones, and is probably plain text.
@@ -222,6 +224,7 @@ impl drone_interface::Drone for TelloDrone
 		else if port == self.video_sock.local_addr()?.port()
 		{
 			loop {
+				todo!("Got the videO!!!!");
 				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
 				self.logger.info_from_string(format!("[[Video Sock Message]]: {}" , crate::debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
 			}
@@ -278,7 +281,7 @@ impl TelloDrone
 		let vid_token = Token(video_sock.local_addr()?.port() as usize);
 		let nfo_token = Token(info_sock.local_addr()?.port() as usize);
 
-		logger.info_from_string(format!("Command socket connected to: {}",	com_token.0))?;
+		logger.info_from_string(format!("Command socket connected to: {}",		com_token.0))?;
 		logger.info_from_string(format!("Video socket connected to: {}",		vid_token.0))?;
 		logger.info_from_string(format!("Info socket connected to: {}",		nfo_token.0))?;
 
@@ -303,7 +306,6 @@ impl TelloDrone
 			info_sock,
 			seq_number,
 			response_buffer,
-			secret			: 0x1234_u16.to_be(), // Everything is little endian with the Tello, but this looks nice over the network.
 			forward_percent	: 0,
 			sideway_percent	: 0,
 			rotate_percent	: 0,
@@ -328,8 +330,9 @@ impl TelloDrone
 
 	fn connect(&mut self) -> Result<(), Error>
 	{
-		let secret_bytes = self.secret.as_bytes();
-		let conn_string = format!("conn_req:{}{}", secret_bytes[0] as char, secret_bytes[1] as char);
+		const CONN_REQ : [u8;9] = *b"conn_req:";
+		let port_bytes : [u8;2] = u16::to_le_bytes(self.video_sock.local_addr()?.port());
+		let conn_string : [u8;11] = concat_arrays!(CONN_REQ, port_bytes);
 		self.command_sock.send(conn_string.as_bytes())?;
 
 		Ok(())
@@ -337,11 +340,13 @@ impl TelloDrone
 
 	fn handle_cmd_bytes(&self, bytes_read : usize) -> Result<(), Error>
 	{
-		let debug  = u16::from_ne_bytes([self.inner_read_buf[5], self.inner_read_buf[6]]);
-		debug_utils::raw_hex_to_string(&debug);
-		let recvd_command : Command = debug.into();
+		let recvd_command : Command = u16::from_le_bytes([self.inner_read_buf[5], self.inner_read_buf[6]]).into();
 
 		match recvd_command {
+			Command::Undefined => {
+				self.logger.error_from_string(format!("Unexpected message ID from Tello: 0x{:02x} 0x{:02x}\t(msg len: {})\t{}", self.inner_read_buf[5], self.inner_read_buf[6], bytes_read, debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
+				todo!()
+			}
 			Command::Error1 => {
 				self.logger.warn_from_string(format!("Error1: {}", debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
 			}
@@ -349,7 +354,9 @@ impl TelloDrone
 				self.logger.warn_from_string(format!("Error2: {}", debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
 			}
 			Command::FlightStatus => {
-				//self.logger.error_from_string(format!("FlightStatus: {}", debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
+				let payload = strip_payload(&self.inner_read_buf[..bytes_read]);
+				let flight_data = FlightData::new(payload)?;
+				self.logger.info_from_string(format!("{:?}", flight_data))?;
 			}
 			Command::TakeOff => {
 				self.logger.info("Taking off...")?;
@@ -357,16 +364,11 @@ impl TelloDrone
 			Command::SetSticks => {
 				self.logger.warn("It appears an error occurred when setting the movement.")?;
 			}
-			Command::Undefined => {
-				self.logger.error_from_string(format!("Unexpected message ID from Tello: 0x{:02x} 0x{:02x}\t(msg len: {})\t{}", self.inner_read_buf[5], self.inner_read_buf[6], bytes_read, debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
-				todo!()
-			}
 			Command::Land => {
 				self.logger.warn("Landing...")?;
 			}
 			Command::Flip => {
 				self.logger.warn("It appears a problem occurred while flipping.")?;
-
 			}
 			Command::SetDateTime => {
 				self.logger.warn_from_string(format!("SetDateTime packet: {}", debug_utils::raw_hex_to_string(strip_payload(&self.inner_read_buf[..bytes_read]))))?;
@@ -403,8 +405,9 @@ impl TelloDrone
 
 		if message.contains("conn_ack:")
 		{
-			if self.secret.as_bytes() != packet_end { self.logger.error_from_string(
-				format!("Expected acknowledgement: {:04x}\tGot: {:04x}", self.secret, u16::from_ne_bytes(packet_end)))?;
+			let port = self.video_sock.local_addr()?.port();
+			if port.as_bytes() != packet_end { self.logger.error_from_string(
+				format!("Expected acknowledgement: {:04x}\tGot: {:04x}", port, u16::from_ne_bytes(packet_end)))?;
 				Err(Error::Custom("Received the wrong value as acknowledgment from Tello."))?
 			}
 			else { self.logger.info("Received handshake acknowledgement from Tello!")? }
@@ -413,9 +416,11 @@ impl TelloDrone
 		{
 			self.logger.warn("We provided an unknown command to Tello.")?;
 		}
-		else {
+		else
+		{
 			println!("no clue what's going on...");
-			todo!("Non 0xCC packets from the Tello that weren't acknowledgement. The message: \"{}\"\t{}", message, message.len()) }
+			todo!("Non 0xCC packets from the Tello that weren't acknowledgement. The message: \"{}\"\t{}", message, message.len())
+		}
 
 		// TODO: put something here.
 
