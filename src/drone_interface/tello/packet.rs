@@ -1,3 +1,4 @@
+use std::io::{Cursor, Read};
 use chrono::Timelike;
 use concat_arrays::concat_arrays;
 use lebe::Endian;
@@ -198,6 +199,7 @@ pub fn strip_payload(packet : &[u8]) -> &[u8]
 	&packet[9..packet.len() - 2]
 }
 
+#[derive(Debug)]
 pub struct FlightData
 {
 	height			: u16, // DECIMETERS???
@@ -243,8 +245,102 @@ pub struct FlightData
 
 impl FlightData
 {
-	pub fn new(payload : &[u8])
+	pub fn new(payload : &[u8]) -> Result<Self, Error>
 	{
+		let mut reader = Cursor::new(payload);
+		let mut height : u16 = 0;
+		let mut v_north: u16 = 0;
+		let mut v_east: u16 = 0;
+		let mut v_vert: u16 = 0;
+		let mut fly_time : u16 = 0;
+		let mut flags1 : u8 = 0;
+		let mut imu_calibration: u8 = 0;
+		let mut battery_percent: u8 = 0;
+		let mut time_remaining: u16 = 0;
+		let mut battery_mvolts: u16 = 0;
+		let mut flags2 : u8 = 0;
+		let mut fly_mode : u8 = 0;
+		let mut throw_fly_timer : u8 = 0;
+		let mut camera_state : u8 = 0;
+		let mut electrical_machinery_state : u8 = 0;
+		let mut flags3 : u8 = 0; // there's only 3 in this one.
+		let mut flags4 : u8 = 0; // There's only 1 in this one.
+		{
+			reader.read(height.as_mut_bytes())?;
+			reader.read(v_north.as_mut_bytes())?;
+			reader.read(v_east.as_mut_bytes())?;
+			reader.read(v_vert.as_mut_bytes())?;
+			reader.read(fly_time.as_mut_bytes())?;
+			reader.read(flags1.as_mut_bytes())?;
+			reader.read(imu_calibration.as_mut_bytes())?;
+			reader.read(battery_percent.as_mut_bytes())?;
+			reader.read(time_remaining.as_mut_bytes())?;
+			reader.read(battery_mvolts.as_mut_bytes())?;
+			reader.read(flags2.as_mut_bytes())?;
+			reader.read(fly_mode.as_mut_bytes())?;
+			reader.read(throw_fly_timer.as_mut_bytes())?;
+			reader.read(camera_state.as_mut_bytes())?;
+			reader.read(electrical_machinery_state.as_mut_bytes())?;
+			reader.read(flags3.as_mut_bytes())?;
+			reader.read(flags4.as_mut_bytes())?;
+		}
 
+		let imu_state				= flags1 & 0b0000_0001 != 0;	// 0
+		let pressure_state		= flags1 & 0b0000_0010 != 0;	// 1
+		let below_state			= flags1 & 0b0000_0100 != 0;	// 2
+		let power_state			= flags1 & 0b0000_1000 != 0;	// 3
+		let battery_state			= flags1 & 0b0001_0000 != 0;	// 4
+		let gravity_state			= flags1 & 0b0010_0000 != 0;	// 5 -- 6 is unknown.
+		let wind_state			= flags1 & 0b1000_0000 != 0;	// 7
+
+		let is_flying				= flags2 & 0b0000_0001 != 0;	// 0
+		let is_on_ground			= flags2 & 0b0000_0010 != 0;	// 1
+		let is_em_open			= flags2 & 0b0000_0100 != 0;	// 2
+		let is_hovering			= flags2 & 0b0000_1000 != 0;	// 3
+		let outage_recording		= flags2 & 0b0001_0000 != 0;	// 4
+		let is_battery_low		= flags2 & 0b0010_0000 != 0;	// 5
+		let is_battery_crit		= flags2 & 0b0100_0000 != 0;	// 6
+		let is_factory_mode		= flags2 & 0b1000_0000 != 0;	// 7
+
+		let front_in				= flags3 & 0b0000_0001 != 0;	// 0
+		let front_out				= flags3 & 0b0000_0010 != 0;	// 1
+		let front_lsc				= flags3 & 0b0000_0100 != 0;	// 2
+
+		let error_state = flags4 == 1;
+
+		Ok(Self {
+			height,
+			v_north,
+			v_east,
+			v_vert,
+			fly_time,
+			imu_state,
+			pressure_state,
+			below_state,
+			power_state,
+			battery_state,
+			gravity_state,
+			wind_state,
+			imu_calibration,
+			battery_percent,
+			time_remaining,
+			battery_mvolts,
+			is_flying,
+			is_on_ground,
+			is_em_open,
+			is_hovering,
+			outage_recording,
+			is_battery_low,
+			is_battery_crit,
+			is_factory_mode,
+			fly_mode,
+			throw_fly_timer,
+			camera_state,
+			electrical_machinery_state,
+			front_in,
+			front_out,
+			front_lsc,
+			error_state,
+		})
 	}
 }
