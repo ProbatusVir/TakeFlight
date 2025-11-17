@@ -17,7 +17,7 @@ Future<int> getServerPort() async {
   // FIXME: Maybe you'll want a ternary operator to decide whether to use Debug or Release in the path.
   final normalPath = Directory.current.parent.path.replaceAll("\\", "/");
   final process = Process.start(
-    "$normalPath/target/release/TakeFlight.exe",
+    "$normalPath/target/debug/TakeFlight.exe",
     [sock.port.toString(),],
     mode: ProcessStartMode.inheritStdio,
     workingDirectory: "..",
@@ -45,12 +45,13 @@ Future<int> getServerPort() async {
 
 
 Future<void> androidConnect()async{
-  final debug = File("helloworld.txt");
-  await debug.writeAsString("${ await getServerPort() }");
+  /*final debug = File("helloworld.txt");
+  await debug.writeAsString("${ await getServerPort() }");*/
 
   Socket? socket;
+  int port = await getServerPort();
   try{
-    socket = await Socket.connect('127.0.0.1', 51108);
+    socket = await Socket.connect('127.0.0.1', port);
     //Prints are for debugging
     print('Connected to Server: ${socket.remoteAddress}:${socket.remotePort}');
   }on SocketException catch (e){

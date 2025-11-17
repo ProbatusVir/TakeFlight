@@ -54,7 +54,10 @@ class _FlightScreenState extends State<FlightScreen>{
       ),
       body: Stack(
         children: [
-          Center(child: VideoFeed(),), //placement for video feed
+          RepaintBoundary(
+            key: previewKey,
+            child: Center(child: VideoFeed(),),
+          ), //placement for video feed and to record it
           Align( //Aligns user menu to bottom center of the screen
             alignment: Alignment.bottomCenter,
             child: Padding(
