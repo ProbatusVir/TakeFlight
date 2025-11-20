@@ -3,7 +3,6 @@ use crate::{Connection, Error, ServerInstance, TcpStream};
 use mio::Token;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::Read;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]

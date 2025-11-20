@@ -52,7 +52,7 @@ pub fn insert_row_flight_log(db : &mut Connection, flight_id : u64, gesture_id :
 }
 
 /// When a flight starts, this should be the first entry
-pub fn insert_row_flight_model(db : &mut Connection, flight_id : u64, drone_model_id : u64) -> Result<(), Error>
+pub fn insert_row_flight_model(db : &mut Connection, drone_model_id : u64) -> Result<(), Error>
 {
 	const CMD : &str = include_str!(concat!(env!("SQL_ENTRY_DIR"), "/flight_model_tb.sql"));
 

@@ -1,19 +1,15 @@
 use super::packet;
 use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
-use crate::drone_interface::{Drone, IUnit, Unit};
+use crate::drone_interface::{ IUnit, Unit};
 use crate::error::Error;
 use crate::logger::Logger;
-use crate::video::rtp::RTPHeader;
 use crate::{debug_utils, drone_interface, send_image, Connection, Poll, Token, UdpSocket};
 use concat_arrays::concat_arrays;
-use const_format::concatcp;
 use image::DynamicImage;
 use mio::Interest;
 use openh264::formats::YUVSource;
 use std::collections::HashMap;
-use std::fs::File;
 use std::io;
-use std::io::{Cursor, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -257,7 +253,7 @@ impl drone_interface::Drone for TelloDrone
 				let bytes_read = self.command_sock.recv(&mut self.inner_read_buf)?;
 
 				// Nab the last two bytes. In most messages this is the CRC. In the acknowledgement (text) packet, it's the port number.
-				let packet_end = [self.inner_read_buf[bytes_read-2], self.inner_read_buf[bytes_read-1]];
+				//let packet_end = [self.inner_read_buf[bytes_read-2], self.inner_read_buf[bytes_read-1]];
 
 				// This means that it's not formatted like the usual ones, and is probably plain text.
 				if self.inner_read_buf[0] != 0xCC {  self.handle_cmd_string(bytes_read)?; }
@@ -661,6 +657,7 @@ impl TelloDrone
 
 		}
 
+		#[allow(unreachable_code)]
 		Ok(())
 	}
 

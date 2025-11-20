@@ -19,6 +19,7 @@ const CRC8_TABLE: [u8; 256] = [
 ];
 
 /// calculates the starting CRC8 byte for packet.
+#[allow(dead_code)]
 pub fn crc8(pkt: impl IntoIterator<Item = u8>) -> u8 {
 	pkt.into_iter()
 		.fold(0x77u8, |crc, x| CRC8_TABLE[(crc ^ x) as usize])
@@ -56,6 +57,7 @@ const CRC16_TABLE: [u16; 256] = [
 ];
 
 /// calculates the ending CRC16 bytes for packet.
+#[allow(dead_code)]
 pub fn crc16(pkt: impl IntoIterator<Item = u8>) -> u16 {
 	pkt.into_iter().fold(0x3692u16, |crc, x| {
 		CRC16_TABLE[((crc ^ x as u16) & 0xff) as usize] ^ (crc >> 8)

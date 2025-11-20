@@ -8,6 +8,10 @@ pub(crate) mod debug_utils;
 mod video;
 pub(crate) mod logger;
 mod app_network;
+
+// TODO: Figure out if this is a fair concession until we fully implement the features.
+//		Not to mention, these concerns about unused imports and variables are just plainly wrong.
+#[allow(dead_code, unused_imports)]
 mod database;
 
 #[cfg(test)]
@@ -26,7 +30,6 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{ErrorKind, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -57,10 +60,10 @@ impl TryInto<TcpStream> for Connection
 
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
-const VID_WAKER : Token = Token(2);
 const LOG_DIR : &str = "logs/";
 
 // TODO: Let's make a more accurate name for this.
+#[allow(dead_code)]
 struct ServerInstance
 {
 	// video_stream : //TODO: let's make an enum where it can be a drone, or a separate TCP
@@ -149,7 +152,7 @@ fn main() -> Result<(), Error> {
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
-	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
+	//let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
 	/*drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
 	drone.lock()?.rc(0, 99, 0, 0.0)?;
@@ -302,11 +305,11 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 
 impl ServerInstance
 {
-	fn send_image(&mut self) -> Result<(), Error>
+	/*fn send_image(&mut self) -> Result<(), Error>
 	{
 		// The only pessimization to this wrapper is the arc increment
 		send_image(self.video_out.clone(), self.video_src.clone(), self.ownership_map.clone())
-	}
+	}*/
 
 }
 

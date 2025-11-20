@@ -57,6 +57,8 @@ enum DroneCommandState
 // It appears that the packet structure uses [0x03 0x66] as an indicator
 //	that this is a command, and ends the transmission with [0x99]
 // It also appears that all commands are 9 characters long.
+/// We are allowing unused variable because development is not going ot be continued here.
+#[allow(unused_variables)]
 
 impl drone_interface::Drone for Drone
 {

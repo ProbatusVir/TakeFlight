@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, };
 
-enum LoggingLevel
+pub(crate) enum LoggingLevel
 {
 	Info,
 	Warning,
@@ -46,6 +46,8 @@ impl Logger
 		self.send_log_message(LoggingLevel::Warning, msg).map_err(|_| Error::Custom("Unable send WARN message to logger!"))
 	}
 
+	// It makes sense that, for the most, part, we want more descriptive error messages.
+	#[allow(dead_code)]
 	pub fn error(&self, msg : &str) -> Result<(), Error>
 	{
 		self.send_log_message(LoggingLevel::Error, msg).map_err(|_| Error::Custom("Unable send ERROR message to logger!"))

@@ -1,12 +1,10 @@
-use crate::drone_interface::crc::{crc16, crc16_ref, crc8, crc8_ref};
+use crate::drone_interface::crc::{ crc16_ref,  crc8_ref};
 use crate::drone_interface::tello::packet::Command::{Land, SetSticks, TakeOff, VideoBitrate, VideoResolution, SPSPPS};
 use crate::drone_interface::tello::packet::PacketType::{Data2, GetInfo, SetInfo};
 use crate::Error;
-use crate::UdpSocket;
 use chrono::Timelike;
 use concat_arrays::concat_arrays;
-use lebe::Endian;
-use num_enum::{Default, FromPrimitive, IntoPrimitive};
+use num_enum::{ FromPrimitive, IntoPrimitive};
 use std::io::{Cursor, Read};
 use zerocopy::IntoBytes;
 
@@ -110,9 +108,9 @@ fn test_takeoff()
 }
 
 // Each value must be between 0-100.
-pub fn set_sticks(sequence_number : u16, mut rx : i16, mut ry : i16, mut lx : i16, mut ly : i16) -> [u8;22]
+pub fn set_sticks(sequence_number : u16, rx : i16, ry : i16, lx : i16, ly : i16) -> [u8;22]
 {
-	const MULTIPLE : i16 = i16::MAX / 100;
+	//const MULTIPLE : i16 = i16::MAX / 100;
 	debug_assert!(rx >= 0 && rx < 100);
 	debug_assert!(ry >= 0 && ry < 100);
 	debug_assert!(lx >= 0 && lx < 100);
