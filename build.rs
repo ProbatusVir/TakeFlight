@@ -1,7 +1,5 @@
-use std::io::{Read, Write};
+use std::io::{Read, };
 use std::path;
-use std::path::Path;
-use rusqlite as sql;
 use anyhow::Error;
 use const_format::{formatcp};
 
