@@ -1,18 +1,23 @@
 use crate::drone_interface::{Drone, IUnit, Unit};
 use crate::error::Error;
-use crate::{debug_utils, drone_interface, Connection, Poll, Token, UdpSocket};
+use crate::{debug_utils, drone_interface, send_image, Connection, Poll, Token, UdpSocket};
 use std::collections::HashMap;
+use std::fs::File;
 use std::io;
+use std::io::{Cursor, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use concat_arrays::concat_arrays;
 use const_format::concatcp;
+use image::DynamicImage;
 use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
 use mio::Interest;
+use openh264::formats::YUVSource;
 use zerocopy::IntoBytes;
 use crate::logger::Logger;
+use crate::video::rtp::RTPHeader;
 use super::packet;
 
 #[allow(dead_code)]
@@ -22,16 +27,36 @@ pub struct TelloDrone
 	command_sock	: UdpSocket,
 	video_sock		: UdpSocket,
 	info_sock		: UdpSocket,
+
 	seq_number		: u16,
 	response_buffer	: Vec<u8>,
+	vid_frame_number: u8,
+	frame_buffer	: Vec<u8>,
+	image			: Option<DynamicImage>,
+
+	last_sps_pps_req: std::time::SystemTime,
+	sps				: Option<[u8;15 - 2]>,
+	pps				: Option<[u8;10 - 2]>,
+	idr				: Vec<u8>,
+	idr_frame_number: Option<u8>,
 
 	forward_percent	: i16,
 	sideway_percent	: i16,
 	rotate_percent	: i16,
 	updown_percent	: i16,
+	battery_percent	: u8,
 
 	inner_read_buf	: [u8;4096],
-	logger			: Logger
+	logger			: Logger,
+
+	poll					: Arc<Mutex<Poll>>,
+	connection_map			: Arc<Mutex<HashMap<Token, Connection>>>,
+	frame_time				: Arc<Duration>,
+	last_frame_sent_time	: SystemTime,
+	curr_video_src			: Arc<Mutex<Option<Token>>>,
+	curr_video_dst			: Arc<Mutex<Option<Token>>>,
+
+
 }
 
 impl drone_interface::Drone for TelloDrone
@@ -162,7 +187,11 @@ impl drone_interface::Drone for TelloDrone
 	}
 
 	fn snapshot(&mut self) -> Option<Arc<Vec<u8>>> {
-		todo!()
+		match &self.image
+		{
+			Some(img) => { Some(Arc::new(img.as_bytes().to_vec())) }
+			None => { None }
+		}
 	}
 
 	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
@@ -181,18 +210,26 @@ impl drone_interface::Drone for TelloDrone
 		Ok(())
 	}
 
+	// FIXME: This is for debug purposes *only*
+	#[cfg(debug_assertions)]
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
 		static mut DEBUG_NUMBER : usize = 0;
 
 		let debug_number = unsafe { DEBUG_NUMBER };
 
 		if debug_number == 0 {
-			//self.takeoff()?;
+			self.takeoff()?;
 		}
-		else if debug_number == 11 {
+		else if debug_number > 20 {
 			self.graceful_land()?;
-		} else {
-			//self.rotate_percent = 0;
+		}
+		else if debug_number > 10 {
+			self.rotate_percent = 50;
+			self.logger.info_from_string(format!("Rotation: {}", self.rotate_percent))?;
+			self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+		}
+		else {
+			self.rotate_percent = 0;
 			self.logger.info_from_string(format!("rotation: {}\tvertical: {}\tsideways: {}\tforward: {}", self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
 			self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
 		}
@@ -206,8 +243,14 @@ impl drone_interface::Drone for TelloDrone
 		Ok(())
 	}
 
+	#[cfg(not(debug_assertions))]
+	fn send_heartbeat(&mut self) -> Result<(), Error> {
+		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+
+		Ok(())
+	}
+
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
-		println!("Port: {}", port);
 		if port == self.command_sock.local_addr()?.port()
 		{
 			loop {
@@ -223,11 +266,7 @@ impl drone_interface::Drone for TelloDrone
 		}
 		else if port == self.video_sock.local_addr()?.port()
 		{
-			loop {
-				todo!("Got the videO!!!!");
-				let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
-				self.logger.info_from_string(format!("[[Video Sock Message]]: {}" , crate::debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
-			}
+			self.receive_video()
 		}
 		else if port == self.info_sock.local_addr()?.port()
 		{
@@ -243,7 +282,9 @@ impl drone_interface::Drone for TelloDrone
 impl TelloDrone
 {
 	#[allow(dead_code)]
-	pub(crate) fn new(registry: Arc<Mutex<Poll>>, map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger) -> Result<Arc<Mutex<Self>>, Error> {
+	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger,
+					  curr_video_src : Arc<Mutex<Option<Token>>>, curr_video_dst : Arc<Mutex<Option<Token>>>, frame_time : Arc<Duration>,
+	) -> Result<Arc<Mutex<Self>>, Error> {
 		let mut command_sock = {
 			const COMMAND_PORT: u16 = 8889;
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
@@ -267,12 +308,11 @@ impl TelloDrone
 
 		let mut video_sock = {
 			const VIDEO_PORT: u16 = 11111;
-			const ARBITRARY_PORT: u16 = 11112;
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, VIDEO_PORT);
 
 			let video_sock = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
-			video_sock.connect(SocketAddr::V4(CONN_SOCK))?;
+			//video_sock.connect(SocketAddr::V4(CONN_SOCK))?;
 
 			video_sock
 		};
@@ -287,7 +327,7 @@ impl TelloDrone
 
 		// Register all the sockets...
 		{
-			let poll_lock = registry.lock()?;
+			let poll_lock = poll.lock()?;
 			let registry = poll_lock.registry();
 
 			registry.register(&mut command_sock,	com_token, Interest::READABLE)?;
@@ -306,26 +346,53 @@ impl TelloDrone
 			info_sock,
 			seq_number,
 			response_buffer,
+			vid_frame_number: 0,
+			frame_buffer	: Vec::new(),
+			image			: None,
+			last_sps_pps_req: std::time::SystemTime::UNIX_EPOCH,	// This prompts an immediate request for SPS/PPS
+			sps				: None,
+			pps				: None,
+			idr				: Vec::new(),
+			idr_frame_number: None,
 			forward_percent	: 0,
 			sideway_percent	: 0,
 			rotate_percent	: 0,
 			updown_percent	: 0,
+			battery_percent	: 0,
 
 			inner_read_buf	: [0;4096],
 			logger,
+			poll,
+			connection_map,
+			frame_time,
+			last_frame_sent_time: UNIX_EPOCH,
+			curr_video_src,
+			curr_video_dst,
 		}
 		));
 
+		// Add everything to the ownership map, and setup video.
 		{
-			let mut map_lock = map.lock()?;
-			map_lock.insert(com_token, Connection::Drone(this_drone.clone()));
-			map_lock.insert(vid_token, Connection::Drone(this_drone.clone()));
-			map_lock.insert(nfo_token, Connection::Drone(this_drone.clone()));
+			let mut drone_lock = this_drone.lock()?;
+			{
+				let mut map_lock = drone_lock.connection_map.lock()?;
+				map_lock.insert(com_token, Connection::Drone(this_drone.clone()));
+				map_lock.insert(vid_token, Connection::Drone(this_drone.clone()));
+				map_lock.insert(nfo_token, Connection::Drone(this_drone.clone()));
+			}
+
+			drone_lock.connect()?;
 		}
-
-		this_drone.lock()?.connect()?;
-
 		Ok(this_drone)
+	}
+
+	fn request_sps_pss(&mut self) -> Result<(), Error>
+	{
+		let sps_pps_request = packet::query_video_sps_pps(0);
+		self.seq_number += 1;
+		self.command_sock.send(&sps_pps_request)?;
+
+		Ok(())
 	}
 
 	fn connect(&mut self) -> Result<(), Error>
@@ -338,7 +405,7 @@ impl TelloDrone
 		Ok(())
 	}
 
-	fn handle_cmd_bytes(&self, bytes_read : usize) -> Result<(), Error>
+	fn handle_cmd_bytes(&mut self, bytes_read : usize) -> Result<(), Error>
 	{
 		let recvd_command : Command = u16::from_le_bytes([self.inner_read_buf[5], self.inner_read_buf[6]]).into();
 
@@ -356,7 +423,12 @@ impl TelloDrone
 			Command::FlightStatus => {
 				let payload = strip_payload(&self.inner_read_buf[..bytes_read]);
 				let flight_data = FlightData::new(payload)?;
-				self.logger.info_from_string(format!("{:?}", flight_data))?;
+				// even though we have a bunch of data, looking at it all the time kinda sucks.
+				if flight_data.battery_percent != self.battery_percent
+				{
+					self.battery_percent = flight_data.battery_percent;
+					self.logger.info_from_string(format!("Battery Percent: {}", self.battery_percent))?;
+				}
 			}
 			Command::TakeOff => {
 				self.logger.info("Taking off...")?;
@@ -386,7 +458,12 @@ impl TelloDrone
 				// This packet is 13 bytes long.
 				let payload = strip_payload(&self.inner_read_buf[..13]);
 				if payload.len() != 2 { Err(io::Error::new(io::ErrorKind::InvalidData, "Malformed WifiStatus packet from Tello drone."))? }
-				self.logger.info_from_string(format!("Wifi Percent: {}\tInterference level: {}", payload[0], payload[1]))?;
+				let wifi_percent = payload[0];
+				let interference_percent = payload[1];
+				if wifi_percent < 70 // arbitrary threshold. I'm just tired of it clogging the logs. TODO: make this a configurable option, or constant, a member perhaps.
+				{
+					self.logger.info_from_string(format!("Wifi Percent: {}\tInterference level: {}", wifi_percent, interference_percent))?;
+				}
 			}
 			Command::LightStrength => {
 				let payload = strip_payload(&self.inner_read_buf[..12]);
@@ -394,11 +471,14 @@ impl TelloDrone
 				let log = if payload[0] > 0 { "Light level good! "} else { "Light level poor. " };
 				self.logger.info(log)?;
 			}
+			Command::SPSPPS => { todo!("Got back SPSPPS") }
+			Command::VideoBitrate => { todo!("Got back VideoBitrate") }
+			Command::VideoResolution => { todo!("Got back VideoResolution") }
 		}
 
 		Ok(())
 	}
-	fn handle_cmd_string(&self, bytes_read : usize) -> Result<(), Error>
+	fn handle_cmd_string(&mut self, bytes_read : usize) -> Result<(), Error>
 	{
 		let message = String::from_utf8_lossy(&self.inner_read_buf[..bytes_read]);
 		let packet_end = [self.inner_read_buf[bytes_read - 2], self.inner_read_buf[bytes_read - 1]];
@@ -406,11 +486,13 @@ impl TelloDrone
 		if message.contains("conn_ack:")
 		{
 			let port = self.video_sock.local_addr()?.port();
-			if port.as_bytes() != packet_end { self.logger.error_from_string(
-				format!("Expected acknowledgement: {:04x}\tGot: {:04x}", port, u16::from_ne_bytes(packet_end)))?;
+			if port.as_bytes() != packet_end {
+				self.logger.error_from_string(format!("Expected acknowledgement: {:04x}\tGot: {:04x}", port, u16::from_ne_bytes(packet_end)))?;
 				Err(Error::Custom("Received the wrong value as acknowledgment from Tello."))?
 			}
-			else { self.logger.info("Received handshake acknowledgement from Tello!")? }
+			else {
+				self.logger.info("Received handshake acknowledgement from Tello!")?;
+			}
 		}
 		else if message.contains("unknown command: ")
 		{
@@ -426,4 +508,160 @@ impl TelloDrone
 
 		Ok(())
 	}
+
+	const SPS_REQUEST_SEC_INTERVAL : Duration = Duration::from_millis(1500);
+
+	fn receive_video(&mut self) -> Result<(), Error>
+	{
+		// Get image metadata to decode the image.
+		let now = SystemTime::now();
+		if now.duration_since(self.last_sps_pps_req)? > Self::SPS_REQUEST_SEC_INTERVAL || self.last_sps_pps_req == UNIX_EPOCH
+		{
+			self.request_sps_pss()?;
+
+			self.last_sps_pps_req = now;
+		}
+
+		loop
+		{
+			const END_OF_FRAME_BITMASK : u8 =  0b1000_0000;
+			// Despite what I thought, it seems that they're using a custom format for these packets.
+			// The frame starts [n_frame, 0x00, 0x00, 0x00, 0x00, 0x01, ...] (I suspect the second byte here is also the local number, but it has to be zero.)
+			// 	In contrast, the standard H.264 frame starts [0x00, 0x00, 0x01], which means that we can simply strip the first three bytes.
+			// The following packets will follow the format [n_frame, n_local, ...], so in theory, we just need to strip that data and we are all set.
+
+			let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
+			let frame_number = self.inner_read_buf[0];
+			let local_number = self.inner_read_buf[1];
+			let payload_start = 2; // FIXME: this is literally a numerical constant, empirically this number holds up. Once we finalize, just write 2.
+			let payload = &self.inner_read_buf[payload_start..bytes_read];
+			// let nal_type : Option<u8> = ....;
+			let end_of_frame = local_number & END_OF_FRAME_BITMASK != 0;
+
+			if bytes_read == 15 && local_number == 0x80 // FIXME: Check the NAL type instead of the length.
+			{
+				self.logger.info("Received updated SPS (larger)")?;
+				self.sps = Some(payload.try_into()?);
+			}
+			else if bytes_read == 10 && local_number == 0x80 // FIXME: Check the NAL type instead of the length
+			{
+				self.logger.info("Received updated PPS (smaller)")?;
+				self.pps = Some(payload.try_into()?);
+			}
+			else if local_number == 0x80
+			{
+				todo!("WHAT, THERE'S ANOTHER THING THAT CAN BE 0x80??? {}", payload.len())
+			}
+			// NAL unit is 0x65, if we're starting an IDR, we should clear all image buffers
+			else if payload.len() >= 4
+			{
+				if payload[4] == 0x65 && local_number == 0
+				{
+					self.idr_frame_number = Some(frame_number);
+					self.idr.clear();
+					self.frame_buffer.clear();
+				}
+			}
+			// this is basically just asking if it exists yet.
+			// TODO: Make this a little cleaner.
+			match self.idr_frame_number
+			{
+				// There's no sense in doing anything with an image if there's no IDR
+				None => { continue; }
+
+				Some(n) =>
+					{
+						// check if we're contributing to the active IDR, if we are, contribute.
+						if frame_number == n
+						{
+							self.idr.extend_from_slice(payload);
+							if !end_of_frame
+							{
+								continue;
+							}
+						}
+					}
+			}
+
+
+
+			//Check if the frame is ending
+			// -- The following is not always true. -- 0x88 is the terminal local number.
+			if frame_number != self.vid_frame_number && self.frame_buffer.len() > 0
+			{
+				// Check that we have all the components to output a coherent image.
+				if self.sps.is_some() && self.pps.is_some() && self.idr.len() > 0
+				{	// The following is for POI.
+					//if self.vid_frame_number % 100 == 0
+					{
+						/*let mut file = File::create(&format!("test_results/frame{frame_number}.h264"))?;
+						file.write_all(self.sps.as_ref().unwrap())?;
+						file.write_all(self.pps.as_ref().unwrap())?;
+						file.write_all(&self.idr)?;
+						file.write_all(&self.frame_buffer)?;
+
+						self.logger.info_from_string(format!("Saved a file: {frame_number}\t{}", self.vid_frame_number))?;
+						 */
+						let mut image_buffer = Vec::new();
+						image_buffer.extend_from_slice(&self.sps.unwrap());
+						image_buffer.extend_from_slice(&self.pps.unwrap());
+						image_buffer.extend_from_slice(&self.idr);
+						image_buffer.extend_from_slice(&self.frame_buffer);
+
+
+						let mut decoder = openh264::decoder::Decoder::new()?;
+						let decoder_result = decoder.decode(&image_buffer);
+						match decoder_result
+						{
+							Ok(decoded_option) =>
+							{
+								/*
+								let decoded = decoded_option.unwrap();
+								let (w,h) = decoded.dimensions();
+								self.logger.info_from_string(format!("We successfully decoded frame {frame_number}, {w}x{h}"))?;
+								let mut file = File::create(format!("test_results/frame{frame_number}.rgb"))?;
+								decoded.write_rgb8(&mut file_buffer);
+								file.write_all(&file_buffer)?;*/
+
+								// Send the image to the client, if possible.
+								// TODO: I think this can be optimized for space if we initialize our image once, etc. etc.
+								let decoded = decoded_option.unwrap();
+								let (w,h) = decoded.dimensions();
+								let mut decoded_image = image::RgbImage::new(w as u32, h as u32);
+								decoded.write_rgb8(&mut decoded_image);
+								self.image = Some(decoded_image.into());
+
+								let now = SystemTime::now();
+								if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
+								{
+									match send_image(self.curr_video_dst.clone(), self.curr_video_src.clone(), self.connection_map.clone())
+									{
+										Err(Error::NoVideoSource) => { }
+										Err(Error::NoVideoTarget) => { }
+										Ok(_) => {  }
+										e => { e? }
+									}
+								}
+							}
+							Err(_) =>
+							{ 	//We actually don't really care about this error.
+								//self.logger.error_from_string(format!("Received malformed video frame {frame_number}"))?;
+								//File::create(format!("test_results/malformed{frame_number}"))?.write_all(&image_buffer)?
+							}
+						}
+					}
+					self.vid_frame_number = frame_number;
+					self.frame_buffer.clear();
+				}
+				//if frame_number == 0xFF { panic!("We reached 255.") }
+			}
+
+			self.frame_buffer.extend(payload);
+
+
+		}
+
+		Ok(())
+	}
+
 }

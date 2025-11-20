@@ -79,7 +79,6 @@ struct ServerInstance
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
 	const MAX_EVENTS : usize = 1024;
-	//const HEARTBEAT_TIME: Duration = Duration::from_millis(40);
 	const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
 
@@ -94,7 +93,8 @@ fn main() -> Result<(), Error> {
 		let cloned_file = file.clone();
 		thread::Builder::new()
 			.name(String::from("Logger"))
-			.spawn(move || { do_logging(receiver, cloned_file).unwrap() })?;
+			.spawn(move || { do_logging(receiver, cloned_file).unwrap()
+			})?;
 	}
 
 	logger.info("Logger started!")?;
@@ -150,7 +150,7 @@ fn main() -> Result<(), Error> {
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
-	//let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone())?;
+	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
 	/*drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
 	drone.lock()?.rc(0, 99, 0, 0.0)?;
@@ -220,6 +220,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
+				#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
 				server.logger.info("Sending out keep-alives!")?;
 				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
 				for connection in server.ownership_map.lock()?.iter_mut() {

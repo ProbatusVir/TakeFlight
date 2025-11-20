@@ -4,8 +4,8 @@ use concat_arrays::concat_arrays;
 use lebe::Endian;
 use zerocopy::IntoBytes;
 use crate::drone_interface::crc::{crc16, crc16_ref, crc8, crc8_ref};
-use crate::drone_interface::tello::packet::Command::{Land, SetSticks, TakeOff};
-use crate::drone_interface::tello::packet::PacketType::{Data2, SetInfo};
+use crate::drone_interface::tello::packet::Command::{Land, SetSticks, TakeOff, VideoBitrate, VideoResolution, SPSPPS};
+use crate::drone_interface::tello::packet::PacketType::{Data2, GetInfo, SetInfo};
 use crate::UdpSocket;
 use crate::Error;
 use num_enum::{Default, FromPrimitive, IntoPrimitive};
@@ -48,6 +48,9 @@ pub enum Command
 	LogConfig = 0x5210_u16.to_be(),
 	WifiStatus = 0x1a00_u16.to_be(),
 	LightStrength = 0x3500_u16.to_be(),
+	SPSPPS = 0x2500_u16.to_be(),			// This gets the H.264 SPS/PPS. C <-> S.
+	VideoBitrate = 0x2800_u16.to_be(),		// This gets the H.264 bitrate. C <-> S.
+	VideoResolution = 0x3100_u16.to_be(),
 }
 
 #[allow(dead_code)]
@@ -55,6 +58,7 @@ struct Packet
 {
 	message : Vec<u8>
 }
+
 
 /// The payload is only used for its size.
 /// The first result is the header, the second is the crc at the end.
@@ -121,23 +125,39 @@ pub fn set_sticks(sequence_number : u16, mut rx : i16, mut ry : i16, mut lx : i1
 	fb	*= MULTIPLE;
 	 */
 
+	// The following is taken from [here](https://github.com/Alexander89/rust-tello/blob/93509c63be4008f57b7c8fb77e38efa52f465723/src/lib.rs#L481)
+	// Center = 1024. The extremes are ±364
+	// TODO: figure this out in more detail.
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	/*let rx = (rx as f32) / 100.0;
+	let ry = (ry as f32) / 100.0;
+	let lx = (lx as f32) / 100.0;
+	let ly = (ly as f32) / 100.0;
+
+	let rx = (1024.0 + 660.0 * rx) as i64;
+	let ry = (1024.0 + 660.0 * ry) as i64;
+	let lx = (1024.0 + 660.0 * lx) as i64;
+	let ly = (1024.0 + 660.0 * ly) as i64;
+*/
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	let rx = 1024 + (66 * rx) / 100;
+	let ry = 1024 + (66 * ry) / 100;
+	let lx = 1024 + (66 * lx) / 100;
+	let ly = 1024 + (66 * ly) / 100;
+
+	let fast = false; // FIXME: This should be a member variable.
 	let packed_axes= {
-	((rx & 0x07FF)	as i64)
+	((rx & 0x07FF)		as i64)
 	| (((ry & 0x07FF)	as i64) << 11)
 	| (((lx & 0x07FF)	as i64) << 22)
-	| (((ly & 0x07FF)	as i64) << 33)}.to_be_bytes();
-
-
+	| (((ly & 0x07FF)	as i64) << 33)
+	| (if fast { 1 } else { 0 }) << 44}.to_le_bytes();
 
 	let now = chrono::Local::now();
-	/*let hour = now.hour() as u8;
+	let hour = now.hour() as u8;
 	let min = now.minute() as u8;
 	let sec = now.second() as u8;
-	let ms : [u8;2] = ((now.nanosecond() / 1_000_000) as u16).to_le_bytes();*/
-	let hour = 0;
-	let min = 0;
-	let sec = 0;
-	let ms = [0, 0];
+	let ms : [u8;2] = ((now.nanosecond() / 1_000_000) as u16).to_le_bytes();
 
 	let payload : [u8;11] = {[
 		packed_axes[0],
@@ -199,48 +219,67 @@ pub fn strip_payload(packet : &[u8]) -> &[u8]
 	&packet[9..packet.len() - 2]
 }
 
+pub fn query_video_bitrate(sequence_number : u16) -> [u8;11]
+{
+	let (footer, header) = packet_header(&[], GetInfo, VideoBitrate, sequence_number);
+	concat_arrays!(footer, header)
+}
+
+pub fn query_video_sps_pps(sequence_number : u16) -> [u8;11]
+{
+	let (footer, header) = packet_header(&[], Data2, SPSPPS, sequence_number);
+	concat_arrays!(footer, header)
+}
+
+/// Ask for future packets to be in 4:3 aspect ratio.
+pub fn request_4_3_video(sequence_number : u16) -> [u8;11]
+{
+	let (footer, header) = packet_header(&[], SetInfo, VideoResolution, sequence_number);
+	concat_arrays!(footer, header)
+}
+
 #[derive(Debug)]
 pub struct FlightData
 {
-	height			: u16, // DECIMETERS???
-	v_north			: u16,
-	v_east			: u16,
-	v_vert			: u16,
-	fly_time		: u16,
+	pub height			: u16, // DECIMETERS???
+	pub v_north			: u16,
+	pub v_east			: u16,
+	pub v_vert			: u16,
+	pub fly_time		: u16,
 
 	// Sensor states?
-	imu_state		: bool,
-	pressure_state	: bool,
-	below_state		: bool,
-	power_state		: bool,
-	battery_state	: bool,
-	gravity_state	: bool,
-	wind_state		: bool,
+	pub imu_state		: bool,
+	pub pressure_state	: bool,
+	pub below_state		: bool,
+	pub power_state		: bool,
+	pub battery_state	: bool,
+	pub gravity_state	: bool,
+	pub wind_state		: bool,
 
-	imu_calibration	: u8,	// not sure.
-	battery_percent	: u8,
-	time_remaining	: u16,	// In ms??
-	battery_mvolts	: u16,
+	pub imu_calibration	: u8,	// not sure.
+	pub battery_percent	: u8,
+	pub time_remaining	: u16,	// In ms??
+	pub battery_mvolts	: u16,
 
-	is_flying		: bool,
-	is_on_ground	: bool,
-	is_em_open		: bool,	// Electromagnets?? Electrical machinery???
-	is_hovering		: bool,
-	outage_recording: bool,
-	is_battery_low	: bool,
-	is_battery_crit	: bool,
-	is_factory_mode	: bool,
+	pub is_flying		: bool,
+	pub is_on_ground	: bool,
+	pub is_em_open		: bool,	// Electromagnets?? Electrical machinery???
+	pub is_hovering		: bool,
+	pub outage_recording: bool,
+	pub is_battery_low	: bool,
+	pub is_battery_crit	: bool,
+	pub is_factory_mode	: bool,
 
-	fly_mode		: u8,
-	throw_fly_timer	: u8,
-	camera_state	: u8,
-	electrical_machinery_state : u8,
+	pub fly_mode		: u8,
+	pub throw_fly_timer	: u8,
+	pub camera_state	: u8,
+	pub electrical_machinery_state : u8,
 
 	// I have NO clue what this means...
-	front_in		: bool,
-	front_out		: bool,
-	front_lsc		: bool,
-	error_state		: bool,
+	pub front_in		: bool,
+	pub front_out		: bool,
+	pub front_lsc		: bool,
+	pub error_state		: bool,
 }
 
 impl FlightData

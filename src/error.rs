@@ -21,7 +21,14 @@ pub enum Error
 	SqliteError(rusqlite::Error),
 	SerdeJSON(serde_json::Error),
 	FromUtf8Error(std::string::FromUtf8Error),
-	SystemTimeError(std::time::SystemTimeError)
+	SystemTimeError(std::time::SystemTimeError),
+	TryFromSliceError(std::array::TryFromSliceError),
+}
+
+
+impl From<std::array::TryFromSliceError> for Error
+{
+	fn from(value: std::array::TryFromSliceError) -> Self { Error::TryFromSliceError(value) }
 }
 
 impl From<std::time::SystemTimeError> for Error
@@ -130,6 +137,7 @@ impl Display for Error {
 			Error::SerdeJSON(e) => { e.fmt(f) }
 			Error::FromUtf8Error(e) => { e.fmt(f) }
 			Error::SystemTimeError(e) => { e.fmt(f) }
+			Error::TryFromSliceError(e) => { e.fmt(f) }
 		}
 	}
 }
