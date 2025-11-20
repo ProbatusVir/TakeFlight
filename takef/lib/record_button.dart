@@ -1,82 +1,71 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-GlobalKey previewKey = GlobalKey();
-List<Uint8List> capture = [];
-late Timer recordingTimer;
-
-Future<void> captureFrames() async{
-  final boundary = previewKey.currentContext!.findRenderObject()
-      as RenderRepaintBoundary;
-  //Capture Raw Image
-  final uiImage = await boundary.toImage(pixelRatio: 1.0);
-
-  //convert to raw RGBA byte buffer
-  final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-
-  if (byteData == null){
-    throw Exception('Could not get byte data from ui.Image');
-  }
-
-  final rgbaBytes = byteData.buffer;
-
-  // Create a package:image.Image from the raw RGBA bytes
-  final img.Image image = img.Image.fromBytes(
-    width: uiImage.width,
-    height: uiImage.height,
-    bytes: rgbaBytes,
-    format: img.Format.uint8,
-  );
-
-  //encode image to Jpeg
-  final Uint8List jpegBytes = img.encodeJpg(image, quality: 85);
-}
-
-void startRecording(){
-  capture.clear(); //clear list incase its still has data in it
-  //start a timer
-  recordingTimer = Timer.periodic(Duration(milliseconds: 33), (_){
-    captureFrames();
-  });
-}
-
-void stopRecording() async{
-recordingTimer.cancel();
-// save captured frames to mp4
-await encodeToVideo(capture);
-
-}
-
-Future<void> encodeToVideo(List<Uint8List> capture) async {
- final dir = Directory.current.path.replaceAll("\\", "/");
- final recordingDir = Directory('$dir/assets/Recordings');
-
- final output = '${recordingDir.path}/testRec.mp4';
-
- //using ffmpeg to build video at 30fps
-  final command = '''
-  ffmpeg -f rawvideo -pix_fmt rgba -s WIDTHxHEIGHT -i - $output.mp4
-  ''';
-
-  //Execute command
-  await FFmpegKit.execute(command);
-}
 
 class RecordButton extends StatefulWidget{
-  const RecordButton({super.key});
+  const RecordButton({super.key, required this.getFrames});
+  final List<Uint8List>? Function() getFrames;
+
   @override
   State<RecordButton> createState() => _RecordButtonState();
 }
 
 class _RecordButtonState extends State<RecordButton>{
   bool isRecording = false;
+  Timer? capture;
+  late String outPath;
+  late String pngPath;
+  late Directory frameDir;
+
+  void startRecording() async{
+    //create output path
+    final dir = Directory.current.path;
+    final timeStamp = DateTime.now().millisecondsSinceEpoch;
+    outPath = path.join(dir, 'assets', 'Recordings', 'testRec-$timeStamp.mp4');
+    //setup file directory to place a png list
+    final pngDir = path.join(dir, 'assets', 'Recordings', 'PngFrames');
+    pngPath = path.join(pngDir, 'frames-$timeStamp');
+    frameDir = Directory(pngPath);
+    //creates the directory in case it doesn't exist
+    if(!await frameDir.exists()){
+      await frameDir.create(recursive: true);
+    }
+    
+    int frameCount = 0; //count for the number of frames
+    //capture frames at 20 fps
+    capture = Timer.periodic(Duration(milliseconds: 50), (timer) async {
+      //get images from video_feed file
+      final jpeg = widget.getFrames();
+      if(jpeg == null || jpeg.isEmpty) throw Exception('Error: No received jpeg Images');
+      //loop through to get all the bytes
+      for(final frames in jpeg){
+        //decode images to turn into png images
+        final decode = img.decodeJpg(frames);
+        if(decode == null) {
+          print('Warning: Skipped a frame due to decode failure');
+          continue;
+        }
+        final framePath = path.join(pngPath, 'frame_${frameCount.toString().padLeft(4, '0')}.png');
+        await File(framePath).writeAsBytes(img.encodePng(decode));
+        frameCount++;
+      }
+    });
+  }
+
+  void stopRecording() async{
+    //stops timer
+    capture?.cancel();
+    //Finishes the video encoder and saves it
+   final command = '-framerate 20 -i $frameDir/frame_%04d.png '
+       '-c:v libx264 -pix_fmt yuv420p $outPath';
+   await FFmpegKit.execute(command);
+  }
 
   @override
   Widget build(BuildContext context) {

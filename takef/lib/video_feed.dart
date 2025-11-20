@@ -6,14 +6,15 @@ class VideoFeed extends StatefulWidget{
   const VideoFeed({super.key});
 
   @override
-  State<VideoFeed> createState() => _VideoFeedState();
+  State<VideoFeed> createState() => VideoFeedState();
 }
 
-class _VideoFeedState extends State<VideoFeed>{
+class VideoFeedState extends State<VideoFeed>{
   late Timer timer;
   int frame = 0;
   late List<Image> feed;
   bool isLoad = false;
+  List<Uint8List> currentFrame = [];
 
   //on creation of the state sets the list time and frame
   @override void initState() {
@@ -31,12 +32,14 @@ class _VideoFeedState extends State<VideoFeed>{
     for(var i = 1; i <= 200; i++){
       //wait to load all images into memory
       final bytes = await rootBundle.load('assets/simulated_feed/ezgif-frame-${i.toString().padLeft(3, '0')}.jpg');
-      feed.add(Image.memory(bytes.buffer.asUint8List(), gaplessPlayback: true, fit: BoxFit.fill));
+      final frameBytes = bytes.buffer.asUint8List();
+      currentFrame.add(frameBytes);
+      feed.add(Image.memory(frameBytes, gaplessPlayback: true, fit: BoxFit.fill));
     }
   }
 
   void start() {
-    timer = Timer.periodic(const Duration(milliseconds: 20), (_) {
+    timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       setState(() {
         frame = (frame + 1) % feed.length;
       });

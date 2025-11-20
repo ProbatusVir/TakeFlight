@@ -12,6 +12,8 @@ class FlightScreen extends StatefulWidget{
   State<FlightScreen> createState() => _FlightScreenState();
 }
 class _FlightScreenState extends State<FlightScreen>{
+  //create a global key to access the curentFrame variable in video feed
+  final GlobalKey<VideoFeedState> videoKey = GlobalKey();
 
   void rc(double lr, double ud, double fb, double rot){
     //TODO::Change to future async once server connection is there
@@ -54,10 +56,7 @@ class _FlightScreenState extends State<FlightScreen>{
       ),
       body: Stack(
         children: [
-          RepaintBoundary(
-            key: previewKey,
-            child: Center(child: VideoFeed(),),
-          ), //placement for video feed and to record it
+          Center(child: VideoFeed(key: videoKey,),),//placement for video feed and to record it
           Align( //Aligns user menu to bottom center of the screen
             alignment: Alignment.bottomCenter,
             child: Padding(
@@ -76,7 +75,7 @@ class _FlightScreenState extends State<FlightScreen>{
                         icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 50.0,)
                     ),
                     //TODO::Implement actual recording logic here
-                    RecordButton(),
+                    RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
                         onPressed: () {
                           Navigator.of(context).push(
