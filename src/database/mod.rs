@@ -1,8 +1,8 @@
 mod entry;
 
-use rusqlite as sql;
 use crate::error::Error;
-use rusqlite::{params, named_params, Connection, OptionalExtension};
+use rusqlite as sql;
+use rusqlite::{named_params, params, Connection, OptionalExtension};
 
 pub const DB_DIR : &str = "logs/flightdb.db3";
 pub const SCRIPTS_DIR : &str = "src/sql_scripts";

@@ -13,24 +13,23 @@ mod database;
 #[cfg(test)]
 mod tests;
 
+use crate::app_network::{handle_connection, ClientSocketType};
 use crate::drone_interface::Drone;
+use crate::logger::{do_logging, Logger};
 use error::Error;
+use local_ip_address::local_ip;
 use mio;
 use mio::net::{TcpListener, TcpStream, UdpSocket};
 use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
-use std::fmt::{Debug, };
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::{ErrorKind, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::thread::sleep;
 use std::time::Duration;
-use local_ip_address::local_ip;
-use crate::app_network::{handle_connection, ClientSocketType};
-use crate::logger::{do_logging, Logger};
 use takeflight_computer_vision as computer_vision;
 
 #[allow(dead_code)]

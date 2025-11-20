@@ -5,7 +5,6 @@ use std::io::Write;
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, };
-use crate::logger::LoggingLevel::Info;
 
 enum LoggingLevel
 {

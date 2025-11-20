@@ -1,6 +1,5 @@
 
 mod drone;
-pub use drone::Drone;
 
 //#[test]
 /*pub(crate) fn test() -> Result<(), Error>

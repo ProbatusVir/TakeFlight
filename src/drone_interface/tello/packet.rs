@@ -1,14 +1,14 @@
-use std::io::{Cursor, Read};
-use chrono::Timelike;
-use concat_arrays::concat_arrays;
-use lebe::Endian;
-use zerocopy::IntoBytes;
 use crate::drone_interface::crc::{crc16, crc16_ref, crc8, crc8_ref};
 use crate::drone_interface::tello::packet::Command::{Land, SetSticks, TakeOff, VideoBitrate, VideoResolution, SPSPPS};
 use crate::drone_interface::tello::packet::PacketType::{Data2, GetInfo, SetInfo};
-use crate::UdpSocket;
 use crate::Error;
+use crate::UdpSocket;
+use chrono::Timelike;
+use concat_arrays::concat_arrays;
+use lebe::Endian;
 use num_enum::{Default, FromPrimitive, IntoPrimitive};
+use std::io::{Cursor, Read};
+use zerocopy::IntoBytes;
 
 #[allow(dead_code)]
 const HEADER : u8 = 0xCC;

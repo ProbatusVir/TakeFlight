@@ -1,5 +1,5 @@
-use std::{fmt};
 use std::fmt::{Display, Formatter};
+use std::fmt;
 
 #[derive(Debug)]
 pub enum Error

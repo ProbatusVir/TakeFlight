@@ -1,4 +1,3 @@
-use const_format::formatcp;
 use zerocopy::{Immutable, IntoBytes};
 
 #[allow(dead_code)]
