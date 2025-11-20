@@ -378,7 +378,11 @@ impl TelloDrone
 			}
 
 			drone_lock.connect()?;
+
+			// FIXME: DEBUG
+			*drone_lock.curr_video_dst.lock()? = Some(vid_token);
 		}
+
 		Ok(this_drone)
 	}
 
@@ -630,6 +634,8 @@ impl TelloDrone
 								let now = SystemTime::now();
 								if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
 								{
+
+									self.logger.warn_from_string(format!("Attempting to send video to {}", self.curr_video_dst.lock()?.unwrap_or(Token(0)).0))?;
 									match send_image(self.curr_video_dst.clone(), self.curr_video_src.clone(), self.connection_map.clone())
 									{
 										Err(Error::NoVideoSource) => { }

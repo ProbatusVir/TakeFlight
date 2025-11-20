@@ -39,7 +39,9 @@ pub fn handle_connection(mut stream : TcpStream, server : &mut ServerInstance) -
 				Connection::Client(Control, stream)
 			}
 			Video => {
-				*server.video_out.lock()? = Some(token);
+				let peer_port = stream.peer_addr()?.port() as usize;
+				server.logger.info_from_string(format!("New video destination: {peer_port}" ))?;
+				*server.video_out.lock()? = Some(Token(peer_port));
 				Connection::VideoOut(Video, stream)
 			}
 			_ => { Err(Error::Custom("Invalid socket handshake."))? }
