@@ -104,24 +104,27 @@ fn main() -> Result<(), Error> {
 	// Start the server
 	let poll = Arc::new(Mutex::new(Poll::new()?));
 	let mut listener = TcpListener::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
+	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
 	let server_address = listener.local_addr()?;
 
 	// Handle arguments
 	{
 		let mut args = std::env::args();
+		logger.info_from_string(format!("We received {} arguments...", args.len()))?;
 		if args.len() == 2
 		{
 			let port : u16 = args.nth(1).unwrap().parse()?;
+			let port_to_send = server_address.port();
 			let negotiator = UdpSocket::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
-			negotiator.send_to(&server_address.port().to_be_bytes(), SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)))?;
-			logger.info("Client asked for server socket.")?;
+			let client_address = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port));
+			negotiator.send_to(&port_to_send.to_be_bytes(), client_address)?;
+			logger.info_from_string(format!("Sent port {} to {}:{}", port_to_send, client_address, client_address.port()))?;
 		}
 	}
 
 	//test
 	logger.info(&format!("Listening on all IPv4 interfaces. Network address: {}, port {}", local_ip()?, server_address.port()))?;
 
-	poll.lock()?.registry().register(&mut listener, LISTENER, Interest::READABLE)?;
 
 	// Start heartbeat
 	{
@@ -203,18 +206,20 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 					{
 						Ok((mut stream, address)) => {
 							let token = Token(address.port() as usize);
-								server.poll.lock()?.registry().register(
-									&mut stream,
-									token.clone(),
-									Interest::READABLE)?;
+							server.poll.lock()?.registry().register(
+								&mut stream,
+								token.clone(),
+								Interest::READABLE)?;
 
-								server.ownership_map.lock()?.insert(
-									token,
-									Connection::TCP(stream),
-								);
+							server.logger.info_from_string(format!("Accepting TCP stream: {}:{}", address.ip(), address.port()))?;
+
+							server.ownership_map.lock()?.insert(
+								token,
+								Connection::TCP(stream),
+							);
 							}
 						Err(e) => {
-							if e.kind() == ErrorKind::WouldBlock {continue}
+							if e.kind() == ErrorKind::WouldBlock {break}
 							else { return Err(e.into()) }
 						}
 					}
