@@ -25,8 +25,12 @@ enum VideoCode
 
 /// This will only be called when a socket initiates connection.
 /// This will not reacquire a lock on the ownership map.
-pub fn handle_connection(mut stream : TcpStream, server : &mut ServerInstance) -> Result<Connection, Error>
+pub fn handle_connection(mut stream : TcpStream,
+						 server		: &mut ServerInstance,
+) -> Result<Connection, Error>
 {
+	// : &mut HashMap<Token, Connection>
+	// Arc<Mutex<Option<Token>>>
 	let mut handshake_buffer = [0;3];
 	stream.read_exact(&mut handshake_buffer)?;
 

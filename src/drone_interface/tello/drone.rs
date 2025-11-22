@@ -380,7 +380,7 @@ impl TelloDrone
 			drone_lock.connect()?;
 
 			// FIXME: DEBUG
-			*drone_lock.curr_video_dst.lock()? = Some(vid_token);
+			*drone_lock.curr_video_src.lock()? = Some(vid_token);
 		}
 
 		Ok(this_drone)
@@ -638,10 +638,10 @@ impl TelloDrone
 									self.logger.warn_from_string(format!("Attempting to send video to {}", self.curr_video_dst.lock()?.unwrap_or(Token(0)).0))?;
 									match send_image(self.curr_video_dst.clone(), self.curr_video_src.clone(), self.connection_map.clone())
 									{
-										Err(Error::NoVideoSource) => { }
-										Err(Error::NoVideoTarget) => { }
-										Ok(_) => {  }
-										e => { e? }
+										Err(Error::NoVideoSource) => { self.logger.info("Tello didn't consider itself a valid video source?")? }
+										Err(Error::NoVideoTarget) => { self.logger.info("No valid video destination.")? }
+										Ok(_) => { self.logger.info("Video sent")?; }
+										e => { self.logger.warn("Some error occured while Tello was sending video...")?; e? }
 									}
 								}
 							}
