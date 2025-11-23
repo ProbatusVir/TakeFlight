@@ -41,8 +41,8 @@ pub(crate) enum Connection
 {
 	TCP(TcpStream),
 	UDP(UdpSocket),
-	Client(ClientSocketType, TcpStream),
-	VideoOut(ClientSocketType, TcpStream), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
+	Client(ClientSocketType, Arc<Mutex<TcpStream>>),
+	VideoOut(ClientSocketType, Arc<Mutex<TcpStream>>), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
 	Drone(Arc<Mutex<dyn Drone>>),
 	Camera(), // FIXME: This needs fields.
 }
@@ -267,12 +267,48 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 				}
 			}
 			token => {
-				// FIXME: If we can do this without removing, that would be really cool.
-				let found_connection = server.ownership_map.lock()?.remove(&token);
-				match found_connection
+
+				// This is gore.
+				// We need to remove the silly TCP stream to reassign it to a proper role. I desperately need to find a better way.
+				let ownership_map_clone = server.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
+				let mut ownership_map_lock = ownership_map_clone.lock()?;
+
+				let needs_reassigned = {
+					let found_connection_wrapped = ownership_map_lock.get(&token);
+					if found_connection_wrapped.is_none()
+					{
+						logger.error_from_string(format!("Unmapped port: {}", token.0))?;
+						return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
+					}
+
+					match found_connection_wrapped {
+						Some(Connection::TCP(_)) => { true }
+						_ => { false }
+					}
+				};
+
+				if needs_reassigned
+				{
+					let found_connection = ownership_map_lock.remove(&token);
+					let new_item = match found_connection
+					{
+						Some(Connection::TCP(stream)) => { handle_connection(stream, server)? }
+						_ => {continue}
+					};
+
+					ownership_map_lock.insert(token, new_item);
+					continue;
+				}
+
+				let found_connection = ownership_map_lock.get(&token);
+				let cloned_connection = found_connection.unwrap().try_clone();
+				drop(ownership_map_lock);
+
+				// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
+				match cloned_connection
 				{
 					Some(found) => {
-						let connection = match found {
+						match found {
 							Connection::Drone(drone) => {
 								// Receive signal will always go until an error is encountered.
 								// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
@@ -281,24 +317,18 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 										match e
 										{
 											Error::IOError(io_error) => {
-												if io_error.kind() == ErrorKind::WouldBlock { /* noop */ }
-												else { Err(io_error)? }
+												if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
 											}
 											_ => { Err(e)? }
 										}
 									}
 									_ => { /* noop */ }
 								}
-								Connection::Drone(drone)
 							}
-							Connection::TCP(stream) => { handle_connection(stream, server)? }
 							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 						};
-
-						server.ownership_map.lock()?.insert(token, connection);
 					}
-					// This seems like it should be an unrecoverable error, so I'm putting this here.
-					None => { logger.error_from_string(format!("Unmapped port: {}", token.0))?; return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!")) }
+					None => panic!("We already checked that the connection exists.")
 				}
 			}
 		}
@@ -350,15 +380,16 @@ pub(crate) fn send_image(
 
 		}
 		Connection::Camera() => todo!(),
-		_ => { Err(Error::NoVideoSource)? }
+		_ => { dbg!("Oh, we're silly billies who forgot how our own enumerator worked???"); Err(Error::NoVideoSource)? }
 	};
 
 	match out
 	{
 		Connection::VideoOut(cnx_type, ref mut stream) => {
-			stream.write(&[u8::from(cnx_type.clone())])?;
-			stream.write(&(image.len() as u16).to_be_bytes())?;
-			stream.write_all(&image)?
+			let mut stream_lock = stream.lock()?;
+			stream_lock.write(&[u8::from(cnx_type.clone())])?;
+			stream_lock.write(&(image.len() as u16).to_be_bytes())?;
+			stream_lock.write_all(&image)?
 		}
 		_ => { Err(Error::NoVideoTarget)? }
 	}
@@ -368,3 +399,19 @@ pub(crate) fn send_image(
 
 	Ok(())
 }
+
+impl Connection
+{
+	pub(crate) fn try_clone(&self) -> Option<Self>
+	{
+		match self {
+			Connection::Client(client_type, stream_arc_mtx) => { Some(Connection::Client(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::VideoOut(client_type, stream_arc_mtx) => { Some(Connection::VideoOut(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::Drone(drone) => { Some(Connection::Drone(drone.clone())) }
+			Connection::Camera() => { todo!("We have no support yet for camera types. We're not sure if cloning a camera is even possible.") }
+			_ => {	None }
+		}
+	}
+
+}
+
