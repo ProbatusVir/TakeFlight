@@ -39,7 +39,7 @@ use takeflight_computer_vision as computer_vision;
 #[derive(Debug)]
 pub(crate) enum Connection
 {
-	TCP(Arc<Mutex<TcpStream>>),
+	TCP(TcpStream),
 	UDP(UdpSocket),
 	Client(ClientSocketType, Arc<Mutex<TcpStream>>),
 	VideoOut(ClientSocketType, Arc<Mutex<TcpStream>>), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
@@ -301,7 +301,11 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 				}
 
 				let found_connection = ownership_map_lock.get(&token);
-				match found_connection
+				let cloned_connection = found_connection.unwrap().try_clone();
+				drop(ownership_map_lock);
+
+				// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
+				match cloned_connection
 				{
 					Some(found) => {
 						match found {
@@ -382,9 +386,10 @@ pub(crate) fn send_image(
 	match out
 	{
 		Connection::VideoOut(cnx_type, ref mut stream) => {
-			stream.write(&[u8::from(cnx_type.clone())])?;
-			stream.write(&(image.len() as u16).to_be_bytes())?;
-			stream.write_all(&image)?
+			let mut stream_lock = stream.lock()?;
+			stream_lock.write(&[u8::from(cnx_type.clone())])?;
+			stream_lock.write(&(image.len() as u16).to_be_bytes())?;
+			stream_lock.write_all(&image)?
 		}
 		_ => { Err(Error::NoVideoTarget)? }
 	}
@@ -394,3 +399,19 @@ pub(crate) fn send_image(
 
 	Ok(())
 }
+
+impl Connection
+{
+	pub(crate) fn try_clone(&self) -> Option<Self>
+	{
+		match self {
+			Connection::Client(client_type, stream_arc_mtx) => { Some(Connection::Client(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::VideoOut(client_type, stream_arc_mtx) => { Some(Connection::VideoOut(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::Drone(drone) => { Some(Connection::Drone(drone.clone())) }
+			Connection::Camera() => { todo!("We have no support yet for camera types. We're not sure if cloning a camera is even possible.") }
+			_ => {	None }
+		}
+	}
+
+}
+

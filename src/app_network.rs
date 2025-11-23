@@ -3,6 +3,7 @@ use crate::{Connection, Error, ServerInstance, TcpStream};
 use mio::Token;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::Read;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]
@@ -40,13 +41,13 @@ pub fn handle_connection(mut stream : TcpStream,
 		match handshake_buffer[2].into() {
 			Control => {
 				server.drone_control = Some(token);
-				Connection::Client(Control, stream)
+				Connection::Client(Control, Arc::new(Mutex::new(stream)))
 			}
 			Video => {
 				let peer_port = stream.peer_addr()?.port() as usize;
 				server.logger.info_from_string(format!("New video destination: {peer_port}" ))?;
 				*server.video_out.lock()? = Some(Token(peer_port));
-				Connection::VideoOut(Video, stream)
+				Connection::VideoOut(Video, Arc::new(Mutex::new(stream)))
 			}
 			_ => { Err(Error::Custom("Invalid socket handshake."))? }
 		};
