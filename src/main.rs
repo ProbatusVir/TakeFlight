@@ -28,7 +28,7 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -41,8 +41,8 @@ pub(crate) enum Connection
 {
 	TCP(TcpStream),
 	UDP(UdpSocket),
-	Client(ClientSocketType, TcpStream),
-	VideoOut(ClientSocketType, TcpStream), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
+	Client(ClientSocketType, Arc<Mutex<TcpStream>>),
+	VideoOut(ClientSocketType, Arc<Mutex<TcpStream>>), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
 	Drone(Arc<Mutex<dyn Drone>>),
 	Camera(), // FIXME: This needs fields.
 }
@@ -57,6 +57,8 @@ impl TryInto<TcpStream> for Connection
 		}
 	}
 }
+
+type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
 
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
@@ -267,12 +269,49 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 				}
 			}
 			token => {
-				// FIXME: If we can do this without removing, that would be really cool.
-				let found_connection = server.ownership_map.lock()?.remove(&token);
-				match found_connection
+
+				// This is gore.
+				// We need to remove the silly TCP stream to reassign it to a proper role. I desperately need to find a better way.
+				let cloned_connection = {
+					let ownership_map_clone = server.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
+					let mut ownership_map_lock = ownership_map_clone.lock()?;
+
+					let needs_reassigned = {
+						let found_connection_wrapped = ownership_map_lock.get(&token);
+						if found_connection_wrapped.is_none()
+						{
+							logger.error_from_string(format!("Unmapped port: {}", token.0))?;
+							return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
+						}
+
+						match found_connection_wrapped {
+							Some(Connection::TCP(_)) => { true }
+							_ => { false }
+						}
+					};
+
+					if needs_reassigned
+					{
+						let found_connection = ownership_map_lock.remove(&token);
+						let new_item = match found_connection
+						{
+							Some(Connection::TCP(stream)) => { handle_connection(stream, server)? }
+							_ => { continue }
+						};
+
+						ownership_map_lock.insert(token, new_item);
+						continue;
+					}
+
+					let found_connection = ownership_map_lock.get(&token);
+					found_connection.unwrap().try_clone()
+				};
+
+				// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
+				match cloned_connection
 				{
 					Some(found) => {
-						let connection = match found {
+						match found {
 							Connection::Drone(drone) => {
 								// Receive signal will always go until an error is encountered.
 								// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
@@ -281,24 +320,18 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 										match e
 										{
 											Error::IOError(io_error) => {
-												if io_error.kind() == ErrorKind::WouldBlock { /* noop */ }
-												else { Err(io_error)? }
+												if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
 											}
 											_ => { Err(e)? }
 										}
 									}
 									_ => { /* noop */ }
 								}
-								Connection::Drone(drone)
 							}
-							Connection::TCP(stream) => { handle_connection(stream, server)? }
 							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 						};
-
-						server.ownership_map.lock()?.insert(token, connection);
 					}
-					// This seems like it should be an unrecoverable error, so I'm putting this here.
-					None => { logger.error_from_string(format!("Unmapped port: {}", token.0))?; return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!")) }
+					None => panic!("We already checked that the connection exists.")
 				}
 			}
 		}
@@ -318,53 +351,20 @@ impl ServerInstance
 
 }
 
-pub(crate) fn send_image(
-	out				: Arc<Mutex<Option<Token>>>,
-	src				: Arc<Mutex<Option<Token>>>,
-	ownership_map	: Arc<Mutex<HashMap<Token, Connection>>>,
-) -> Result<(), Error>
+impl Connection
 {
-	// While this is a large critical section, I actually think it's for the best, due to all the validations and possible reassignments of our streams.
-	let mut video_out = out.lock()?;
-	let mut video_src = src.lock()?;
-
-	let video_out_token = video_out.ok_or(Error::NoVideoTarget)?;
-	let video_src_token = video_src.ok_or(Error::NoVideoSource)?;
-
-	let mut ownership_lock = ownership_map.lock()?;
-	let src = ownership_lock.remove(&video_src_token).ok_or_else(|| {
-		*video_src = None;
-		Error::NoVideoSource
-	})?;
-	let mut out = ownership_lock.remove(&video_out_token).ok_or_else(|| {
-		*video_out = None;
-		Error::NoVideoTarget
-	})?;
-
-	let image = match &src {
-		Connection::Drone(source) => {
-			{
-				let mut source_lock = source.lock()?;
-				source_lock.snapshot().clone().ok_or(Error::Custom("Could not obtain image from drone!"))?.clone()
-			}
-
-		}
-		Connection::Camera() => todo!(),
-		_ => { Err(Error::NoVideoSource)? }
-	};
-
-	match out
+	pub(crate) fn try_clone(&self) -> Option<Self>
 	{
-		Connection::VideoOut(cnx_type, ref mut stream) => {
-			stream.write(&[u8::from(cnx_type.clone())])?;
-			stream.write(&(image.len() as u16).to_be_bytes())?;
-			stream.write_all(&image)?
+		match self {
+			Connection::Client(client_type, stream_arc_mtx) => { Some(Connection::Client(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::VideoOut(client_type, stream_arc_mtx) => { Some(Connection::VideoOut(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::Drone(drone) => { Some(Connection::Drone(drone.clone())) }
+			Connection::Camera() => { todo!("We have no support yet for camera types. We're not sure if cloning a camera is even possible.") }
+			_ => {	None }
 		}
-		_ => { Err(Error::NoVideoTarget)? }
 	}
 
-	ownership_lock.insert(video_src_token, src);
-	ownership_lock.insert(video_out_token, out);
-
-	Ok(())
 }
+
+
+

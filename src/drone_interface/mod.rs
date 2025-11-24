@@ -4,9 +4,15 @@ pub mod tello;
 pub mod drone_pro;
 mod crc;
 
-use crate::Error;
+use std::collections::HashMap;
+use crate::{Connection, Error, ServerMap};
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::io::Write;
+use std::sync::{Arc, Mutex};
+use image::DynamicImage;
+use mio::net::UdpSocket;
+use mio::Token;
+use crate::app_network::{send_image, VideoCode};
 
 /// The unit corresponds to a centimeter, for now; even if the precision of the drone is not matched to the centimeter.
 
@@ -76,7 +82,7 @@ pub trait Drone : Debug
 	fn cclockwise_rot(&mut self, rads : f32) -> Result<(), Error>;
 
 	/// Will return a picture from the drone's video feed.
-	fn snapshot(&mut self) -> Option<Arc<Vec<u8>>>;
+	fn snapshot(&mut self) -> Option<Arc<DynamicImage>>;
 
 
 	/// The drone may be free to move on all axes simultaneously.
@@ -95,4 +101,70 @@ pub trait Drone : Debug
 
 	fn send_heartbeat(&mut self) -> Result<(), Error>;
 	fn receive_signal(&mut self, port : u16) -> Result<(), Error>;
+}
+
+pub(crate) trait _DroneInternal : Drone
+{
+	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
+	fn expose_video_stream_port(&self) -> Result<u16, Error>;
+	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
+	fn expose_video_stream(&mut self) -> &mut UdpSocket;
+
+	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
+	fn expose_ownership_map(&self) -> ServerMap;
+	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
+	fn expose_server_src_token(&self) -> Arc<Mutex<Option<Token>>>;
+
+	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
+	fn expose_server_out_token(&self) -> Arc<Mutex<Option<Token>>>;
+
+	/// Actual utility to send images.
+	fn send_image(&mut self, mut video_code : VideoCode, ) -> Result<(), Error>
+	{
+		let own_vid_token = Token(self.expose_video_stream_port()? as usize);
+
+		let src = self.expose_server_src_token();
+		let out = self.expose_server_out_token();
+
+		// While this is a large critical section, I actually think it's for the best, due to all the validations and possible reassignments of our streams.
+		let mut video_src = src.lock()?;
+		let mut video_out = out.lock()?;
+
+		let (video_src_token, video_out_token) = crate::app_network::_validate_tokens_exist(&video_src, &video_out)?;
+
+		// Make sure that we are the source (or not), and that we are NOT the destination.
+		debug_assert_ne!(video_out.unwrap_or(Token(0)), own_vid_token);    // Just make sure it's not possible for our drone to be receiving our video.
+		if own_vid_token != video_src_token { return Err(Error::NoVideoSource); }
+
+		// Get the relevant sockets if they're still valid, or make sure they are unregistered.
+		// TODO: We should investigate whether we also need to unregister these from the registry.
+		let ownership_map = self.expose_ownership_map();
+		let mut ownership_lock = ownership_map.lock()?;
+		let src = ownership_lock.get_mut(&video_src_token).ok_or_else(|| {
+			*video_src = None;
+			Error::NoVideoSource
+		})?;
+		let mut out = ownership_lock.get_mut(&video_out_token).ok_or_else(|| {
+			*video_out = None;
+			Error::NoVideoTarget
+		})?;
+
+		// The requested format will override the one specified by the drone.
+		// FIXME: This is more of a shortcoming of our own network specification.
+		/*
+		match out {
+			Connection::Client(_, _) => { video_code = format }
+			Connection::VideoOut(_, _) => { video_code = format }
+			_ => { /* noop */ }
+		}*/
+
+		let image = self.snapshot();
+
+		match image
+		{
+			Some(img) => { send_image(&mut out, &img, video_code) } // not this trait's `send_image`.
+			None => { Err(Error::NoVideoSource) }
+		}
+	}
+
 }
