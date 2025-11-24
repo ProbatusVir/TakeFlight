@@ -1,20 +1,23 @@
 use super::packet;
 use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
-use crate::drone_interface::{ IUnit, Unit};
+use crate::drone_interface::{IUnit, Unit, _DroneInternal};
 use crate::error::Error;
 use crate::logger::Logger;
-use crate::{debug_utils, drone_interface, send_image, Connection, Poll, Token, UdpSocket};
+use crate::{debug_utils, drone_interface, Connection, Poll, ServerMap, Token, UdpSocket};
+use crate::app_network::send_image;
 use concat_arrays::concat_arrays;
 use image::DynamicImage;
 use mio::Interest;
 use openh264::formats::YUVSource;
 use std::collections::HashMap;
 use std::io;
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zerocopy::IntoBytes;
+use crate::app_network::VideoCode::Png;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -182,12 +185,8 @@ impl drone_interface::Drone for TelloDrone
 		Ok(())
 	}
 
-	fn snapshot(&mut self) -> Option<Arc<Vec<u8>>> {
-		match &self.image
-		{
-			Some(img) => { Some(Arc::new(img.as_bytes().to_vec())) }
-			None => { None }
-		}
+	fn snapshot(&mut self) -> Option<Arc<DynamicImage>> {
+			Some(Arc::new(self.image.clone()?))
 	}
 
 	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
@@ -206,6 +205,7 @@ impl drone_interface::Drone for TelloDrone
 		Ok(())
 	}
 
+	/*
 	// FIXME: This is for debug purposes *only*
 	#[cfg(debug_assertions)]
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
@@ -238,8 +238,8 @@ impl drone_interface::Drone for TelloDrone
 
 		Ok(())
 	}
+	 */
 
-	#[cfg(not(debug_assertions))]
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
 		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
 
@@ -525,6 +525,7 @@ impl TelloDrone
 		loop
 		{
 			const END_OF_FRAME_BITMASK : u8 =  0b1000_0000;
+			const PAYLOAD_START : usize = 2;
 			// Despite what I thought, it seems that they're using a custom format for these packets.
 			// The frame starts [n_frame, 0x00, 0x00, 0x00, 0x00, 0x01, ...] (I suspect the second byte here is also the local number, but it has to be zero.)
 			// 	In contrast, the standard H.264 frame starts [0x00, 0x00, 0x01], which means that we can simply strip the first three bytes.
@@ -533,56 +534,57 @@ impl TelloDrone
 			let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
 			let frame_number = self.inner_read_buf[0];
 			let local_number = self.inner_read_buf[1];
-			let payload_start = 2; // FIXME: this is literally a numerical constant, empirically this number holds up. Once we finalize, just write 2.
-			let payload = &self.inner_read_buf[payload_start..bytes_read];
-			// let nal_type : Option<u8> = ....;
-			let end_of_frame = local_number & END_OF_FRAME_BITMASK != 0;
+			// Manipulate the internal state of this object's image related members based on the contents of the payload
+			// This scope is necessary to let go of the borrow on payload. Of course, we must reborrow this at the end of the function, as we append the payload
+			// 	to the current frame_buffer.
+			{
+				let payload = &self.inner_read_buf[PAYLOAD_START..bytes_read];
+				// let nal_type : Option<u8> = ....;
+				let end_of_frame = local_number & END_OF_FRAME_BITMASK != 0;
 
-			if bytes_read == 15 && local_number == 0x80 // FIXME: Check the NAL type instead of the length.
-			{
-				self.logger.info("Received updated SPS (larger)")?;
-				self.sps = Some(payload.try_into()?);
-			}
-			else if bytes_read == 10 && local_number == 0x80 // FIXME: Check the NAL type instead of the length
-			{
-				self.logger.info("Received updated PPS (smaller)")?;
-				self.pps = Some(payload.try_into()?);
-			}
-			else if local_number == 0x80
-			{
-				todo!("WHAT, THERE'S ANOTHER THING THAT CAN BE 0x80??? {}", payload.len())
-			}
-			// NAL unit is 0x65, if we're starting an IDR, we should clear all image buffers
-			else if payload.len() >= 4
-			{
-				if payload[4] == 0x65 && local_number == 0
+				if bytes_read == 15 && local_number == 0x80 // FIXME: Check the NAL type instead of the length.
 				{
-					self.idr_frame_number = Some(frame_number);
-					self.idr.clear();
-					self.frame_buffer.clear();
+					self.logger.info("Received updated SPS (larger)")?;
+					self.sps = Some(payload.try_into()?);
+				} else if bytes_read == 10 && local_number == 0x80 // FIXME: Check the NAL type instead of the length
+				{
+					self.logger.info("Received updated PPS (smaller)")?;
+					self.pps = Some(payload.try_into()?);
+				} else if local_number == 0x80
+				{
+					todo!("WHAT, THERE'S ANOTHER THING THAT CAN BE 0x80??? {}", payload.len())
 				}
-			}
-			// this is basically just asking if it exists yet.
-			// TODO: Make this a little cleaner.
-			match self.idr_frame_number
-			{
-				// There's no sense in doing anything with an image if there's no IDR
-				None => { continue; }
-
-				Some(n) =>
+				// NAL unit is 0x65, if we're starting an IDR, we should clear all image buffers
+				else if payload.len() > 4
+				{
+					if payload[4] == 0x65 && local_number == 0
 					{
-						// check if we're contributing to the active IDR, if we are, contribute.
-						if frame_number == n
+						self.idr_frame_number = Some(frame_number);
+						self.idr.clear();
+						self.frame_buffer.clear();
+					}
+				}
+				// this is basically just asking if it exists yet.
+				// TODO: Make this a little cleaner.
+				match self.idr_frame_number
+				{
+					// There's no sense in doing anything with an image if there's no IDR
+					None => { continue; }
+
+					Some(n) =>
 						{
-							self.idr.extend_from_slice(payload);
-							if !end_of_frame
+							// check if we're contributing to the active IDR, if we are, contribute.
+							if frame_number == n
 							{
-								continue;
+								self.idr.extend_from_slice(payload);
+								if !end_of_frame
+								{
+									continue;
+								}
 							}
 						}
-					}
+				}
 			}
-
 
 
 			//Check if the frame is ending
@@ -636,12 +638,12 @@ impl TelloDrone
 								{
 
 									self.logger.warn_from_string(format!("Attempting to send video to {}", self.curr_video_dst.lock()?.unwrap_or(Token(0)).0))?;
-									match send_image(self.curr_video_dst.clone(), self.curr_video_src.clone(), self.connection_map.clone())
+									match self.send_image(Png)
 									{
 										Err(Error::NoVideoSource) => { self.logger.info("Tello didn't consider itself a valid video source?")? }
 										Err(Error::NoVideoTarget) => { self.logger.info("No valid video destination.")? }
 										Ok(_) => { self.logger.info("Video sent")?; }
-										e => { self.logger.warn("Some error occured while Tello was sending video...")?; e? }
+										e => { self.logger.warn("Some error occurred while Tello was sending video...")?; e? }
 									}
 								}
 							}
@@ -658,6 +660,8 @@ impl TelloDrone
 				//if frame_number == 0xFF { panic!("We reached 255.") }
 			}
 
+
+			let payload = &self.inner_read_buf[PAYLOAD_START..bytes_read];
 			self.frame_buffer.extend(payload);
 
 
@@ -667,4 +671,28 @@ impl TelloDrone
 		Ok(())
 	}
 
+}
+
+
+impl _DroneInternal for TelloDrone
+{
+	fn expose_video_stream_port(&self) -> Result<u16, Error> {
+		Ok(self.video_sock.local_addr()?.port())
+	}
+
+	fn expose_video_stream(&mut self) -> &mut UdpSocket {
+		&mut self.video_sock
+	}
+
+	fn expose_ownership_map(&self) -> ServerMap {
+		self.connection_map.clone()
+	}
+
+	fn expose_server_src_token(&self) -> Arc<Mutex<Option<Token>>> {
+		self.curr_video_src.clone()
+	}
+
+	fn expose_server_out_token(&self) -> Arc<Mutex<Option<Token>>> {
+		self.curr_video_dst.clone()
+	}
 }

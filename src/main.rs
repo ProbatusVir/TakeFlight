@@ -28,7 +28,7 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -57,6 +57,8 @@ impl TryInto<TcpStream> for Connection
 		}
 	}
 }
+
+type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
 
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
@@ -270,39 +272,40 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 
 				// This is gore.
 				// We need to remove the silly TCP stream to reassign it to a proper role. I desperately need to find a better way.
-				let ownership_map_clone = server.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
-				let mut ownership_map_lock = ownership_map_clone.lock()?;
+				let cloned_connection = {
+					let ownership_map_clone = server.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
+					let mut ownership_map_lock = ownership_map_clone.lock()?;
 
-				let needs_reassigned = {
-					let found_connection_wrapped = ownership_map_lock.get(&token);
-					if found_connection_wrapped.is_none()
-					{
-						logger.error_from_string(format!("Unmapped port: {}", token.0))?;
-						return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
-					}
+					let needs_reassigned = {
+						let found_connection_wrapped = ownership_map_lock.get(&token);
+						if found_connection_wrapped.is_none()
+						{
+							logger.error_from_string(format!("Unmapped port: {}", token.0))?;
+							return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
+						}
 
-					match found_connection_wrapped {
-						Some(Connection::TCP(_)) => { true }
-						_ => { false }
-					}
-				};
-
-				if needs_reassigned
-				{
-					let found_connection = ownership_map_lock.remove(&token);
-					let new_item = match found_connection
-					{
-						Some(Connection::TCP(stream)) => { handle_connection(stream, server)? }
-						_ => {continue}
+						match found_connection_wrapped {
+							Some(Connection::TCP(_)) => { true }
+							_ => { false }
+						}
 					};
 
-					ownership_map_lock.insert(token, new_item);
-					continue;
-				}
+					if needs_reassigned
+					{
+						let found_connection = ownership_map_lock.remove(&token);
+						let new_item = match found_connection
+						{
+							Some(Connection::TCP(stream)) => { handle_connection(stream, server)? }
+							_ => { continue }
+						};
 
-				let found_connection = ownership_map_lock.get(&token);
-				let cloned_connection = found_connection.unwrap().try_clone();
-				drop(ownership_map_lock);
+						ownership_map_lock.insert(token, new_item);
+						continue;
+					}
+
+					let found_connection = ownership_map_lock.get(&token);
+					found_connection.unwrap().try_clone()
+				};
 
 				// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
 				match cloned_connection
@@ -348,58 +351,6 @@ impl ServerInstance
 
 }
 
-pub(crate) fn send_image(
-	out				: Arc<Mutex<Option<Token>>>,
-	src				: Arc<Mutex<Option<Token>>>,
-	ownership_map	: Arc<Mutex<HashMap<Token, Connection>>>,
-) -> Result<(), Error>
-{
-	// While this is a large critical section, I actually think it's for the best, due to all the validations and possible reassignments of our streams.
-	let mut video_out = out.lock()?;
-	let mut video_src = src.lock()?;
-
-	let video_out_token = video_out.ok_or(Error::NoVideoTarget)?;
-	let video_src_token = video_src.ok_or(Error::NoVideoSource)?;
-
-	let mut ownership_lock = ownership_map.lock()?;
-	let src = ownership_lock.remove(&video_src_token).ok_or_else(|| {
-		*video_src = None;
-		Error::NoVideoSource
-	})?;
-	let mut out = ownership_lock.remove(&video_out_token).ok_or_else(|| {
-		*video_out = None;
-		Error::NoVideoTarget
-	})?;
-
-	let image = match &src {
-		Connection::Drone(source) => {
-			{
-				let mut source_lock = source.lock()?;
-				source_lock.snapshot().clone().ok_or(Error::Custom("Could not obtain image from drone!"))?.clone()
-			}
-
-		}
-		Connection::Camera() => todo!(),
-		_ => { dbg!("Oh, we're silly billies who forgot how our own enumerator worked???"); Err(Error::NoVideoSource)? }
-	};
-
-	match out
-	{
-		Connection::VideoOut(cnx_type, ref mut stream) => {
-			let mut stream_lock = stream.lock()?;
-			stream_lock.write(&[u8::from(cnx_type.clone())])?;
-			stream_lock.write(&(image.len() as u16).to_be_bytes())?;
-			stream_lock.write_all(&image)?
-		}
-		_ => { Err(Error::NoVideoTarget)? }
-	}
-
-	ownership_lock.insert(video_src_token, src);
-	ownership_lock.insert(video_out_token, out);
-
-	Ok(())
-}
-
 impl Connection
 {
 	pub(crate) fn try_clone(&self) -> Option<Self>
@@ -414,4 +365,6 @@ impl Connection
 	}
 
 }
+
+
 
