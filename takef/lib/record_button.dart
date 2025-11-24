@@ -1,12 +1,34 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+//an isolate compute function has to be JSON safe
+//will work with a void function just not ideal
+void _encodeFrame(Map<String, dynamic> args){
+  //using try catch to find the silent crashes of isolate
+  try{
+    final frames = args['image'];
+    final fpath = args['path'];
+    final index = args['index'];
+
+    final decode = img.decodeJpg(frames);
+    if (decode == null) throw Exception('Frame Skipped');
+
+    final pngbytes = Uint8List.fromList(img.encodePng(decode));
+    File('$fpath/frame_${index.toString().padLeft(4, '0')}.png')
+        .writeAsBytesSync(pngbytes);
+  }catch(e){
+    //isolate crash
+    print('Isolate error: $e');
+  }
+}
 
 class RecordButton extends StatefulWidget{
   const RecordButton({super.key, required this.getFrames});
@@ -23,10 +45,24 @@ class _RecordButtonState extends State<RecordButton>{
   late String pngPath;
   late Directory frameDir;
 
-  void startRecording() async{
+  //separate isolate process to handle overloading of writing images to file
+  Future<void> process(List<Uint8List> frames, String fpath) async {
+   //loop here to avoid giving compute to much to do
+    for(int i = 0; i < frames.length; i++){
+      final result = await compute(_encodeFrame, {
+        'image': frames[i],
+        'path': fpath,
+        'index': i
+      });
+    }
+  }
+
+  Future<void> startRecording() async{
     //create output path
     final dir = Directory.current.path;
-    final timeStamp = DateTime.now().millisecondsSinceEpoch;
+    final now = DateTime.now();
+    final format = DateFormat('M-d, h:m:s a').format(now);
+    final timeStamp = format;
     outPath = path.join(dir, 'assets', 'Recordings', 'testRec-$timeStamp.mp4');
     //setup file directory to place a png list
     final pngDir = path.join(dir, 'assets', 'Recordings', 'PngFrames');
@@ -36,50 +72,39 @@ class _RecordButtonState extends State<RecordButton>{
     if(!await frameDir.exists()){
       await frameDir.create(recursive: true);
     }
-    
-    int frameCount = 0; //count for the number of frames
+
     //capture frames at 20 fps
     capture = Timer.periodic(Duration(milliseconds: 50), (timer) async {
       //get images from video_feed file
       final jpeg = widget.getFrames();
       if(jpeg == null || jpeg.isEmpty) throw Exception('Error: No received jpeg Images');
-      //loop through to get all the bytes
-      for(final frames in jpeg){
-        //decode images to turn into png images
-        final decode = img.decodeJpg(frames);
-        if(decode == null) {
-          print('Warning: Skipped a frame due to decode failure');
-          continue;
-        }
-        final framePath = path.join(pngPath, 'frame_${frameCount.toString().padLeft(4, '0')}.png');
-        await File(framePath).writeAsBytes(img.encodePng(decode));
-        frameCount++;
-      }
+      //to lesson load during debug and looping before the process causing it to create thousands of isolates
+      await process(jpeg, pngPath); //loop will now be done within the isolate
     });
   }
 
-  void stopRecording() async{
+  Future<void> stopRecording() async{
     //stops timer
     capture?.cancel();
     //Finishes the video encoder and saves it
    final command = '-framerate 20 -i $frameDir/frame_%04d.png '
        '-c:v libx264 -pix_fmt yuv420p $outPath';
-   await FFmpegKit.execute(command);
+   await FFmpegKit.executeAsync(command);
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: (){
+      onTap: () async {
         setState((){
           isRecording = !isRecording; //simpler way to set it to true or false
         });
         if(isRecording){
           //function to start recording
-          startRecording();
+          await startRecording();
         }else{
           //function to stop recording
-          stopRecording();
+          await stopRecording();
         }
       },
       child: isRecording? SvgPicture.asset(
