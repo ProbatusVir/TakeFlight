@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
 import 'package:image/image.dart' as img;
-import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:path_provider/path_provider.dart';
 
 //an isolate compute function has to be JSON safe
 //will work with a void function just not ideal
@@ -53,25 +53,42 @@ class _RecordButtonState extends State<RecordButton>{
         'image': frames[i],
         'path': fpath,
         'index': i
+      }).catchError((e){
+        debugPrint('Error: $e');
       });
     }
   }
 
   Future<void> startRecording() async{
     //create output path
-    final dir = Directory.current.path;
-    final now = DateTime.now();
-    final format = DateFormat('M-d, h:m:s a').format(now);
-    final timeStamp = format;
-    outPath = path.join(dir, 'assets', 'Recordings', 'testRec-$timeStamp.mp4');
+    //final dir = Directory.current.path;
+    final andDir =  await getApplicationDocumentsDirectory();
+    final andPath = andDir.path;
+    final timeStamp = DateTime.now().millisecondsSinceEpoch;
+    //outPath = path.join(dir, 'assets', 'Recordings', 'testRec-$timeStamp.mp4');
+    outPath = path.join(andPath, 'Recordings', 'testRec-$timeStamp.mp4');
+
     //setup file directory to place a png list
-    final pngDir = path.join(dir, 'assets', 'Recordings', 'PngFrames');
-    pngPath = path.join(pngDir, 'frames-$timeStamp');
+    //final pngDir = path.join(dir, 'assets', 'Recordings', 'PngFrames');
+    //pngPath = path.join(pngDir, 'frames-$timeStamp');
+    pngPath = path.join(andPath, 'Recordings', 'PngFrames', 'frames-$timeStamp');
     frameDir = Directory(pngPath);
     //creates the directory in case it doesn't exist
     if(!await frameDir.exists()){
       await frameDir.create(recursive: true);
     }
+
+    FlutterQuickVideoEncoder.setup(
+        width: 480,
+        height: 840,
+        fps: 20,
+        videoBitrate: 1000000,
+        profileLevel: ProfileLevel.any,
+        audioChannels: 0,
+        audioBitrate: 0,
+        sampleRate: 0,
+        filepath: outPath
+    );
 
     //capture frames at 20 fps
     capture = Timer.periodic(Duration(milliseconds: 50), (timer) async {
@@ -81,15 +98,20 @@ class _RecordButtonState extends State<RecordButton>{
       //to lesson load during debug and looping before the process causing it to create thousands of isolates
       await process(jpeg, pngPath); //loop will now be done within the isolate
     });
+    final pngFile = await frameDir.list().toList();
+    int total = pngFile.length;
+    debugPrint('$total');
+
   }
 
   Future<void> stopRecording() async{
     //stops timer
     capture?.cancel();
     //Finishes the video encoder and saves it
-   final command = '-framerate 20 -i $frameDir/frame_%04d.png '
+    FlutterQuickVideoEncoder.finish();
+   /*final command = '-framerate 20 -i $frameDir/frame_%04d.png '
        '-c:v libx264 -pix_fmt yuv420p $outPath';
-   await FFmpegKit.executeAsync(command);
+   await FFmpegKit.executeAsync(command);*/
   }
 
   @override
