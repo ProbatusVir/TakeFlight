@@ -43,8 +43,3 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-
-# Josh added these, if this changes in the future... my bad...
-linux/flutter
-windows/flutter
-macos/Flutter
