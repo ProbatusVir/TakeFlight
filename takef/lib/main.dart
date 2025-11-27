@@ -57,9 +57,9 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState(){
     super.initState();
-    Future.microtask(() async {
+    /*Future.microtask(() async {
       await connectToServer();
-    });
+    });*/
   }
 
   @override

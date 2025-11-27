@@ -1,12 +1,12 @@
 use crate::computer_vision::HandLandmarker;
 use crate::drone_interface::drone_pro::drone::DroneCommandState::BasicMovement;
-use crate::drone_interface::{IUnit, Unit};
+use crate::drone_interface::{IUnit, Unit, _DroneInternal};
 use crate::logger::Logger;
 use crate::video::rtp;
 use crate::video::rtp::{JpegMainHeader, RTPContent};
-use crate::Interest;
+use crate::{Interest, ServerMap};
 use crate::SocketAddr;
-use crate::{drone_interface, send_image};
+use crate::{drone_interface, app_network::send_image};
 use crate::{Arc, Connection, Error, HashMap, Mutex, Poll, TcpStream, Token, UdpSocket};
 use image::DynamicImage;
 use image::ImageFormat::Jpeg;
@@ -127,13 +127,9 @@ impl drone_interface::Drone for Drone
 		self.create_command(0, 0, 0,-0x79, BasicMovement)
 	}
 
-	fn snapshot(&mut self) -> Option<Arc<Vec<u8>>> {
-		match &self.image
-		{
-			Some(img) => { Some(Arc::new(img.as_bytes().to_vec())) }
-			None => { None }
-		}
-}
+	fn snapshot(&mut self) -> Option<Arc<DynamicImage>> {
+		Some(Arc::new(self.image.clone()?))
+	}
 
 	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
 		// FIXME: rot *should* always be 0 right now. We obviously values from -128 to 127
@@ -216,13 +212,14 @@ impl drone_interface::Drone for Drone
 					let now = SystemTime::now();
 					if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
 					{
-						match send_image(self.curr_video_dst.clone(), self.curr_video_src.clone(), self.connection_map.clone())
+						todo!("Why are you using the DronePro?")
+						/*match send_image(self.curr_video_dst.clone(), self.curr_video_src.clone(), self.connection_map.clone())
 						{
 							Err(Error::NoVideoSource) => { }
 							Err(Error::NoVideoTarget) => { }
 							Ok(_) => {  }
 							e => { e? }
-						}
+						}*/
 					}
 
 					self.last_frame_sent_time = now;
@@ -443,5 +440,28 @@ impl Drone
 			0x99])?;
 
 		Ok(())
+	}
+}
+
+impl _DroneInternal for Drone
+{
+	fn expose_video_stream_port(&self) -> Result<u16, Error> {
+		Ok(self.video_sock.local_addr()?.port())
+	}
+
+	fn expose_video_stream(&mut self) -> &mut UdpSocket {
+		&mut self.video_sock
+	}
+
+	fn expose_ownership_map(&self) -> ServerMap {
+		self.connection_map.clone()
+	}
+
+	fn expose_server_src_token(&self) -> Arc<Mutex<Option<Token>>> {
+		self.curr_video_src.clone()
+	}
+
+	fn expose_server_out_token(&self) -> Arc<Mutex<Option<Token>>> {
+		self.curr_video_dst.clone()
 	}
 }
