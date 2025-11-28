@@ -4,15 +4,13 @@ pub mod tello;
 pub mod drone_pro;
 mod crc;
 
-use std::collections::HashMap;
-use crate::{Connection, Error, ServerMap};
-use std::fmt::Debug;
-use std::io::Write;
-use std::sync::{Arc, Mutex};
+use crate::app_network::{send_image, VideoCode};
+use crate::{Error, ServerMap};
 use image::DynamicImage;
 use mio::net::UdpSocket;
 use mio::Token;
-use crate::app_network::{send_image, VideoCode};
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 
 /// The unit corresponds to a centimeter, for now; even if the precision of the drone is not matched to the centimeter.
 
@@ -108,6 +106,7 @@ pub(crate) trait _DroneInternal : Drone
 	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
 	fn expose_video_stream_port(&self) -> Result<u16, Error>;
 	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
+	#[allow(dead_code)]
 	fn expose_video_stream(&mut self) -> &mut UdpSocket;
 
 	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.
@@ -119,7 +118,7 @@ pub(crate) trait _DroneInternal : Drone
 	fn expose_server_out_token(&self) -> Arc<Mutex<Option<Token>>>;
 
 	/// Actual utility to send images.
-	fn send_image(&mut self, mut video_code : VideoCode, ) -> Result<(), Error>
+	fn send_image(&mut self, video_code : VideoCode, ) -> Result<(), Error>
 	{
 		let own_vid_token = Token(self.expose_video_stream_port()? as usize);
 
@@ -140,7 +139,7 @@ pub(crate) trait _DroneInternal : Drone
 		// TODO: We should investigate whether we also need to unregister these from the registry.
 		let ownership_map = self.expose_ownership_map();
 		let mut ownership_lock = ownership_map.lock()?;
-		let src = ownership_lock.get_mut(&video_src_token).ok_or_else(|| {
+		let _src = ownership_lock.get_mut(&video_src_token).ok_or_else(|| {
 			*video_src = None;
 			Error::NoVideoSource
 		})?;

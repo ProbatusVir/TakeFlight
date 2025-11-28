@@ -17,24 +17,23 @@ mod database;
 #[cfg(test)]
 mod tests;
 
-use std::any::Any;
 use crate::app_network::{handle_connection, handle_info_activity, ClientSocketType};
 use crate::drone_interface::Drone;
 use crate::logger::{do_logging, Logger};
 use error::Error;
 use local_ip_address::local_ip;
 use mio;
+use mio::event::Event;
 use mio::net::{TcpListener, TcpStream, UdpSocket};
 use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::{ErrorKind};
+use std::io::ErrorKind;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use mio::event::Event;
 use takeflight_computer_vision as computer_vision;
 
 #[allow(dead_code)]
@@ -207,7 +206,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 						Connection::ClientControl(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
 						Connection::VideoOut(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
 						Connection::ServerInfo(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
-						Connection::Drone(drone) => { todo!("We definitely want to let the drone decide what to do here. Take note that the ownership map is NOT locked right now.") }
+						Connection::Drone(drone) => { todo!("We definitely want to let the drone decide what to do here. Take note that the ownership map is NOT locked right now. {:?}", drone) }
 						Connection::Camera() => { todo!("We still do not have support for cameras yet.") }
 					};
 
@@ -348,13 +347,15 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 									_ => { /* noop */ }
 								}
 							}
-							Connection::ServerInfo(client_type, stream_arc_mtx) => { handle_info_activity(token, server)? }
+							Connection::ServerInfo(..) => { handle_info_activity(token, server)? }
 							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 						};
 					}
 					None => panic!("We already checked that the connection exists.")
 				}
 			}
+			// It's assuring for the compiler to prove that this condition is unreachable.
+			#[allow(unreachable_patterns)]
 			_ => { todo!("What is this?") }
 		}
 	}

@@ -1,23 +1,21 @@
 use super::packet;
+use crate::app_network::VideoCode::Png;
 use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
 use crate::drone_interface::{IUnit, Unit, _DroneInternal};
 use crate::error::Error;
 use crate::logger::Logger;
 use crate::{debug_utils, drone_interface, Connection, Poll, ServerMap, Token, UdpSocket};
-use crate::app_network::send_image;
 use concat_arrays::concat_arrays;
 use image::DynamicImage;
 use mio::Interest;
 use openh264::formats::YUVSource;
 use std::collections::HashMap;
 use std::io;
-use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zerocopy::IntoBytes;
-use crate::app_network::VideoCode::Png;
 
 #[allow(dead_code)]
 #[derive(Debug)]

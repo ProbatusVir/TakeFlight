@@ -1,10 +1,10 @@
-use crate::drone_interface::crc::{ crc16_ref,  crc8_ref};
+use crate::drone_interface::crc::{crc16_ref, crc8_ref};
 use crate::drone_interface::tello::packet::Command::{Land, SetSticks, TakeOff, VideoBitrate, VideoResolution, SPSPPS};
 use crate::drone_interface::tello::packet::PacketType::{Data2, GetInfo, SetInfo};
 use crate::Error;
 use chrono::Timelike;
 use concat_arrays::concat_arrays;
-use num_enum::{ FromPrimitive, IntoPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::{Cursor, Read};
 use zerocopy::IntoBytes;
 

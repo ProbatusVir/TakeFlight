@@ -1,20 +1,16 @@
-use std::collections::HashMap;
+use crate::app_network::ClientSocketType::Info;
 use crate::ClientSocketType::{Control, Video};
 use crate::{Connection, Error, ServerInstance, TcpStream};
+use image::{DynamicImage, ImageFormat};
+use lebe::io::ReadPrimitive;
 use mio::Token;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use std::io::{ Cursor, Read, Write};
+use serde::{Deserialize, Serialize};
 use std::io::ErrorKind::WouldBlock;
-use std::ptr::read;
+use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use image::{DynamicImage, ImageFormat};
-use lebe::Endian;
-use lebe::io::ReadPrimitive;
-use mio::net::UdpSocket;
-use serde::{Deserialize, Serialize};
 use zerocopy::IntoBytes;
-use crate::app_network::ClientSocketType::Info;
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]
@@ -164,7 +160,7 @@ pub(crate) fn send_image(
 		Connection::ClientControl(_, stream)	=> { send_image_packet_tcp(&mut *stream.lock()?, image_type, &image_buffer) }
 		Connection::VideoOut(_, stream)	=> { send_image_packet_tcp(&mut *stream.lock()?, image_type, &image_buffer) }
 		Connection::Camera() => { todo!("Haven't implemented this yet.") }
-		Connection::UDP(socket) => { debug_assert!(false, "Invalid video target: unpromoted UDP socket."); Err(Error::NoVideoTarget) }
+		Connection::UDP(socket) => { debug_assert!(false, "Invalid video target: unpromoted UDP socket {}.", socket.peer_addr()?.port()); Err(Error::NoVideoTarget) }
 		Connection::TCP(..) => { debug_assert!(false, "Invalid video target: unpromoted TCP socket."); Err(Error::NoVideoTarget) }
 		Connection::Drone(..) => { debug_assert!(false, "Invalid video target: Drone."); Err(Error::NoVideoTarget) }
 		Connection::ServerInfo(..) => { debug_assert!(false, "Invalid video target: ServerInfo."); Err(Error::NoVideoTarget) }
@@ -198,7 +194,7 @@ pub(crate) fn handle_info_activity(
 		let ownership_lock = server.ownership_map.lock()?;
 		let inbound_connection = ownership_lock.get(&origin);
 
-		let mut info_sock = match inbound_connection {
+		let info_sock = match inbound_connection {
 			Some(connection) => {
 				match connection {
 					Connection::ServerInfo(_, stream) => {
@@ -256,8 +252,8 @@ impl InfoPacket
 	/// This does assume that the stream is big endian. Git gud if it's not???
 	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
 	{
-		let mut id : InfoID = u8::read_from_big_endian(stream)?.into(); // again, I know this is redundant for a u8, but whatevs, it's a noop.
-		let mut play : RoShamBo = u8::read_from_big_endian(stream)?.into();
+		let id : InfoID = u8::read_from_big_endian(stream)?.into(); // again, I know this is redundant for a u8, but whatevs, it's a noop.
+		let play : RoShamBo = u8::read_from_big_endian(stream)?.into();
 		let payload_size = u16::read_from_big_endian(stream)? as usize;
 		let mut payload = vec![0;payload_size];
 		stream.read_exact(&mut payload)?;
@@ -279,10 +275,9 @@ impl InfoPacket
 		Ok(())
 	}
 
-	pub fn new_ssid(origin_play : RoShamBo, server : &ServerInstance) -> Result<Self, Error>
+	pub fn new_ssid(origin_play : RoShamBo, _server : &ServerInstance) -> Result<Self, Error>
 	{
 		let list_of_ssids = crate::app_network::SSIDs { ssids : vec![String::from_str("Hello")?, String::from_str("world")?, String::from_str("!")?, ] };
-		let mut payload = Vec::<u8>::new();
 		let json = serde_json::to_vec(&list_of_ssids)?;
 		// TODO: Make this a feature of the server.
 		Ok(Self {
@@ -306,7 +301,7 @@ impl RoShamBo
 	}
 }
 
-pub(crate) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
+pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
 {
 	match packet.id
 	{
