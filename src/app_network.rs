@@ -4,9 +4,17 @@ use crate::{Connection, Error, ServerInstance, TcpStream};
 use mio::Token;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::{ Cursor, Read, Write};
+use std::io::ErrorKind::WouldBlock;
+use std::ptr::read;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use image::{DynamicImage, ImageFormat};
+use lebe::Endian;
+use lebe::io::ReadPrimitive;
 use mio::net::UdpSocket;
+use serde::{Deserialize, Serialize};
+use zerocopy::IntoBytes;
+use crate::app_network::ClientSocketType::Info;
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]
@@ -14,8 +22,9 @@ pub enum ClientSocketType
 {
 	Control = 1,
 	Video = 2,
-	#[num_enum(catch_all)]
-	Invalid(u8),
+	Info = 3,
+	#[num_enum(default)]
+	Invalid = 0,
 }
 
 #[derive(Debug, IntoPrimitive, FromPrimitive)]
@@ -28,6 +37,36 @@ pub enum VideoCode
 	Invalid = 0,
 }
 
+#[derive(Debug, Clone, IntoPrimitive, FromPrimitive)]
+#[repr(u8)]
+pub enum InfoID
+{
+	SSIDs,
+	DroneStateDump,
+	RecordRequest,
+	#[num_enum(default)]
+	Invalid = 255,
+}
+
+#[derive(Debug, Clone, FromPrimitive)]
+#[repr(u8)]
+pub enum RoShamBo
+{
+	Rock = 0,
+	Paper = 1,
+	Scissors = 2,
+	#[num_enum(default)]
+	Invalid = 0xFF,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SSIDs
+{
+	ssids: Vec<String>,
+}
+
+
+
 /// This will only be called when a socket initiates connection.
 /// This will not reacquire a lock on the ownership map.
 pub fn handle_connection(mut stream : TcpStream,
@@ -36,24 +75,50 @@ pub fn handle_connection(mut stream : TcpStream,
 {
 	// : &mut HashMap<Token, Connection>
 	// Arc<Mutex<Option<Token>>>
-	let mut handshake_buffer = [0;3];
+	let mut handshake_buffer = [0;3]; // Only needs to be 3, then we need to try to read into the buffer again to proc WouldBlock.
 	stream.read_exact(&mut handshake_buffer)?;
+
+	if &handshake_buffer[..2] != &[0x42, 0x42] { todo!("Failed to promote socket. Invalid handshake sequence. Received [{:02x} {:02x}]", handshake_buffer[0], handshake_buffer[1])};
+	let handshake_code = handshake_buffer[2];
+
+	loop {
+		match stream.read(&mut handshake_buffer)
+		{
+			Ok(_) => { server.logger.error("Error while draining read buffer during client-server handshake: There was still data to read from the handshake buffer!")?; }
+			Err(e) => {
+				if e.kind() == WouldBlock {
+					break;
+				}
+				// Propagate the error if not clean.
+				else {
+					Err(e)?
+				}
+			}
+		}
+	}
 
 	let token = Token(stream.local_addr()?.port() as usize);
 
 	let new_connection =
-		match handshake_buffer[2].into() {
-			Control => {
+		match handshake_code.into() {
+			ClientSocketType::Control => {
 				server.drone_control = Some(token);
-				Connection::Client(Control, Arc::new(Mutex::new(stream)))
+				Connection::ClientControl(Control, Arc::new(Mutex::new(stream)))
 			}
-			Video => {
+			ClientSocketType::Video => {
 				let peer_port = stream.peer_addr()?.port() as usize;
 				server.logger.info_from_string(format!("New video destination: {peer_port}" ))?;
 				*server.video_out.lock()? = Some(Token(peer_port));
 				Connection::VideoOut(Video, Arc::new(Mutex::new(stream)))
 			}
-			_ => { Err(Error::Custom("Invalid socket handshake."))? }
+			ClientSocketType::Info => {
+				let peer_port = stream.peer_addr()?.port() as usize;
+				server.logger.info_from_string(format!("New bidirectional info stream: {peer_port}"))?;
+				server.info_token = Some(Token(peer_port));
+				Connection::ServerInfo(Info, Arc::new(Mutex::new(stream)))
+			}
+
+			ClientSocketType::Invalid => { Err(Error::Custom("Invalid socket handshake."))? }
 		};
 
 	// Good to note: when we insert a new key-map pair, if the key exists, the value will just be overwritten.
@@ -96,12 +161,13 @@ pub(crate) fn send_image(
 	}
 
 	match out {
-		Connection::Client(_, stream)	=> { send_image_packet_tcp(&mut *stream.lock()?, image_type, &image_buffer) }
+		Connection::ClientControl(_, stream)	=> { send_image_packet_tcp(&mut *stream.lock()?, image_type, &image_buffer) }
 		Connection::VideoOut(_, stream)	=> { send_image_packet_tcp(&mut *stream.lock()?, image_type, &image_buffer) }
 		Connection::Camera() => { todo!("Haven't implemented this yet.") }
-		Connection::Drone(_) => { debug_assert!(false, "Invalid video target: Drone."); Err(Error::NoVideoTarget) }
 		Connection::UDP(socket) => { debug_assert!(false, "Invalid video target: unpromoted UDP socket."); Err(Error::NoVideoTarget) }
-		Connection::TCP(_) => { debug_assert!(false, "Invalid video target: unpromoted TCP socket."); Err(Error::NoVideoTarget) }
+		Connection::TCP(..) => { debug_assert!(false, "Invalid video target: unpromoted TCP socket."); Err(Error::NoVideoTarget) }
+		Connection::Drone(..) => { debug_assert!(false, "Invalid video target: Drone."); Err(Error::NoVideoTarget) }
+		Connection::ServerInfo(..) => { debug_assert!(false, "Invalid video target: ServerInfo."); Err(Error::NoVideoTarget) }
 	}?;
 
 	Ok(())
@@ -120,55 +186,136 @@ pub(crate) fn _validate_tokens_exist(src : &Option<Token>, out : &Option<Token>)
 	Ok((video_src_token, video_out_token))
 }
 
-/*#[allow(dead_code)]
-pub(crate) fn send_image_server_edition(
-	out				: Arc<Mutex<Option<Token>>>,
-	src				: Arc<Mutex<Option<Token>>>,
-	ownership_map	: Arc<Mutex<HashMap<Token, Connection>>>,
-) -> Result<(), Error>
+pub(crate) fn handle_info_activity(
+	origin	: Token,
+	server	: &mut ServerInstance) -> Result<(), Error>
 {
-	// While this is a large critical section, I actually think it's for the best, due to all the validations and possible reassignments of our streams.
-	let mut video_out = out.lock()?;
-	let mut video_src = src.lock()?;
+	if server.info_token.is_none() { todo!("The server did not have an info socket, yet still received activity!") }
+	let peer_port_number = origin.0;
+	if origin != *server.info_token.as_ref().unwrap() { todo!("Somehow the info socket did not match the server's info socket? Server expected: {}, Actual: {}", server.info_token.as_ref().unwrap().0, peer_port_number) }
 
-	let (video_src_token, video_out_token) = _validate_tokens_exist(&video_src, &video_out)?;
+	let info_sock = {
+		let ownership_lock = server.ownership_map.lock()?;
+		let inbound_connection = ownership_lock.get(&origin);
 
-	let mut ownership_lock = ownership_map.lock()?;
-	let src = ownership_lock.remove(&video_src_token).ok_or_else(|| {
-		*video_src = None;
-		Error::NoVideoSource
-	})?;
-	let mut out = ownership_lock.remove(&video_out_token).ok_or_else(|| {
-		*video_out = None;
-		Error::NoVideoTarget
-	})?;
-
-	let image = match &src {
-		Connection::Drone(source) => {
-			{
-				// FIXME: THIS IS WHERE THE DEADLOCK IS HAPPENING!
-				let mut source_lock = source.lock()?;
-				source_lock.snapshot().clone().ok_or(Error::Custom("Could not obtain image from drone!"))?.clone()
+		let mut info_sock = match inbound_connection {
+			Some(connection) => {
+				match connection {
+					Connection::ServerInfo(_, stream) => {
+						stream
+					}
+					_ => { Err(Error::Custom("Info socket was NOT the right type of connection."))? }
+				}
 			}
-
-		}
-		Connection::Camera() => todo!(),
-		_ => { dbg!("Oh, we're silly billies who forgot how our own enumerator worked???"); Err(Error::NoVideoSource)? }
+			// The server doesn't recognize it. This shouldn't happen.
+			None => {
+				server.info_token = None;
+				Err(Error::Custom("The client's info socket was somehow not in the ownership map. "))?
+			}
+		};
+		info_sock.clone()
 	};
+	let mut info_lock = info_sock.lock()?;
 
-	match out
-	{
-		Connection::VideoOut(cnx_type, ref mut stream) => {
-			let mut stream_lock = stream.lock()?;
-			stream_lock.write(&[u8::from(cnx_type.clone())])?;
-			stream_lock.write(&(image.len() as u16).to_be_bytes())?;
-			stream_lock.write_all(&image)?
-		}
-		_ => { Err(Error::NoVideoTarget)? }
+	loop {
+		// Start getting packet info
+		server.logger.info("We're doing very cool right now!")?;
+		let read_result = InfoPacket::read(&mut *info_lock);
+		match read_result {
+			Ok(packet) => {
+				handle_info_packet(&packet, &mut info_lock, server)?;
+			}
+			Err(e) => {
+				match e {
+					Error::IOError(io_error) => {
+						match io_error.kind() {
+							WouldBlock => { break; }
+							_ => { Err(io_error)?; }
+						}
+					}
+					_ => { Err(e)?; }
+				}
+			}
+		};
+
 	}
 
-	ownership_lock.insert(video_src_token, src);
-	ownership_lock.insert(video_out_token, out);
+	Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct InfoPacket
+{
+	pub id			: InfoID,
+	pub play		: RoShamBo,
+	//pub payload_size: u16, // this is part of the packet's internal structure, but since this is already encoded in the payload, there is no sense in putting another here.
+	pub payload		: Vec<u8>,
+}
+
+impl InfoPacket
+{
+	/// This does assume that the stream is big endian. Git gud if it's not???
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	{
+		let mut id : InfoID = u8::read_from_big_endian(stream)?.into(); // again, I know this is redundant for a u8, but whatevs, it's a noop.
+		let mut play : RoShamBo = u8::read_from_big_endian(stream)?.into();
+		let payload_size = u16::read_from_big_endian(stream)? as usize;
+		let mut payload = vec![0;payload_size];
+		stream.read_exact(&mut payload)?;
+
+		Ok(Self {
+			id,
+			play,
+			payload
+		})
+	}
+
+	pub fn write<W : Write>(&self, stream : &mut W) -> Result<(), Error>
+	{
+		stream.write_all((self.id.to_owned() as u8).as_bytes())?;
+		stream.write_all((self.play.to_owned() as u8).as_bytes())?;
+		stream.write_all((self.payload.len() as u16).as_bytes())?;
+		stream.write_all(&self.payload)?;
+
+		Ok(())
+	}
+
+	pub fn new_ssid(origin_play : RoShamBo, server : &ServerInstance) -> Result<Self, Error>
+	{
+		let list_of_ssids = crate::app_network::SSIDs { ssids : vec![String::from_str("Hello")?, String::from_str("world")?, String::from_str("!")?, ] };
+		let mut payload = Vec::<u8>::new();
+		let json = serde_json::to_vec(&list_of_ssids)?;
+		// TODO: Make this a feature of the server.
+		Ok(Self {
+			id : InfoID::SSIDs,
+			play: origin_play.counterplay(),
+			payload: json,
+		})
+	}
+}
+
+impl RoShamBo
+{
+	pub fn counterplay(&self) -> Self
+	{
+		match self {
+			RoShamBo::Rock		=> { RoShamBo::Paper }
+			RoShamBo::Paper		=> { RoShamBo::Scissors }
+			RoShamBo::Scissors	=> { RoShamBo::Rock }
+			RoShamBo::Invalid	=> { RoShamBo::Invalid } // Invalid is its own counterplay??? Yes.
+		}
+	}
+}
+
+pub(crate) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
+{
+	match packet.id
+	{
+		InfoID::SSIDs => { let return_packet = InfoPacket::new_ssid(packet.play.clone(), server)?; return_packet.write(origin)? ; server.logger.error("Sent the client a faux list of SSIDs.")?; }
+		InfoID::DroneStateDump => { todo!("Haven't implemented DroneStateDump yet.") }
+		InfoID::RecordRequest => { todo!("Haven't implemented RecordRequest yet.") }
+		InfoID::Invalid => { Err(Error::Custom("Attempted to handle invalid info packet."))? }
+	}
 
 	Ok(())
-}*/
+}

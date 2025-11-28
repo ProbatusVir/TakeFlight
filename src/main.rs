@@ -17,7 +17,8 @@ mod database;
 #[cfg(test)]
 mod tests;
 
-use crate::app_network::{handle_connection, ClientSocketType};
+use std::any::Any;
+use crate::app_network::{handle_connection, handle_info_activity, ClientSocketType};
 use crate::drone_interface::Drone;
 use crate::logger::{do_logging, Logger};
 use error::Error;
@@ -33,6 +34,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use mio::event::Event;
 use takeflight_computer_vision as computer_vision;
 
 #[allow(dead_code)]
@@ -41,21 +43,11 @@ pub(crate) enum Connection
 {
 	TCP(TcpStream),
 	UDP(UdpSocket),
-	Client(ClientSocketType, Arc<Mutex<TcpStream>>),
+	ClientControl(ClientSocketType, Arc<Mutex<TcpStream>>),
 	VideoOut(ClientSocketType, Arc<Mutex<TcpStream>>), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
+	ServerInfo(ClientSocketType, Arc<Mutex<TcpStream>>),
 	Drone(Arc<Mutex<dyn Drone>>),
 	Camera(), // FIXME: This needs fields.
-}
-impl TryInto<TcpStream> for Connection
-{
-	type Error = crate::Error;
-
-	fn try_into(self) -> Result<TcpStream, Self::Error> {
-		match self {
-			Connection::TCP(stream) => Ok(stream),
-			_ => Err(Error::Custom("Not a TCP stream buddy...")),
-		}
-	}
 }
 
 type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
@@ -76,7 +68,9 @@ struct ServerInstance
 	video_out		: Arc<Mutex<Option<Token>>>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
 	video_src		: Arc<Mutex<Option<Token>>>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
 	drone_control	: Option<Token>,				// If this is None, we will travel the whole map and send signals to every found drone.
+	info_token		: Option<Token>,				// If this is None, we will travel the whole map and send signals to every found drone.
 	frame_time		: Arc<Duration>,
+	read_buffer		: [u8;1024],
 }
 
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
@@ -152,12 +146,14 @@ fn main() -> Result<(), Error> {
 		video_src		: Arc::new(Mutex::new(None)),
 		video_out		: Arc::new(Mutex::new(None)),
 		drone_control	: None,
+		info_token		: None,
 		frame_time		: Arc::new(FRAME_TIME),
+		read_buffer		: [0;1024],
 	};
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
-	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
+	//let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
 	/*drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
 	drone.lock()?.rc(0, 99, 0, 0.0)?;
@@ -198,6 +194,30 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 {
 	for event in event_buffer.iter()
 	{
+		// TODO: If one drone socket disconnects, do we want to let the drone decide what to do?
+		if Event::is_read_closed(event)
+		{
+			let token = event.token();
+			let socket_wrapped = server.ownership_map.lock()?.remove(&token);
+			match socket_wrapped {
+				Some(mut socket) => {
+					match &mut socket {
+						Connection::TCP(stream) => { server.poll.lock()?.registry().deregister(stream)?; }
+						Connection::UDP(datagram) => {server.poll.lock()?.registry().deregister(datagram)?; }
+						Connection::ClientControl(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+						Connection::VideoOut(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+						Connection::ServerInfo(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+						Connection::Drone(drone) => { todo!("We definitely want to let the drone decide what to do here. Take note that the ownership map is NOT locked right now.") }
+						Connection::Camera() => { todo!("We still do not have support for cameras yet.") }
+					};
+
+					server.logger.info_from_string(format!("Disconnected {} socket: {}", socket.socket_type_name(), event.token().0))?;
+				}
+				None => { todo!("Somehow we received a 'read closed' event for a socket that isn't registered to the poll... This shouldn't be possible. Please try to reproduce this issue.") }
+			}
+			continue
+		}
+
 		match event.token()
 		{
 			LISTENER => {
@@ -328,12 +348,14 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 									_ => { /* noop */ }
 								}
 							}
+							Connection::ServerInfo(client_type, stream_arc_mtx) => { handle_info_activity(token, server)? }
 							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 						};
 					}
 					None => panic!("We already checked that the connection exists.")
 				}
 			}
+			_ => { todo!("What is this?") }
 		}
 	}
 
@@ -356,14 +378,41 @@ impl Connection
 	pub(crate) fn try_clone(&self) -> Option<Self>
 	{
 		match self {
-			Connection::Client(client_type, stream_arc_mtx) => { Some(Connection::Client(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::ClientControl(client_type, stream_arc_mtx) => { Some(Connection::ClientControl(client_type.clone(), stream_arc_mtx.clone())) }
 			Connection::VideoOut(client_type, stream_arc_mtx) => { Some(Connection::VideoOut(client_type.clone(), stream_arc_mtx.clone())) }
+			Connection::ServerInfo(client_type, stream_arc_mtx) => { Some(Connection::ServerInfo(client_type.clone(), stream_arc_mtx.clone())) }
 			Connection::Drone(drone) => { Some(Connection::Drone(drone.clone())) }
 			Connection::Camera() => { todo!("We have no support yet for camera types. We're not sure if cloning a camera is even possible.") }
 			_ => {	None }
 		}
 	}
 
+	pub(crate) const fn socket_type_name(&self) -> &'static str
+	{
+		match self {
+			Connection::TCP(..)				=> { "Unpromoted TCP" }
+			Connection::UDP(..)				=> { "Unpromoted UDP" }
+			Connection::ClientControl(..)	=> { "ClientControl" }
+			Connection::VideoOut(..)		=> { "VideoOut" }
+			Connection::ServerInfo(..)		=> { "ServerInfo" }
+			Connection::Drone(..)			=> { "Drone" }
+			Connection::Camera(..)			=> { "Camera" }
+		}
+	}
+
+
+}
+
+impl TryInto<TcpStream> for Connection
+{
+	type Error = crate::Error;
+
+	fn try_into(self) -> Result<TcpStream, Self::Error> {
+		match self {
+			Connection::TCP(stream) => Ok(stream),
+			_ => Err(Error::Custom("Not a TCP stream buddy...")),
+		}
+	}
 }
 
 
