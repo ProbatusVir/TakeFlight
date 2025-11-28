@@ -219,7 +219,6 @@ pub(crate) fn handle_info_activity(
 
 	loop {
 		// Start getting packet info
-		server.logger.info("We're doing very cool right now!")?;
 		let read_result = InfoPacket::read(&mut *info_lock);
 		match read_result {
 			Ok(packet) => {
