@@ -51,6 +51,13 @@ Future<void> androidConnect()async{
 
   Socket? socket;
   int port = await getServerPort();
+  //func for getting images from drone
+  //await getDroneImg(socket, port);
+  //func for getting SSID from server
+  await getSSID(socket, port);
+}
+
+Future<void> getDroneImg(Socket? socket, int port) async {
   try{
     socket = await Socket.connect('127.0.0.1', port);
     //Prints are for debugging
@@ -60,7 +67,7 @@ Future<void> androidConnect()async{
   }
   //send data to server
   if(socket != null){
-    socket.add([0x42, 0x42, 2]); //sends the header bytes along with the ID of video stream
+    socket.add([0x42, 0x42, 0x02]); //sends the header bytes along with the ID of video stream
     socket.flush(); //ensures all data is sent
   }
   List<int> imageDataBytes = [];
@@ -98,6 +105,40 @@ Future<void> androidConnect()async{
   }
 }
 
+Future<void> getSSID(Socket? socket, int port) async {
+  try{
+    socket = await Socket.connect('127.0.0.1', port);
+    //Prints are for debugging
+    print('Connected to Server for SSID: ${socket.remoteAddress}:${socket.remotePort}');
+  }on SocketException catch (e){
+    print("Error connecting to server: $e");
+  }
+  if(socket != null){
+     socket.add([0x42, 0x42, 0x03]);
+     socket.flush();
+  }
+  //receive SSID
+  List<String> recSSID = [];
+  if(socket != null){
+    socket.listen(
+      (Uint8List data){
+        //decode received data
+        final recData = utf8.decode(data);
+        print('Received: $recData');
+
+      },
+      onError: (e){
+        print('Error on socket: $e');
+        socket?.destroy();
+      },
+      onDone: (){
+        print('Server disconnected');
+        socket?.destroy();
+      }
+    );
+  }
+}
+
 Future<void> webConnection() async{
   final port = 51108;
   final web = WebSocketChannel.connect(
@@ -109,7 +150,7 @@ Future<void> webConnection() async{
 Future<void> connectToServer() async{
   //Need to detect platform first to determine correct socket creation
   if(kIsWeb){
-    await webConnection();
+    //await webConnection();
   }else{
     await androidConnect();
   }
