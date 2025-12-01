@@ -125,7 +125,8 @@ Future<void> getSSID(Socket? socket, int port) async {
         //decode received data
         final recData = utf8.decode(data);
         print('Received: $recData');
-
+        recSSID.add(recData);
+        print(recSSID);
       },
       onError: (e){
         print('Error on socket: $e');
