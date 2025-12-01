@@ -215,9 +215,13 @@ pub(crate) fn handle_info_activity(
 
 	loop {
 		// Start getting packet info
+		#[cfg(debug_assertions)]
+		server.logger.info("Attempting to parse incoming info packet")?;
 		let read_result = InfoPacket::read(&mut *info_lock);
 		match read_result {
 			Ok(packet) => {
+				#[cfg(debug_assertions)]
+				server.logger.info("We received an info packet!")?;
 				handle_info_packet(&packet, &mut info_lock, server)?;
 			}
 			Err(e) => {
