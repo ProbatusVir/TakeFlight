@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
@@ -114,7 +115,17 @@ Future<void> getSSID(Socket? socket, int port) async {
     print("Error connecting to server: $e");
   }
   if(socket != null){
+    //send handshake
      socket.add([0x42, 0x42, 0x03]);
+     //send data [INFO_ID : u8, RO_SHAM_BO : u8, payload_size : u16, PAYLOAD]
+     final packet = Uint8List.fromList([
+       0x00,
+       0x01,
+       0x00, 0x04,
+       0xAA, 0xBB, 0xCC, 0xDD
+     ]);
+     socket.add(packet);
+     //one flush
      socket.flush();
   }
   //receive SSID
@@ -123,10 +134,13 @@ Future<void> getSSID(Socket? socket, int port) async {
     socket.listen(
       (Uint8List data){
         //decode received data
-        final recData = utf8.decode(data);
+        final recData = utf8.decode(data, allowMalformed: true);
         print('Received: $recData');
-        recSSID.add(recData);
-        print(recSSID);
+        //decode json
+        final jString = recData.substring(recData.indexOf('{'));
+        final decoded = jsonDecode(jString); // decoded is a Map<String, dynamic>
+        recSSID = List<String>.from(decoded['ssids']);
+        print('The received SSIDs: $recSSID');
       },
       onError: (e){
         print('Error on socket: $e');
