@@ -5,6 +5,25 @@ import 'joy_stick.dart';
 import 'settings_screen.dart';
 import 'video_feed.dart';
 
+class RC{
+  List<int> buildPacket(double lr, double ud, double fb, double rot){
+    //multiply by 100 for -100.0 to 100;
+    final leftRight = (lr * 100).toInt();
+    final upDown = (ud * 100).toInt();
+    final forwardBack = (fb * 100).toInt();
+    final rotation = (rot * 100).toInt();
+
+    return[
+      0x02, //Rc command code
+      leftRight,
+      upDown,
+      forwardBack,
+      rotation,
+      0x00 //Reserved
+    ];
+  }
+}
+
 class FlightScreen extends StatefulWidget{
   const FlightScreen({super.key});
 
@@ -15,11 +34,14 @@ class _FlightScreenState extends State<FlightScreen>{
   //create a global key to access the curentFrame variable in video feed
   final GlobalKey<VideoFeedState> videoKey = GlobalKey();
 
-  void rc(double lr, double ud, double fb, double rot){
+  static void rc(double lr, double ud, double fb, double rot) async{
     //TODO::Change to future async once server connection is there
+    final rcController = RC();
+    rcController.buildPacket(lr, ud, fb, rot);
     //simulate movement to drone til connection to server is established
-    print('RC Commands: left/right$lr:up/down$ud:forward/backward$fb:rotation$rot'); //debug
+    //print('RC Commands: left/right$lr:up/down$ud:forward/backward$fb:rotation$rot'); //debug
   }
+
   //Changed to stateful widget to force this screen into landscape for android
   @override
   void initState(){

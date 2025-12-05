@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart'; //For Uint8List
 import 'package:takef/main.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'flight_screen.dart';
 
 /// This method may throw IOException or RangeError.
 Future<int> getServerPort() async {
@@ -50,32 +51,49 @@ Future<void> androidConnect()async{
   /*final debug = File("helloworld.txt");
   await debug.writeAsString("${ await getServerPort() }");*/
 
-  Socket? socket;
   int port = await getServerPort();
-  try{
-    socket = await Socket.connect('127.0.0.1', port);
-    //Prints are for debugging
-    print('Connected to Server: ${socket.remoteAddress}:${socket.remotePort}');
-  }on SocketException catch (e){
-    print("Error connecting to server: $e");
-  }
+  //func for sending controls
+
   //func for getting images from drone
-  await getDroneImg(socket, port);
+  await getDroneImg(port);
   //func for getting SSID from server
-  await getSSID(socket, port);
+  await getSSID(port);
 }
 
-Future<void> getDroneImg(Socket? socket, int port) async {
+Future<void> controlRC(int port) async{
+  Socket? controlSoc;
+  try{
+    controlSoc = await Socket.connect('127.0.0.1', port);
+    print('Connected to Server over Control Socket: ${controlSoc.remoteAddress}:${controlSoc.remotePort}');
+  } on SocketException catch (e){
+    print("Error connecting to server on Control: $e");
+  }
+  //Send server handshake
+  if(controlSoc != null){
+    controlSoc.add([0x42, 0x42, 0x01]);
+  }
+  //send movement packet from flight screen
+}
+
+Future<void> getDroneImg(int port) async {
+  Socket? videoSoc;
+  try{
+    videoSoc = await Socket.connect('127.0.0.1', port);
+    //Prints are for debugging
+    print('Connected to Server over video socket: ${videoSoc.remoteAddress}:${videoSoc.remotePort}');
+  }on SocketException catch (e){
+    print("Error connecting to server on Video: $e");
+  }
   //send data to server
-  if(socket != null){
-    socket.add([0x42, 0x42, 0x02]); //sends the header bytes along with the ID of video stream
+  if(videoSoc != null){
+    videoSoc.add([0x42, 0x42, 0x02]); //sends the header bytes along with the ID of video stream
     //socket.flush(); //ensures all data is sent
   }
   List<int> imageDataBytes = [];
   int? imageLength;
   //receiving image data
-  if(socket != null){
-    socket.listen(
+  if(videoSoc != null){
+    videoSoc.listen(
             (Uint8List data){
           if(imageLength == null && data.length >= 4){ //Assuming 4 bytes for length
             imageLength = ByteData.view(data.buffer).getInt32(0, Endian.big); //Read length
@@ -96,27 +114,28 @@ Future<void> getDroneImg(Socket? socket, int port) async {
         },
         onDone: (){
           print('Server disconnected');
-          socket.destroy();
+          videoSoc?.destroy();
         },
         onError: (error){
           print('Error on socket: $error');
-          socket.destroy();
+          videoSoc?.destroy();
         }
     );
   }
 }
 
-Future<void> getSSID(Socket? socket, int port) async {
+Future<void> getSSID(int port) async {
+  Socket? infoSoc;
   try{
-    socket = await Socket.connect('127.0.0.1', port);
+    infoSoc = await Socket.connect('127.0.0.1', port);
     //Prints are for debugging
-    print('Connected to Server for SSID: ${socket.remoteAddress}:${socket.remotePort}');
+    print('Connected to Server over Info Socket: ${infoSoc.remoteAddress}:${infoSoc.remotePort}');
   }on SocketException catch (e){
-    print("Error connecting to server: $e");
+    print("Error connecting to server on Info: $e");
   }
-  if(socket != null){
+  if(infoSoc != null){
     //send handshake
-     socket.add([0x42, 0x42, 0x03]);
+     infoSoc.add([0x42, 0x42, 0x03]);
      print('Info Handshake was sent');
      //send data [INFO_ID : u8, RO_SHAM_BO : u8, payload_size : u16, PAYLOAD]
      final packet = Uint8List.fromList([
@@ -125,14 +144,14 @@ Future<void> getSSID(Socket? socket, int port) async {
        0x00, 0x04,
        0xAA, 0xBB, 0xCC, 0xDD
      ]);
-     socket.add(packet);
+     infoSoc.add(packet);
      //one flush
      //socket.flush();
   }
   //receive SSID
   List<String> recSSID = [];
-  if(socket != null){
-    socket.listen(
+  if(infoSoc != null){
+    infoSoc.listen(
       (Uint8List data){
         //decode received data
         final recData = utf8.decode(data, allowMalformed: true);
@@ -145,11 +164,11 @@ Future<void> getSSID(Socket? socket, int port) async {
       },
       onError: (e){
         print('Error on socket: $e');
-        socket?.destroy();
+        infoSoc?.destroy();
       },
       onDone: (){
         print('Server disconnected');
-        socket?.destroy();
+        infoSoc?.destroy();
       }
     );
   }
