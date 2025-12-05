@@ -52,13 +52,6 @@ Future<void> androidConnect()async{
 
   Socket? socket;
   int port = await getServerPort();
-  //func for getting images from drone
-  //await getDroneImg(socket, port);
-  //func for getting SSID from server
-  await getSSID(socket, port);
-}
-
-Future<void> getDroneImg(Socket? socket, int port) async {
   try{
     socket = await Socket.connect('127.0.0.1', port);
     //Prints are for debugging
@@ -66,10 +59,17 @@ Future<void> getDroneImg(Socket? socket, int port) async {
   }on SocketException catch (e){
     print("Error connecting to server: $e");
   }
+  //func for getting images from drone
+  await getDroneImg(socket, port);
+  //func for getting SSID from server
+  await getSSID(socket, port);
+}
+
+Future<void> getDroneImg(Socket? socket, int port) async {
   //send data to server
   if(socket != null){
     socket.add([0x42, 0x42, 0x02]); //sends the header bytes along with the ID of video stream
-    socket.flush(); //ensures all data is sent
+    //socket.flush(); //ensures all data is sent
   }
   List<int> imageDataBytes = [];
   int? imageLength;
@@ -96,11 +96,11 @@ Future<void> getDroneImg(Socket? socket, int port) async {
         },
         onDone: (){
           print('Server disconnected');
-          socket?.destroy();
+          socket.destroy();
         },
         onError: (error){
           print('Error on socket: $error');
-          socket?.destroy();
+          socket.destroy();
         }
     );
   }
@@ -117,6 +117,7 @@ Future<void> getSSID(Socket? socket, int port) async {
   if(socket != null){
     //send handshake
      socket.add([0x42, 0x42, 0x03]);
+     print('Info Handshake was sent');
      //send data [INFO_ID : u8, RO_SHAM_BO : u8, payload_size : u16, PAYLOAD]
      final packet = Uint8List.fromList([
        0x00,
@@ -126,7 +127,7 @@ Future<void> getSSID(Socket? socket, int port) async {
      ]);
      socket.add(packet);
      //one flush
-     socket.flush();
+     //socket.flush();
   }
   //receive SSID
   List<String> recSSID = [];
