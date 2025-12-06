@@ -247,6 +247,18 @@ impl drone_interface::Drone for Drone
 		else { return Err(Error::Custom("DronePro: Requested socket not found in DronePro!")) }
 
 	}
+
+	fn connected(&self) -> bool {
+		todo!()
+	}
+
+	fn time_created(&self) -> SystemTime {
+		todo!()
+	}
+
+	fn disconnect(&mut self, ownership_map : &mut HashMap<Token, Connection>) -> Result<(), Error> {
+		todo!()
+	}
 }
 
 impl Drop for Drone
@@ -431,13 +443,13 @@ impl Drone
 
 		self.handshake_sock.send(
 			&[0x03, 0x66,
-			DEFAULT.wrapping_add(lr) as u8,
-			DEFAULT.wrapping_add(fb) as u8,
-			DEFAULT.wrapping_add(ud) as u8,
-			DEFAULT.wrapping_add(r ) as u8,
-			cmd as u8,
-			checksum as u8,
-			0x99])?;
+				DEFAULT.wrapping_add(lr) as u8,
+				DEFAULT.wrapping_add(fb) as u8,
+				DEFAULT.wrapping_add(ud) as u8,
+				DEFAULT.wrapping_add(r ) as u8,
+				cmd as u8,
+				checksum as u8,
+				0x99])?;
 
 		Ok(())
 	}

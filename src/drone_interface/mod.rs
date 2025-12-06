@@ -4,13 +4,15 @@ pub mod tello;
 pub mod drone_pro;
 mod crc;
 
+use std::collections::HashMap;
 use crate::app_network::{send_image, VideoCode};
-use crate::{Error, ServerMap};
+use crate::{Connection, Error, ServerMap};
 use image::DynamicImage;
 use mio::net::UdpSocket;
 use mio::Token;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 /// The unit corresponds to a centimeter, for now; even if the precision of the drone is not matched to the centimeter.
 
@@ -99,6 +101,10 @@ pub trait Drone : Debug
 
 	fn send_heartbeat(&mut self) -> Result<(), Error>;
 	fn receive_signal(&mut self, port : u16) -> Result<(), Error>;
+
+	fn connected(&self) -> bool;
+	fn time_created(&self) -> SystemTime;
+	fn disconnect(&mut self, ownership_map : &mut HashMap<Token, Connection>) -> Result<(), Error>;
 }
 
 pub(crate) trait _DroneInternal : Drone

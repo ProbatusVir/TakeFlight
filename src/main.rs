@@ -33,7 +33,7 @@ use std::io::ErrorKind;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use takeflight_computer_vision as computer_vision;
 
 #[allow(dead_code)]
@@ -54,6 +54,7 @@ type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
 const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
 const LOG_DIR : &str = "logs/";
+const TIMEOUT : Duration = Duration::from_millis((1.5 * 1000.0) as u64);
 
 // TODO: Let's make a more accurate name for this.
 #[allow(dead_code)]
@@ -152,7 +153,7 @@ fn main() -> Result<(), Error> {
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
-	//let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
+	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
 	/*drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
 	drone.lock()?.rc(0, 99, 0, 0.0)?;
@@ -238,7 +239,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 								token,
 								Connection::TCP(stream),
 							);
-							}
+						}
 						Err(e) => {
 							if e.kind() == ErrorKind::WouldBlock {break}
 							else { return Err(e.into()) }
@@ -248,10 +249,10 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 			}
 			HEARTBEAT => {
 				// Send heartbeat to all eligible connections
-				#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
-				server.logger.info("Sending out keep-alives!")?;
 				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
-				for connection in server.ownership_map.lock()?.iter_mut() {
+				let mut delete_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
+				let mut ownership_map_lock = server.ownership_map.lock()?;
+				for connection in ownership_map_lock.iter_mut() {
 					// This seems like a patchy solution. This combats sending multiple pings per cycle.
 					match connection.1
 					{
@@ -265,6 +266,17 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 							}
 
 							let mut drone_lock = drone.lock()?;
+							if !drone_lock.connected()
+							{
+								let now = SystemTime::now();
+								if now.duration_since(drone_lock.time_created())? > TIMEOUT
+								{
+									logger.error("Failed to connect to drone!!!")?;
+									delete_drones.push(drone.clone());
+								}
+								continue;
+							}
+
 							let ping_result = drone_lock.send_heartbeat();
 							match ping_result {
 								Ok(_)	=> { continue; }
@@ -285,6 +297,13 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 						}
 						_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
 					}
+				}
+
+				delete_drones.dedup_by(|left, right| {Arc::ptr_eq(&left, right)});
+				for drone in delete_drones
+				{
+					drone.lock()?.disconnect(&mut *ownership_map_lock)?;
+
 				}
 			}
 			token => {
@@ -326,6 +345,8 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 					found_connection.unwrap().try_clone()
 				};
 
+				#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
+				server.logger.info("Sending out keep-alives!")?;
 				// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
 				match cloned_connection
 				{

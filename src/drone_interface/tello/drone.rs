@@ -1,7 +1,7 @@
 use super::packet;
 use crate::app_network::VideoCode::Png;
 use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
-use crate::drone_interface::{IUnit, Unit, _DroneInternal};
+use crate::drone_interface::{Drone, IUnit, Unit, _DroneInternal};
 use crate::error::Error;
 use crate::logger::Logger;
 use crate::{debug_utils, drone_interface, Connection, Poll, ServerMap, Token, UdpSocket};
@@ -11,10 +11,12 @@ use mio::Interest;
 use openh264::formats::YUVSource;
 use std::collections::HashMap;
 use std::io;
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use mio::event::Source;
 use zerocopy::IntoBytes;
 
 #[allow(dead_code)]
@@ -24,6 +26,8 @@ pub struct TelloDrone
 	command_sock	: UdpSocket,
 	video_sock		: UdpSocket,
 	info_sock		: UdpSocket,
+	is_connected	: bool,
+	time_created	: SystemTime,
 
 	seq_number		: u16,
 	response_buffer	: Vec<u8>,
@@ -184,7 +188,7 @@ impl drone_interface::Drone for TelloDrone
 	}
 
 	fn snapshot(&mut self) -> Option<Arc<DynamicImage>> {
-			Some(Arc::new(self.image.clone()?))
+		Some(Arc::new(self.image.clone()?))
 	}
 
 	fn rc(&mut self, lr: IUnit, ud: IUnit, fb: IUnit, rot: f32) -> Result<(), Error> {
@@ -271,6 +275,43 @@ impl drone_interface::Drone for TelloDrone
 		}
 		else { return Err(Error::Custom("Tello: Requested socket not found in this Tello!")) }
 	}
+
+	fn connected(&self) -> bool {
+		self.is_connected
+	}
+
+	fn time_created(&self) -> SystemTime {
+		self.time_created
+	}
+
+	fn disconnect(&mut self, ownership_map : &mut HashMap<Token, Connection>) -> Result<(), Error> {
+		{
+			ownership_map.remove(&Token(self.video_sock.local_addr()?.port() as usize));
+			ownership_map.remove(&Token(self.command_sock.local_addr()?.port() as usize));
+			ownership_map.remove(&Token(self.info_sock.local_addr()?.port() as usize));
+		}
+
+		{
+			let poll_lock = self.poll.lock()?;
+			self.video_sock.deregister(poll_lock.registry())?;
+			self.command_sock.deregister(poll_lock.registry())?;
+			self.info_sock.deregister(poll_lock.registry())?;
+		}
+
+		{
+			let mut vid_src_lock = self.curr_video_src.lock()?;
+			if vid_src_lock.is_some()
+			{
+				let port = vid_src_lock.as_ref().unwrap().0 as u16;
+				if port == self.video_sock.local_addr()?.port()
+				{
+					*vid_src_lock = None;
+				}
+			}
+		}
+
+		Ok(())
+	}
 }
 
 impl TelloDrone
@@ -338,6 +379,8 @@ impl TelloDrone
 			command_sock,
 			video_sock,
 			info_sock,
+			is_connected	: false,
+			time_created	: SystemTime::now(),
 			seq_number,
 			response_buffer,
 			vid_frame_number: 0,
@@ -490,6 +533,7 @@ impl TelloDrone
 			}
 			else {
 				self.logger.info("Received handshake acknowledgement from Tello!")?;
+				self.is_connected = true;
 			}
 		}
 		else if message.contains("unknown command: ")
@@ -614,42 +658,43 @@ impl TelloDrone
 						match decoder_result
 						{
 							Ok(decoded_option) =>
-							{
-								/*
-								let decoded = decoded_option.unwrap();
-								let (w,h) = decoded.dimensions();
-								self.logger.info_from_string(format!("We successfully decoded frame {frame_number}, {w}x{h}"))?;
-								let mut file = File::create(format!("test_results/frame{frame_number}.rgb"))?;
-								decoded.write_rgb8(&mut file_buffer);
-								file.write_all(&file_buffer)?;*/
-
-								// Send the image to the client, if possible.
-								// TODO: I think this can be optimized for space if we initialize our image once, etc. etc.
-								let decoded = decoded_option.unwrap();
-								let (w,h) = decoded.dimensions();
-								let mut decoded_image = image::RgbImage::new(w as u32, h as u32);
-								decoded.write_rgb8(&mut decoded_image);
-								self.image = Some(decoded_image.into());
-
-								let now = SystemTime::now();
-								if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
 								{
+									/*
+									let decoded = decoded_option.unwrap();
+									let (w,h) = decoded.dimensions();
+									self.logger.info_from_string(format!("We successfully decoded frame {frame_number}, {w}x{h}"))?;
+									let mut file = File::create(format!("test_results/frame{frame_number}.rgb"))?;
+									decoded.write_rgb8(&mut file_buffer);
+									file.write_all(&file_buffer)?;*/
 
-									self.logger.warn_from_string(format!("Attempting to send video to {}", self.curr_video_dst.lock()?.unwrap_or(Token(0)).0))?;
-									match self.send_image(Png)
+									// Send the image to the client, if possible.
+									// TODO: I think this can be optimized for space if we initialize our image once, etc. etc.
+									let decoded = decoded_option.unwrap();
+									let (w,h) = decoded.dimensions();
+									let mut decoded_image = image::RgbImage::new(w as u32, h as u32);
+									decoded.write_rgb8(&mut decoded_image);
+									self.image = Some(decoded_image.into());
+
+									let now = SystemTime::now();
+									if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
 									{
-										Err(Error::NoVideoSource) => { self.logger.info("Tello didn't consider itself a valid video source?")? }
-										Err(Error::NoVideoTarget) => { self.logger.info("No valid video destination.")? }
-										Ok(_) => { self.logger.info("Video sent")?; }
-										e => { self.logger.warn("Some error occurred while Tello was sending video...")?; e? }
+										// TODO: DEBUG -- BUILD REVIEW CODE
+										std::fs::File::create(format!("test_results/ImageFrame{frame_number}"))?.write_all(&self.image.as_ref().unwrap().as_rgb8().unwrap())?;
+										self.logger.warn_from_string(format!("Attempting to send video to {}", self.curr_video_dst.lock()?.unwrap_or(Token(0)).0))?;
+										match self.send_image(Png)
+										{
+											Err(Error::NoVideoSource) => { self.logger.info("Tello didn't consider itself a valid video source?")? }
+											Err(Error::NoVideoTarget) => { self.logger.info("No valid video destination.")? }
+											Ok(_) => { self.logger.info("Video sent")?; }
+											e => { self.logger.warn("Some error occurred while Tello was sending video...")?; e? }
+										}
 									}
 								}
-							}
 							Err(_) =>
-							{ 	//We actually don't really care about this error.
-								//self.logger.error_from_string(format!("Received malformed video frame {frame_number}"))?;
-								//File::create(format!("test_results/malformed{frame_number}"))?.write_all(&image_buffer)?
-							}
+								{ 	//We actually don't really care about this error.
+									//self.logger.error_from_string(format!("Received malformed video frame {frame_number}"))?;
+									//File::create(format!("test_results/malformed{frame_number}"))?.write_all(&image_buffer)?
+								}
 						}
 					}
 					self.vid_frame_number = frame_number;
