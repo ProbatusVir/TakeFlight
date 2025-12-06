@@ -7,6 +7,8 @@ import 'package:takef/main.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'flight_screen.dart';
 
+Socket? controlSoc;
+
 /// This method may throw IOException or RangeError.
 Future<int> getServerPort() async {
   // Acquire random socket
@@ -52,27 +54,38 @@ Future<void> androidConnect()async{
   await debug.writeAsString("${ await getServerPort() }");*/
 
   int port = await getServerPort();
-  //func for sending controls
-
+  //func for control handshake
+  await controlRC(port);
   //func for getting images from drone
-  await getDroneImg(port);
+  //await getDroneImg(port);
   //func for getting SSID from server
-  await getSSID(port);
+  //await getSSID(port);
+}
+
+void sendRC(){
+  if(controlSoc == null){
+    print('socket not ready');
+    return;
+  }
+  if(rcCon.packet.isEmpty){
+    print('Packet is currently empty');
+    return;
+  }
+  print('Sending movement packet...');
+  controlSoc?.add(rcCon.packet);
 }
 
 Future<void> controlRC(int port) async{
-  Socket? controlSoc;
   try{
     controlSoc = await Socket.connect('127.0.0.1', port);
-    print('Connected to Server over Control Socket: ${controlSoc.remoteAddress}:${controlSoc.remotePort}');
+    print('Connected to Server over Control Socket: ${controlSoc?.remoteAddress}:${controlSoc?.remotePort}');
   } on SocketException catch (e){
     print("Error connecting to server on Control: $e");
   }
   //Send server handshake
   if(controlSoc != null){
-    controlSoc.add([0x42, 0x42, 0x01]);
+    controlSoc?.add([0x42, 0x42, 0x01]);
   }
-  //send movement packet from flight screen
 }
 
 Future<void> getDroneImg(int port) async {
