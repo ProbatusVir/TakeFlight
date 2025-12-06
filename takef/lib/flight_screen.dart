@@ -18,10 +18,10 @@ class RC{
 
     return packet = [
       0x02, //Rc command code
-      leftRight,
-      upDown,
-      forwardBack,
-      rotation,
+      leftRight.toSigned(8),
+      upDown.toSigned(8),
+      forwardBack.toSigned(8),
+      rotation.toSigned(8),
       0x00 //Reserved
     ];
   }
