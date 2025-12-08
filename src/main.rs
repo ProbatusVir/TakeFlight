@@ -18,7 +18,7 @@ mod database;
 mod tests;
 
 use crate::app_network::{handle_connection, handle_info_activity, ClientSocketType};
-use crate::drone_interface::Drone;
+use crate::drone_interface::{ConnectionState, Drone};
 use crate::logger::{do_logging, Logger};
 use error::Error;
 use local_ip_address::local_ip;
@@ -189,6 +189,7 @@ fn main() -> Result<(), Error> {
 
 	status
 }
+
 fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger : &Logger)
 				-> Result<(), Error>
 {
@@ -266,15 +267,21 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 							}
 
 							let mut drone_lock = drone.lock()?;
-							if !drone_lock.connected()
-							{
-								let now = SystemTime::now();
-								if now.duration_since(drone_lock.time_created())? > TIMEOUT
-								{
+							let drone_connection_state = drone_lock.connection_state();
+
+							// Log the appropriate error, and send to client.
+							match drone_connection_state {
+								ConnectionState::FailedConnect => {
 									logger.error("Failed to connect to drone!!!")?;
 									delete_drones.push(drone.clone());
+									continue;
 								}
-								continue;
+								ConnectionState::Disconnected => {
+									logger.error("Drone disconnected.")?;
+									delete_drones.push(drone.clone());
+									continue;
+								}
+								_ => { /* noop */ }
 							}
 
 							let ping_result = drone_lock.send_heartbeat();
@@ -365,7 +372,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 											_ => { Err(e)? }
 										}
 									}
-									_ => { /* noop */ }
+									_ => { panic!("This block should be unreachable.") }
 								}
 							}
 							Connection::ServerInfo(..) => { handle_info_activity(token, server)? }

@@ -1,6 +1,6 @@
 use crate::computer_vision::HandLandmarker;
 use crate::drone_interface::drone_pro::drone::DroneCommandState::BasicMovement;
-use crate::drone_interface::{IUnit, Unit, _DroneInternal};
+use crate::drone_interface::{ConnectionState, IUnit, Unit, _DroneInternal};
 use crate::logger::Logger;
 use crate::video::rtp;
 use crate::video::rtp::{JpegMainHeader, RTPContent};
@@ -248,7 +248,7 @@ impl drone_interface::Drone for Drone
 
 	}
 
-	fn connected(&self) -> bool {
+	fn connection_state(&self) -> ConnectionState {
 		todo!()
 	}
 

@@ -1,7 +1,8 @@
+use crate::ConnectionState::StillConnecting;
 use super::packet;
 use crate::app_network::VideoCode::Png;
 use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
-use crate::drone_interface::{Drone, IUnit, Unit, _DroneInternal};
+use crate::drone_interface::{ConnectionState, Drone, IUnit, Unit, _DroneInternal};
 use crate::error::Error;
 use crate::logger::Logger;
 use crate::{debug_utils, drone_interface, Connection, Poll, ServerMap, Token, UdpSocket};
@@ -18,8 +19,8 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use mio::event::Source;
 use zerocopy::IntoBytes;
+use crate::drone_interface::ConnectionState::{Connected, Disconnected, FailedConnect};
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct TelloDrone
 {
@@ -57,7 +58,7 @@ pub struct TelloDrone
 	curr_video_src			: Arc<Mutex<Option<Token>>>,
 	curr_video_dst			: Arc<Mutex<Option<Token>>>,
 
-
+	last_message_time		: SystemTime,
 }
 
 impl drone_interface::Drone for TelloDrone
@@ -249,10 +250,13 @@ impl drone_interface::Drone for TelloDrone
 	}
 
 	fn receive_signal(&mut self, port: u16) -> Result<(), Error> {
-		if port == self.command_sock.local_addr()?.port()
+		let reception_result = if port == self.command_sock.local_addr()?.port()
 		{
 			loop {
-				let bytes_read = self.command_sock.recv(&mut self.inner_read_buf)?;
+				let bytes_read = match self.command_sock.recv(&mut self.inner_read_buf) {
+						Ok (bytes) => { bytes }
+						Err(e) => { break Err(e.into()) },
+				};
 
 				// Nab the last two bytes. In most messages this is the CRC. In the acknowledgement (text) packet, it's the port number.
 				//let packet_end = [self.inner_read_buf[bytes_read-2], self.inner_read_buf[bytes_read-1]];
@@ -269,15 +273,45 @@ impl drone_interface::Drone for TelloDrone
 		else if port == self.info_sock.local_addr()?.port()
 		{
 			loop {
-				let bytes_read = self.info_sock.recv(&mut self.inner_read_buf)?;
-				self.logger.info_from_string(format!("[[Info Sock Message]]{}" , crate::debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
+				match self.info_sock.recv(&mut self.inner_read_buf)
+				{
+					Ok(bytes_read) => {self.logger.info_from_string(format!("[[Info Sock Message]]{}" , crate::debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;}
+					Err(e) => {break Err(e.into())}
+				}
 			}
 		}
-		else { return Err(Error::Custom("Tello: Requested socket not found in this Tello!")) }
+		else { Err(Error::Custom("Tello: Requested socket not found in this Tello!")) };
+
+		let now = SystemTime::now();
+		#[cfg(debug_assertions)]
+		self.logger.info_from_string(format!("Last message was received: {}ms ago!", now.duration_since(self.last_message_time)?.as_millis()))?;
+		self.last_message_time = now;
+
+		reception_result
 	}
 
-	fn connected(&self) -> bool {
-		self.is_connected
+	fn connection_state(&self) -> ConnectionState {
+		let now = SystemTime::now();
+
+		if !self.is_connected
+		{
+			if self.is_still_connecting(&now)
+			{
+				StillConnecting
+			}
+			else
+			{
+				FailedConnect
+			}
+		}
+		else if !self.is_still_connected(&now)
+		{
+			Disconnected
+		}
+		else
+		{
+			Connected
+		}
 	}
 
 	fn time_created(&self) -> SystemTime {
@@ -316,6 +350,8 @@ impl drone_interface::Drone for TelloDrone
 
 impl TelloDrone
 {
+	const TIMEOUT : Duration = Duration::from_secs(3);
+
 	#[allow(dead_code)]
 	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger,
 					  curr_video_src : Arc<Mutex<Option<Token>>>, curr_video_dst : Arc<Mutex<Option<Token>>>, frame_time : Arc<Duration>,
@@ -405,6 +441,7 @@ impl TelloDrone
 			last_frame_sent_time: UNIX_EPOCH,
 			curr_video_src,
 			curr_video_dst,
+			last_message_time : SystemTime::now(), // This is required for it to not instantly kill itself...
 		}
 		));
 
@@ -709,6 +746,19 @@ impl TelloDrone
 
 		#[allow(unreachable_code)]
 		Ok(())
+	}
+
+	#[inline(always)]
+	fn is_still_connected(&self, now : &SystemTime) -> bool {
+		// TODO: Review if this is a good idea.
+		// 	If somehow we fail to get the difference between the last message and now, just time it out.
+		now.duration_since(self.last_message_time).unwrap_or(Self::TIMEOUT) <= Self::TIMEOUT
+	}
+
+	#[inline(always)]
+	fn is_still_connecting(&self, now : &SystemTime) -> bool
+	{
+		now.duration_since(self.time_created).unwrap_or(Self::TIMEOUT) <= Self::TIMEOUT
 	}
 
 }

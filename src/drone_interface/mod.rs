@@ -20,6 +20,16 @@ use std::time::SystemTime;
 pub type Unit = u64;
 pub type IUnit = i64;
 
+// These are sorted by chronological order... sort of.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ConnectionState
+{
+	Connected,
+	StillConnecting,
+	FailedConnect,
+	Disconnected,
+}
+
 #[allow(dead_code)]
 pub trait Drone : Debug
 {
@@ -102,7 +112,7 @@ pub trait Drone : Debug
 	fn send_heartbeat(&mut self) -> Result<(), Error>;
 	fn receive_signal(&mut self, port : u16) -> Result<(), Error>;
 
-	fn connected(&self) -> bool;
+	fn connection_state(&self) -> ConnectionState;
 	fn time_created(&self) -> SystemTime;
 	fn disconnect(&mut self, ownership_map : &mut HashMap<Token, Connection>) -> Result<(), Error>;
 }
