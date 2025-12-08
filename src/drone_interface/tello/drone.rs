@@ -678,9 +678,6 @@ impl TelloDrone
 									let now = SystemTime::now();
 									if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
 									{
-										// TODO: DEBUG -- BUILD REVIEW CODE
-										std::fs::File::create(format!("test_results/ImageFrame{frame_number}"))?.write_all(&self.image.as_ref().unwrap().as_rgb8().unwrap())?;
-										self.logger.warn_from_string(format!("Attempting to send video to {}", self.curr_video_dst.lock()?.unwrap_or(Token(0)).0))?;
 										match self.send_image(Png)
 										{
 											Err(Error::NoVideoSource) => { self.logger.info("Tello didn't consider itself a valid video source?")? }
