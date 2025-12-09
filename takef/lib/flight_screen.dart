@@ -29,6 +29,17 @@ class RC{
 
 final rcCon = RC();
 
+bool isMobile(BuildContext context){
+  bool mob = false;
+  final width = MediaQuery.of(context).size.width;
+  final height = MediaQuery.of(context).size.height;
+
+  if(width < 740 && height < 360){
+    mob = true;
+  }
+  return mob;
+}
+
 class FlightScreen extends StatefulWidget{
   const FlightScreen({super.key});
 
@@ -68,7 +79,50 @@ class _FlightScreenState extends State<FlightScreen>{
   }
   @override
   Widget build(BuildContext context) {
+    return isMobile(context) ? MobileFlight(videoKey: videoKey,) : DeskFlight(videoKey: videoKey);
+  }
+}
+
+class MobileFlight extends StatelessWidget{
+  const MobileFlight({
+    super.key,
+    required this.videoKey
+  });
+
+  final GlobalKey<VideoFeedState> videoKey;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0.0, //gets rid of the shadow
+        title: Text('H: 48m', style: TextStyle(color: Colors.white, fontSize: 15.0),),
+        actions: [
+          Icon(Icons.wifi_outlined, color: Colors.white, size: 25.0,),
+          SizedBox(width: 50,), //for spacing between objects
+          Text('12m 34s', style: TextStyle(color: Colors.white, fontSize: 15.0),),
+          SizedBox(width: 50,),
+          Icon(Icons.battery_6_bar_sharp, color: Colors.green,size: 25.0,),
+        ],
+      ),
+    );
+  }
+}
+
+class DeskFlight extends StatelessWidget {
+  const DeskFlight({
+    super.key,
+    required this.videoKey,
+  });
+
+  final GlobalKey<VideoFeedState> videoKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: Colors.grey,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
