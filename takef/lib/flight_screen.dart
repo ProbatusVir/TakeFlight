@@ -33,8 +33,10 @@ bool isMobile(BuildContext context){
   bool mob = false;
   final width = MediaQuery.of(context).size.width;
   final height = MediaQuery.of(context).size.height;
+  final or = MediaQuery.of(context).orientation;
+  print('Width:$width \n\n Height: $height \n\n Orientation: $or');
 
-  if(width < 740 && height < 360){
+  if(width <= 800){
     mob = true;
   }
   return mob;
@@ -98,7 +100,7 @@ class MobileFlight extends StatelessWidget{
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0.0, //gets rid of the shadow
-        title: Text('H: 48m', style: TextStyle(color: Colors.white, fontSize: 15.0),),
+        title: Text('H: 45m', style: TextStyle(color: Colors.white, fontSize: 15.0),),
         actions: [
           Icon(Icons.wifi_outlined, color: Colors.white, size: 25.0,),
           SizedBox(width: 50,), //for spacing between objects
@@ -126,6 +128,7 @@ class DeskFlight extends StatelessWidget {
       backgroundColor: Colors.grey,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        elevation: 0.0, //gets rid of the shadow
         title: Text('H: 48m', style: TextStyle(color: Colors.white, fontSize: 25.0),),
         actions: [
           Icon(Icons.wifi_outlined, color: Colors.white, size: 35.0,),
