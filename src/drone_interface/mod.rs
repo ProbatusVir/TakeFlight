@@ -24,8 +24,8 @@ pub type IUnit = i64;
 #[derive(Debug, Eq, PartialEq)]
 pub enum ConnectionState
 {
-	Connected,
 	StillConnecting,
+	Connected,
 	FailedConnect,
 	Disconnected,
 }
