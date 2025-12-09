@@ -77,7 +77,7 @@ pub fn handle_connection(mut stream : TcpStream,
 	if &handshake_buffer[..2] != &[0x42, 0x42] { todo!("Failed to promote socket. Invalid handshake sequence. Received [{:02x} {:02x}]", handshake_buffer[0], handshake_buffer[1])};
 	let handshake_code = handshake_buffer[2];
 
-	loop {
+	/*loop {
 		match stream.read(&mut handshake_buffer)
 		{
 			Ok(_) => { server.logger.error("Error while draining read buffer during client-server handshake: There was still data to read from the handshake buffer!")?; }
@@ -91,9 +91,12 @@ pub fn handle_connection(mut stream : TcpStream,
 				}
 			}
 		}
-	}
+	}*/
 
 	let token = Token(stream.local_addr()?.port() as usize);
+	server.info_token = Some(token);
+	handle_info_activity(token.clone(), server)?;
+
 
 	let new_connection =
 		match handshake_code.into() {
