@@ -59,7 +59,7 @@ Future<void> androidConnect()async{
   //func for getting images from drone
   //await getDroneImg(port);
   //func for getting SSID from server
-  //await getSSID(port);
+  await getSSID(port);
 }
 
 void sendRC(){
@@ -152,14 +152,13 @@ Future<void> getSSID(int port) async {
      print('Info Handshake was sent');
      //send data [INFO_ID : u8, RO_SHAM_BO : u8, payload_size : u16, PAYLOAD]
      final packet = Uint8List.fromList([
-       0x00,
-       0x01,
-       0x00, 0x04,
-       0xAA, 0xBB, 0xCC, 0xDD
+       0x00,  //SSID
+       0x01,  //RoShamBo
+       0x00, 0x00, //payload_size
      ]);
      infoSoc.add(packet);
      //one flush
-     //socket.flush();
+     await infoSoc.flush();
   }
   //receive SSID
   List<String> recSSID = [];
