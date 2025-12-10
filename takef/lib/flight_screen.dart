@@ -4,6 +4,30 @@ import 'package:flutter/services.dart';
 import 'joy_stick.dart';
 import 'settings_screen.dart';
 import 'video_feed.dart';
+import 'connect.dart';
+
+class RC{
+  List<int> packet = [];
+
+  List<int> buildPacket(double lr, double ud, double fb, double rot){
+    //multiply by 100 for -100.0 to 100;
+    final leftRight = (lr * 100).toInt();
+    final upDown = (ud * 100).toInt();
+    final forwardBack = (fb * 100).toInt();
+    final rotation = (rot * 100).toInt();
+
+    return packet = [
+      0x02, //Rc command code
+      leftRight.toSigned(8),
+      upDown.toSigned(8),
+      forwardBack.toSigned(8),
+      rotation.toSigned(8),
+      0x00 //Reserved
+    ];
+  }
+}
+
+final rcCon = RC();
 
 class FlightScreen extends StatefulWidget{
   const FlightScreen({super.key});
@@ -15,11 +39,14 @@ class _FlightScreenState extends State<FlightScreen>{
   //create a global key to access the curentFrame variable in video feed
   final GlobalKey<VideoFeedState> videoKey = GlobalKey();
 
-  void rc(double lr, double ud, double fb, double rot){
+  /*static void rc(double lr, double ud, double fb, double rot) async{
     //TODO::Change to future async once server connection is there
+    final rcController = RC();
+    rcController.buildPacket(lr, ud, fb, rot);
     //simulate movement to drone til connection to server is established
-    print('RC Commands: left/right$lr:up/down$ud:forward/backward$fb:rotation$rot'); //debug
-  }
+    //print('RC Commands: left/right$lr:up/down$ud:forward/backward$fb:rotation$rot'); //debug
+  }*/
+
   //Changed to stateful widget to force this screen into landscape for android
   @override
   void initState(){
@@ -99,7 +126,8 @@ class _FlightScreenState extends State<FlightScreen>{
                   //Will be movement logic here
                   final lr = x;
                   final fb = y;
-                  rc(lr,0,fb,0);
+                  rcCon.buildPacket(lr,0,fb,0);
+                  sendRC();
                 },
               ),
             ),
@@ -114,7 +142,8 @@ class _FlightScreenState extends State<FlightScreen>{
                   //Will be height/axis control logic
                   final rot = x;
                   final ud = y;
-                  rc(0,ud,0,rot);
+                  rcCon.buildPacket(0,ud,0,rot);
+                  sendRC();
                 },
               ),
             ),
