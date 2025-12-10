@@ -95,6 +95,7 @@ class MobileFlight extends StatelessWidget{
 
   @override
   Widget build(BuildContext context) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky); //hides the nav and status bar
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
