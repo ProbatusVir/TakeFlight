@@ -451,8 +451,7 @@ pub(crate) fn handle_control_activity (
 					Error::IOError(io_error) => {
 						match io_error.kind()
 						{
-							WouldBlock => { server.logger.error("[DEBUG]: I've seen enough.")?;
-											break;}
+							WouldBlock => { break }
 							_ => { Err(io_error)? }
 						}
 					}

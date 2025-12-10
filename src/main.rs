@@ -374,7 +374,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 									_ => { /* noop */ }
 								}
 							}
-							Connection::ClientControl(..) => { panic!("Hit ClientControl"); handle_control_activity(token, server, &mut *server.ownership_map.lock()?)? }
+							Connection::ClientControl(..) => { handle_control_activity(token, server, &mut *server.ownership_map.clone().lock()?)? }
 							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 						};
 					}
