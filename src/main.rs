@@ -17,7 +17,7 @@ mod database;
 #[cfg(test)]
 mod tests;
 
-use crate::app_network::{handle_connection, handle_info_activity, ClientSocketType};
+use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
 use crate::drone_interface::Drone;
 use crate::logger::{do_logging, Logger};
 use error::Error;
@@ -71,6 +71,7 @@ struct ServerInstance
 	info_token		: Option<Token>,				// If this is None, we will travel the whole map and send signals to every found drone.
 	frame_time		: Arc<Duration>,
 	read_buffer		: [u8;1024],
+	curr_drone		: Option<Arc<Mutex<Connection>>>,
 }
 
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
@@ -149,6 +150,7 @@ fn main() -> Result<(), Error> {
 		info_token		: None,
 		frame_time		: Arc::new(FRAME_TIME),
 		read_buffer		: [0;1024],
+		curr_drone		: None,
 	};
 
 	// test
@@ -333,11 +335,14 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 						let found_connection = ownership_map_lock.remove(&token);
 						let new_item = match found_connection
 						{
-							Some(Connection::TCP(stream)) => { handle_connection(stream, server)? }
+							// Handle the connection.
+							Some(Connection::TCP(stream)) => { handle_connection(stream, server, &mut *ownership_map_lock)?}
 							_ => { continue }
 						};
 
-						ownership_map_lock.insert(token, new_item);
+						// CLARIFY:
+						// 	This logic should be handled in the above function now.
+						//ownership_map_lock.insert(token, new_item);
 						continue;
 					}
 
@@ -346,12 +351,13 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 				};
 
 				#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
-				server.logger.info("Sending out keep-alives!")?;
+				server.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
 				// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
 				match cloned_connection
 				{
 					Some(found) => {
 						match found {
+							Connection::ServerInfo(..) => { handle_info_activity(token, server, &mut *server.ownership_map.clone().lock()?)?; }
 							Connection::Drone(drone) => {
 								// Receive signal will always go until an error is encountered.
 								// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
@@ -368,7 +374,7 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 									_ => { /* noop */ }
 								}
 							}
-							Connection::ServerInfo(..) => { handle_info_activity(token, server)? }
+							Connection::ClientControl(..) => { panic!("Hit ClientControl"); handle_control_activity(token, server, &mut *server.ownership_map.lock()?)? }
 							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 						};
 					}

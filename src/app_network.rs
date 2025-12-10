@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::app_network::ClientSocketType::Info;
 use crate::ClientSocketType::{Control, Video};
 use crate::{Connection, Error, ServerInstance, TcpStream};
@@ -67,7 +68,8 @@ pub struct SSIDs
 /// This will not reacquire a lock on the ownership map.
 pub fn handle_connection(mut stream : TcpStream,
 						 server		: &mut ServerInstance,
-) -> Result<Connection, Error>
+						 ownership_map : &mut HashMap<Token, Connection>
+) -> Result<(), Error>
 {
 	// : &mut HashMap<Token, Connection>
 	// Arc<Mutex<Option<Token>>>
@@ -94,27 +96,28 @@ pub fn handle_connection(mut stream : TcpStream,
 	}*/
 
 	let token = Token(stream.local_addr()?.port() as usize);
-	server.info_token = Some(token);
-	handle_info_activity(token.clone(), server)?;
-
+	let peer_port = stream.peer_addr()?.port() as usize;
 
 	let new_connection =
 		match handshake_code.into() {
 			ClientSocketType::Control => {
-				server.drone_control = Some(token);
-				Connection::ClientControl(Control, Arc::new(Mutex::new(stream)))
+				server.logger.info_from_string(format!("New command socket: {peer_port}"))?;
+				server.drone_control = Some(Token(peer_port));
+				ownership_map.insert(Token(peer_port), Connection::ClientControl(Control, Arc::new(Mutex::new(stream))));
+				handle_control_activity(Token(peer_port), server, ownership_map)?;
 			}
 			ClientSocketType::Video => {
-				let peer_port = stream.peer_addr()?.port() as usize;
 				server.logger.info_from_string(format!("New video destination: {peer_port}" ))?;
-				*server.video_out.lock()? = Some(Token(peer_port));
-				Connection::VideoOut(Video, Arc::new(Mutex::new(stream)))
+				//*server.video_out.lock()? = Some(Token(peer_port));
+				ownership_map.insert(Token(peer_port), Connection::VideoOut(Video, Arc::new(Mutex::new(stream))));
+				*server.video_out.lock()? = Some(token);
 			}
 			ClientSocketType::Info => {
-				let peer_port = stream.peer_addr()?.port() as usize;
-				server.logger.info_from_string(format!("New bidirectional info stream: {peer_port}"))?;
 				server.info_token = Some(Token(peer_port));
-				Connection::ServerInfo(Info, Arc::new(Mutex::new(stream)))
+				server.logger.info_from_string(format!("New bidirectional info stream: {peer_port}"))?;
+				// Drain incoming events, in case there are other messages already in queue.
+				ownership_map.insert(Token(peer_port), Connection::ServerInfo(Info, Arc::new(Mutex::new(stream))));
+				handle_info_activity(Token(peer_port), server, ownership_map)?;
 			}
 
 			ClientSocketType::Invalid => { Err(Error::Custom("Invalid socket handshake."))? }
@@ -123,7 +126,7 @@ pub fn handle_connection(mut stream : TcpStream,
 	// Good to note: when we insert a new key-map pair, if the key exists, the value will just be overwritten.
 	// Implementation note: right now, the value is being removed from the map anyway, so the above is slightly null.
 
-	Ok(new_connection)
+	Ok(())
 }
 
 fn send_image_packet_tcp(out : &mut TcpStream, image_type : VideoCode, image_buffer : &Vec<u8>) -> Result<(), Error>
@@ -187,15 +190,18 @@ pub(crate) fn _validate_tokens_exist(src : &Option<Token>, out : &Option<Token>)
 
 pub(crate) fn handle_info_activity(
 	origin	: Token,
-	server	: &mut ServerInstance) -> Result<(), Error>
+	server	: &mut ServerInstance,
+	ownership_map : &mut HashMap<Token, Connection>,
+) -> Result<(), Error>
 {
 	if server.info_token.is_none() { todo!("The server did not have an info socket, yet still received activity!") }
-	let peer_port_number = origin.0;
-	if origin != *server.info_token.as_ref().unwrap() { todo!("Somehow the info socket did not match the server's info socket? Server expected: {}, Actual: {}", server.info_token.as_ref().unwrap().0, peer_port_number) }
+
+	//let peer_port_number = origin.0;
+	// We'll bring back this logic if we want to just send this to a work-queue.
+	//if origin != *server.info_token.as_ref().unwrap() { todo!("Somehow the info socket did not match the server's info socket? Server expected: {}, Actual: {}", server.info_token.as_ref().unwrap().0, peer_port_number) }
 
 	let info_sock = {
-		let ownership_lock = server.ownership_map.lock()?;
-		let inbound_connection = ownership_lock.get(&origin);
+		let inbound_connection = ownership_map.get(&origin);
 
 		let info_sock = match inbound_connection {
 			Some(connection) => {
@@ -208,11 +214,12 @@ pub(crate) fn handle_info_activity(
 			}
 			// The server doesn't recognize it. This shouldn't happen.
 			None => {
+				server.logger.error_from_string(format!("The client's info socket was somehow not in the ownership map. Recvd: {}", origin.0))?;
 				server.info_token = None;
-				Err(Error::Custom("The client's info socket was somehow not in the ownership map. "))?
+				Err(Error::Custom("The client's info socket was somehow not in the ownership map. Local: {}, Peer: {}"))?
 			}
 		};
-		info_sock.clone()
+		info_sock.clone() // This is so the info socket doesn't outlive the ownership map.
 	};
 	let mut info_lock = info_sock.lock()?;
 
@@ -319,4 +326,66 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 	}
 
 	Ok(())
+}
+
+pub(crate) fn handle_control_activity (
+	origin	: Token,
+	server	: &mut ServerInstance,
+	ownership_map : &mut HashMap<Token, Connection>
+) -> Result<(), Error>
+{
+	let peer_port_number = origin.0;
+	match server.drone_control
+	{
+		None => { todo!("The server did not have a client control socket, yet still received activity!") }
+		Some(ref drone_control_token) => {
+			if origin != *drone_control_token {
+				todo!("Somehow the drone control socket did not match the server's info socket? Server expected: {}, Actual: {}", drone_control_token.0, peer_port_number)
+			}
+		}
+	}
+
+
+	let command_sock = {
+
+		let inbound_connection = ownership_map.get(&origin);
+
+		let command_sock = match inbound_connection {
+			Some(connection) => {
+				match connection {
+					Connection::ClientControl(_, stream) => {
+						stream
+					}
+					_ => { Err(Error::Custom("Drone control socket was NOT the right type of connection."))? }
+				}
+			}
+			// The server doesn't recognize it. This shouldn't happen.
+			None => {
+				server.drone_control = None;
+				Err(Error::Custom("The client's drone control socket was somehow not in the ownership map. "))?
+			}
+		};
+		command_sock.clone() // This is so the command sock doesn't outlive the ownership_map lock.
+	};
+
+	let mut command_lock = command_sock.lock()?;
+
+	let mut DEBUG_buffer = [0_u8;256];
+	loop {
+		match command_lock.read(&mut DEBUG_buffer)
+		{
+			Ok(_) => {}
+			Err(e) => {
+				match e.kind()
+				{
+					WouldBlock => { server.logger.error("I've seen enough.")? },
+					_ => {  }
+				}
+
+				Err(e)?
+			}
+		}
+	}
+
+	panic!("Cool, we called the controller!");
 }
