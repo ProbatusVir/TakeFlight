@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io;
 use crate::app_network::ClientSocketType::Info;
 use crate::ClientSocketType::{Control, Video};
 use crate::{Connection, Error, ServerInstance, TcpStream};
@@ -12,6 +13,7 @@ use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use zerocopy::IntoBytes;
+use crate::drone_interface::Drone;
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]
@@ -56,13 +58,46 @@ pub enum RoShamBo
 	Invalid = 0xFF,
 }
 
+#[derive(Debug, Clone, IntoPrimitive, FromPrimitive)]
+#[repr(u8)]
+pub enum ConnectionState
+{
+	StillConnecting = 0,
+	Connected = 1,
+	FailedConnect = 2,
+	Disconnected = 3,
+	#[num_enum(default)]
+	Invalid = 255,
+}
+
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SSIDs
 {
 	ssids: Vec<String>,
 }
 
+#[derive(Debug, Clone, IntoPrimitive, FromPrimitive)]
+#[repr(u8)]
+pub enum CommandCode
+{
+	Takeoff = 0,
+	Land = 1,
+	RC = 2,
+	#[num_enum(default)]
+	Invalid = 255,
+}
 
+#[derive(Debug, Clone, IntoPrimitive, FromPrimitive)]
+#[repr(u8)]
+// CLARIFY: non-exhaustive.
+pub enum LandCode
+{
+	Graceful = 1,
+	Emergency = 2,
+	#[num_enum(default)]
+	Invalid = 255,
+}
 
 /// This will only be called when a socket initiates connection.
 /// This will not reacquire a lock on the ownership map.
@@ -261,6 +296,39 @@ struct InfoPacket
 	pub payload		: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
+enum CommandPacket
+{
+	Takeoff(TakeoffPacket),
+	Land(LandPacket),
+	RC(RcPacket),
+}
+
+// This is basically just a unit... right now.
+#[derive(Debug, Clone)]
+struct TakeoffPacket
+{
+	// there is a reserved byte.
+}
+
+#[derive(Debug, Clone)]
+struct LandPacket
+{
+	land_code		: LandCode,
+}
+
+#[derive(Debug, Clone)]
+struct RcPacket
+{
+	forward			: i8,
+	right			: i8,
+	up				: i8,
+	rot				: i8,
+	// there is a reserved byte.
+}
+
+
+
 impl InfoPacket
 {
 	/// This does assume that the stream is big endian. Git gud if it's not???
@@ -330,7 +398,7 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 
 pub(crate) fn handle_control_activity (
 	origin	: Token,
-	server	: &mut ServerInstance,
+	server: &mut ServerInstance,
 	ownership_map : &mut HashMap<Token, Connection>
 ) -> Result<(), Error>
 {
@@ -370,22 +438,172 @@ pub(crate) fn handle_control_activity (
 
 	let mut command_lock = command_sock.lock()?;
 
-	let mut DEBUG_buffer = [0_u8;256];
 	loop {
-		match command_lock.read(&mut DEBUG_buffer)
+		match CommandPacket::read(&mut *command_lock)
 		{
-			Ok(_) => {}
+			Ok(command_packet) => {
+				handle_control_packet(&command_packet, &mut command_lock, server)?
+			}
+			// This pattern is a bit done to death at this point...
 			Err(e) => {
-				match e.kind()
+				match e
 				{
-					WouldBlock => { server.logger.error("I've seen enough.")? },
-					_ => {  }
+					Error::IOError(io_error) => {
+						match io_error.kind()
+						{
+							WouldBlock => { server.logger.error("[DEBUG]: I've seen enough.")?;
+											break;}
+							_ => { Err(io_error)? }
+						}
+					}
+					_ => { Err(e)? }
 				}
-
-				Err(e)?
 			}
 		}
 	}
 
-	panic!("Cool, we called the controller!");
+	Ok(())
+}
+
+pub(self) fn handle_control_packet(packet : &CommandPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
+{
+	//TODO: make sure that the right socket is making executive calls here.
+
+	match server.curr_drone
+	{
+		Some(ref mut connection) => {
+			match &mut *connection.lock()?
+			{
+				Connection::Drone(drone) => {
+					match packet {
+						CommandPacket::Takeoff(_) => { server.logger.error("Taking off!") }
+						CommandPacket::Land(_) => { server.logger.error("Landing!") }
+						CommandPacket::RC(_) => { server.logger.error("RC...ing!") }
+					}?;
+
+					packet.issue(&mut *drone.lock()?)?
+				}
+				_ => { todo!("handle_control_packet not a drone."); }
+			}
+
+		}
+		None => {
+			server.logger.warn("Tried to issue a command while not connected to drone!")?;
+			return Ok(())
+		}
+	}
+
+	Ok(())
+}
+
+trait Command
+{
+	fn issue(&self, drone : &mut dyn Drone) -> Result<(), Error>;
+}
+
+impl CommandPacket
+{
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	{
+		// Again, the BE is unnecessary, but it's also a noop, so I don't care.
+		let command_code: CommandCode = u8::read_from_big_endian(stream)?.into();
+
+		Ok(match command_code
+		{
+			CommandCode::Takeoff => {
+				CommandPacket::Takeoff(TakeoffPacket::read(stream)?)
+			}
+			CommandCode::Land => {
+				CommandPacket::Land(LandPacket::read(stream)?)
+			}
+			CommandCode::RC => {
+				CommandPacket::RC(RcPacket::read(stream)?)
+			}
+			CommandCode::Invalid => { Err(Error::Custom("Received invalid command code."))? }
+		})
+
+	}
+}
+
+impl TakeoffPacket
+{
+	/// This assumes that the COMMAND_CODE has already been consumed.
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	{
+		let _reserved = u8::read_from_big_endian(stream)?;
+		Ok(Self{})
+	}
+
+}
+
+impl LandPacket
+{
+	/// This assumes that the COMMAND_CODE has already been consumed.
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	{
+		let land_code : LandCode = u8::read_from_big_endian(stream)?.into();
+		Ok(Self {
+			land_code,
+		})
+	}
+}
+
+impl RcPacket
+{
+	/// This assumes that the COMMAND_CODE has already been consumed.
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	{
+		let forward = i8::read_from_big_endian(stream)?.into();
+		let right = i8::read_from_big_endian(stream)?.into();
+		let up = i8::read_from_big_endian(stream)?.into();
+		let rot = i8::read_from_big_endian(stream)?.into();
+		let _reserved = u8::read_from_big_endian(stream)?;
+
+		Ok(Self {
+			forward,
+			right,
+			up,
+			rot,
+		})
+	}
+
+}
+
+
+impl Command for CommandPacket
+{
+	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+		match self {
+			CommandPacket::Takeoff(takeoff) => { takeoff.issue(drone) }
+			CommandPacket::Land(land) => { land.issue(drone) }
+			CommandPacket::RC(rc) => { rc.issue(drone) }
+		}
+	}
+}
+
+impl Command for TakeoffPacket
+{
+	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+		drone.takeoff()
+	}
+}
+
+impl Command for LandPacket
+{
+	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+		match self.land_code
+		{
+			LandCode::Graceful => { drone.graceful_land() }
+			LandCode::Emergency => { drone.emergency_land() }
+			LandCode::Invalid => { Err(Error::Custom("Invalid land code.")) }
+		}?;
+
+		Ok(())
+	}
+}
+impl Command for RcPacket
+{
+	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+		drone.rc(self.right as i64, self.up as i64, self.forward as i64, self.rot as f32)
+	}
 }
