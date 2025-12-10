@@ -84,7 +84,7 @@ class _FlightScreenState extends State<FlightScreen>{
     return isMobile(context) ? MobileFlight(videoKey: videoKey,) : DeskFlight(videoKey: videoKey);
   }
 }
-
+///Mobile Design
 class MobileFlight extends StatelessWidget{
   const MobileFlight({
     super.key,
@@ -109,10 +109,49 @@ class MobileFlight extends StatelessWidget{
           Icon(Icons.battery_6_bar_sharp, color: Colors.green,size: 25.0,),
         ],
       ),
+      body: Stack(
+        children: [
+          Align(
+            alignment: Alignment.center,
+            //TODO:: Need to fix weird visual bug of the feed being small then readjusting to correct size
+            child: VideoFeed(key: videoKey),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(30)
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
+                  mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
+                  children: [
+                    IconButton(
+                        onPressed: (){},
+                        icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
+                    ),
+                    RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
+                    IconButton(
+                        onPressed: () {
+                          //TODO:: Create separate settings screen for mobile side
+                          throw UnimplementedError('Mobile Settings coming soon');
+                        },
+                        icon: Icon(Icons.settings_outlined, color: Colors.white, size: 30.0,)
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-
+///Desktop design
 class DeskFlight extends StatelessWidget {
   const DeskFlight({
     super.key,
