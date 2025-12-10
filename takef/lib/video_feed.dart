@@ -34,7 +34,8 @@ class VideoFeedState extends State<VideoFeed>{
       final bytes = await rootBundle.load('assets/simulated_feed/ezgif-frame-${i.toString().padLeft(3, '0')}.jpg');
       final frameBytes = bytes.buffer.asUint8List();
       currentFrame.add(frameBytes);
-      feed.add(Image.memory(frameBytes, gaplessPlayback: true, fit: BoxFit.fill));
+      if(!mounted) return;
+      feed.add(Image.memory(frameBytes, gaplessPlayback: true, fit: BoxFit.cover, width: MediaQuery.of(context).size.width, height: MediaQuery.of(context).size.height,));
     }
   }
 
