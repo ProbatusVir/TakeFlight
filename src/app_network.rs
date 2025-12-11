@@ -42,10 +42,11 @@ pub enum VideoCode
 #[repr(u8)]
 pub enum InfoID
 {
-	SSIDs,
-	DroneStateDump,
-	RecordRequest,
-	DroneConnectionState,
+	SSIDs = 0,
+	DroneStateDump = 1,
+	RecordRequest = 2,
+	DroneConnectionState = 3,
+	DroneSelection = 4,
 	#[num_enum(default)]
 	Invalid = 255,
 }
