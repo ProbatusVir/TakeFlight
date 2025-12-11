@@ -12,6 +12,7 @@ use std::io::ErrorKind::WouldBlock;
 use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use lebe::Endian;
 use zerocopy::IntoBytes;
 use crate::drone_interface::Drone;
 
@@ -43,6 +44,7 @@ pub enum InfoID
 	SSIDs,
 	DroneStateDump,
 	RecordRequest,
+	DroneConnectionState,
 	#[num_enum(default)]
 	Invalid = 255,
 }
@@ -288,7 +290,7 @@ pub(crate) fn handle_info_activity(
 }
 
 #[derive(Debug, Clone)]
-struct InfoPacket
+pub(crate) struct InfoPacket
 {
 	pub id			: InfoID,
 	pub play		: RoShamBo,
@@ -368,6 +370,20 @@ impl InfoPacket
 			payload: json,
 		})
 	}
+	
+	pub fn new_drone_state(play : RoShamBo, connection_state: ConnectionState, mac_address : [u8;6]) -> Self
+	{
+		let mut payload = Vec::new();
+		payload.extend_from_slice(&(connection_state as u8));
+		payload.extend_from_slice(&mac_address);
+		Self
+		{
+			id: InfoID::DroneConnectionState,
+			play,
+			payload,
+		}
+	}
+	
 }
 
 impl RoShamBo
@@ -381,6 +397,13 @@ impl RoShamBo
 			RoShamBo::Invalid	=> { RoShamBo::Invalid } // Invalid is its own counterplay??? Yes.
 		}
 	}
+
+	pub fn post_increment(&mut self) -> Self
+	{
+		let result = self.clone();
+		*self = self.counterplay();
+		result
+	}
 }
 
 pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
@@ -390,6 +413,7 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 		InfoID::SSIDs => { let return_packet = InfoPacket::new_ssid(packet.play.clone(), server)?; return_packet.write(origin)? ; server.logger.error("Sent the client a faux list of SSIDs.")?; }
 		InfoID::DroneStateDump => { todo!("Haven't implemented DroneStateDump yet.") }
 		InfoID::RecordRequest => { todo!("Haven't implemented RecordRequest yet.") }
+		InfoID::DroneConnectionState => { todo!("Haven't implemented response to DroneConnectionState request yet.") }
 		InfoID::Invalid => { Err(Error::Custom("Attempted to handle invalid info packet."))? }
 	}
 

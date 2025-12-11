@@ -17,6 +17,7 @@ mod database;
 #[cfg(test)]
 mod tests;
 
+use crate::app_network::{ConnectionState, InfoPacket, RoShamBo};
 use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
 use crate::drone_interface::Drone;
 use crate::logger::{do_logging, Logger};
@@ -69,6 +70,7 @@ struct ServerInstance
 	video_src		: Arc<Mutex<Option<Token>>>,	// If this connection is not found in the map, this will be set to None. This should not be accessed directly.
 	drone_control	: Option<Token>,				// If this is None, we will travel the whole map and send signals to every found drone.
 	info_token		: Option<Token>,				// If this is None, we will travel the whole map and send signals to every found drone.
+	ro_sham_bo		: RoShamBo,
 	frame_time		: Arc<Duration>,
 	read_buffer		: [u8;1024],
 	curr_drone		: Option<Arc<Mutex<Connection>>>,
@@ -148,6 +150,7 @@ fn main() -> Result<(), Error> {
 		video_out		: Arc::new(Mutex::new(None)),
 		drone_control	: None,
 		info_token		: None,
+		ro_sham_bo		: RoShamBo::Rock,
 		frame_time		: Arc::new(FRAME_TIME),
 		read_buffer		: [0;1024],
 		curr_drone		: None,
@@ -253,8 +256,9 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 				// Send heartbeat to all eligible connections
 				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
 				let mut delete_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
-				let mut ownership_map_lock = server.ownership_map.lock()?;
-				for connection in ownership_map_lock.iter_mut() {
+				let ownership_map_clone = server.ownership_map.clone();
+				let mut ownership_map_lock = ownership_map_clone.lock()?;
+				for connection in ownership_map_lock.iter() {
 					// This seems like a patchy solution. This combats sending multiple pings per cycle.
 					match connection.1
 					{
@@ -274,6 +278,13 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 								if now.duration_since(drone_lock.time_created())? > TIMEOUT
 								{
 									logger.error("Failed to connect to drone!!!")?;
+									// CLARIFY: This should not be all 0's. This should be an actual MAC address.
+									let state_packet = InfoPacket::new_drone_state(server.ro_sham_bo.post_increment(),
+																ConnectionState::FailedConnect,
+																[0, 0, 0, 0, 0, 0],
+									);
+
+									server.send_info(&state_packet, &ownership_map_lock)?;
 									delete_drones.push(drone.clone());
 								}
 								continue;
@@ -304,8 +315,13 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 				delete_drones.dedup_by(|left, right| {Arc::ptr_eq(&left, right)});
 				for drone in delete_drones
 				{
-					drone.lock()?.disconnect(&mut *ownership_map_lock)?;
-
+					// CLARIFY: This should not be all 0's. This should be an actual MAC address.
+					let state_packet = InfoPacket::new_drone_state(server.ro_sham_bo.post_increment(),
+																	ConnectionState::Disconnected,
+																	[0, 0, 0, 0, 0, 0],
+					);
+					server.send_info(&state_packet, &ownership_map_lock)?;
+					drone.lock()?.disconnect(&mut ownership_map_lock)?;
 				}
 			}
 			token => {
@@ -398,6 +414,49 @@ impl ServerInstance
 		// The only pessimization to this wrapper is the arc increment
 		send_image(self.video_out.clone(), self.video_src.clone(), self.ownership_map.clone())
 	}*/
+
+	/// Doesn't throw error if there is no info socket. Instead, it's a noop.
+	/// FIXME: I want to do a little less passing in of ownership maps...
+	fn send_info(&mut self, packet : &InfoPacket, ownership_map: &HashMap<Token, Connection>) -> Result<(), Error>
+	{
+		match &self.info_token
+		{
+			// If there's no token, that's fine, nothing to be done.
+			None => {
+				self.logger.warn("Tried to send an info message out, but there was no candidate")
+			}
+
+			Some(token) => {
+				match ownership_map.get(token)
+				{
+					// If the token doesn't actually exist, that's a problem. But one that we can recover from!
+					None => {
+						self.info_token = None; // I guess this is valid because Token is copy?
+						Err(Error::Custom("While attempting to send info, found that the current token was invalid!"))
+					}
+
+					Some(connection) => {
+						match connection
+						{
+							// The nominal case. We can send the dang message.
+							Connection::ServerInfo(_, stream) => {
+								let mut stream_lock = stream.lock()?;
+								packet.write(&mut *stream_lock)
+							}
+
+							// If the server is the wrong type, that's a problem, but one we can also recover from!
+							_ => {
+								self.info_token = None;
+								Err(Error::Custom("While attempting to send info, found that the info socket was the wrong type of connection!"))
+							}
+						}
+
+					}
+				}
+			}
+		}
+
+	}
 
 }
 
