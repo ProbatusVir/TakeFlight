@@ -159,6 +159,7 @@ fn main() -> Result<(), Error> {
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
 	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
+	server.curr_drone = Some(Arc::new(Mutex::new(Connection::Drone(drone.clone()))));
 	/*drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
 	drone.lock()?.rc(0, 99, 0, 0.0)?;
