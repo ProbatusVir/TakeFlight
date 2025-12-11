@@ -2,10 +2,12 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart'; //For Uint8List
 import 'package:takef/main.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'flight_screen.dart';
+import 'video_feed.dart';
 
 Socket? controlSoc;
 
@@ -49,17 +51,17 @@ Future<int> getServerPort() async {
 
 
 
-Future<void> androidConnect()async{
+Future<void> androidConnect(GlobalKey<VideoFeedState> videoKey)async{
   /*final debug = File("helloworld.txt");
   await debug.writeAsString("${ await getServerPort() }");*/
 
   int port = await getServerPort();
   //func for control handshake
-  await controlRC(port);
+  //await controlRC(port);
   //func for getting images from drone
-  //await getDroneImg(port);
+  await getDroneImg(port, videoKey);
   //func for getting SSID from server
-  await getSSID(port);
+  //await getSSID(port);
 }
 
 void sendRC(){
@@ -88,7 +90,7 @@ Future<void> controlRC(int port) async{
   }
 }
 
-Future<void> getDroneImg(int port) async {
+Future<void> getDroneImg(int port, GlobalKey<VideoFeedState> videoKey) async {
   Socket? videoSoc;
   try{
     videoSoc = await Socket.connect('127.0.0.1', port);
@@ -108,7 +110,26 @@ Future<void> getDroneImg(int port) async {
   if(videoSoc != null){
     videoSoc.listen(
             (Uint8List data){
-          if(imageLength == null && data.length >= 4){ //Assuming 4 bytes for length
+              //print('Received chunk of ${data.length} bytes: ${data.take(16).toList()}');
+              imageDataBytes.addAll(data);
+              //loop through to find the start of the png then reassemble
+              while(true) {
+                int sigIndex = findStart(imageDataBytes);
+                if(sigIndex == -1) break;
+
+                //Look for PNG end marker
+                int endIndex = findEnd(imageDataBytes, sigIndex);
+                if(endIndex == -1)break; //not complete
+
+                //Extract full PNG
+                Uint8List pngBytes = Uint8List.fromList(imageDataBytes.sublist(sigIndex, endIndex));
+                print('Successfully found png in connect file');
+                videoKey.currentState?.onImageReceived(pngBytes);
+
+                //Remove consumed bytes
+                imageDataBytes.removeRange(0, endIndex+8);
+              }
+          /*if(imageLength == null && data.length >= 4){ //Assuming 4 bytes for length
             imageLength = ByteData.view(data.buffer).getInt32(0, Endian.big); //Read length
             imageDataBytes.addAll(data.sublist(4)); //read the rest of data after first 4
           } else if(imageLength != null){
@@ -123,7 +144,7 @@ Future<void> getDroneImg(int port) async {
             // Reset for next image if multiple images are expected
             imageDataBytes.clear();
             imageLength = null;
-          }
+          }*/
         },
         onDone: (){
           print('Server disconnected');
@@ -136,6 +157,27 @@ Future<void> getDroneImg(int port) async {
     );
   }
 }
+
+int findStart(List<int> buf) {
+  for (int i = 0; i < buf.length - 3; i++) {
+    if (buf[i] == 137 && buf[i+1] == 80 && buf[i+2] == 78 && buf[i+3] == 71) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+
+int findEnd(List<int> buf, int start) {
+  for (int i = start; i < buf.length-7; i++) {
+    if (buf[i] == 73 && buf[i+1] == 69 && buf[i+2] == 78 && buf[i+3] == 68 &&
+        buf[i+4] == 174 && buf[i+5] == 66 && buf[i+6] == 96 && buf[i+7] == 130) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 
 Future<void> getSSID(int port) async {
   Socket? infoSoc;
@@ -194,12 +236,12 @@ Future<void> webConnection() async{
   web.sink.add([0x42, 0x42, 2]);
 }
 
-Future<void> connectToServer() async{
+Future<void> connectToServer(GlobalKey<VideoFeedState> videoKey) async{
   //Need to detect platform first to determine correct socket creation
   if(kIsWeb){
     //await webConnection();
   }else{
-    await androidConnect();
+    await androidConnect(videoKey);
   }
 
 }

@@ -34,7 +34,7 @@ bool isMobile(BuildContext context){
   final width = MediaQuery.of(context).size.width;
   final height = MediaQuery.of(context).size.height;
   final or = MediaQuery.of(context).orientation;
-  print('Width:$width \n\n Height: $height \n\n Orientation: $or');
+  //print('Width:$width \n\n Height: $height \n\n Orientation: $or');
 
   if(width <= 800){
     mob = true;
@@ -43,14 +43,13 @@ bool isMobile(BuildContext context){
 }
 
 class FlightScreen extends StatefulWidget{
-  const FlightScreen({super.key});
+  const FlightScreen({super.key, required this.videoKey});
+  final GlobalKey<VideoFeedState> videoKey;
 
   @override
   State<FlightScreen> createState() => _FlightScreenState();
 }
 class _FlightScreenState extends State<FlightScreen>{
-  //create a global key to access the curentFrame variable in video feed
-  final GlobalKey<VideoFeedState> videoKey = GlobalKey();
 
   /*static void rc(double lr, double ud, double fb, double rot) async{
     //TODO::Change to future async once server connection is there
@@ -81,7 +80,7 @@ class _FlightScreenState extends State<FlightScreen>{
   }
   @override
   Widget build(BuildContext context) {
-    return isMobile(context) ? MobileFlight(videoKey: videoKey,) : DeskFlight(videoKey: videoKey);
+    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey,) : DeskFlight(videoKey: widget.videoKey);
   }
 }
 ///Mobile Design

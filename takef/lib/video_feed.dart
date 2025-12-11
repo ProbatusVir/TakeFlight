@@ -10,14 +10,22 @@ class VideoFeed extends StatefulWidget{
 }
 
 class VideoFeedState extends State<VideoFeed>{
-  late Timer timer;
+  /*late Timer timer;
   int frame = 0;
   late List<Image> feed;
-  bool isLoad = false;
+  bool isLoad = false;*/
   List<Uint8List> currentFrame = [];
+  Uint8List? latestFrame;
 
+  void onImageReceived(Uint8List received){
+    setState(() {
+      print('VideoFeedState received frame of ${received.length} bytes');
+      latestFrame = received;
+      currentFrame.add(latestFrame!);
+    });
+  }
   //on creation of the state sets the list time and frame
-  @override void initState() {
+  /*@override void initState() {
     super.initState();
     loadFeed().then((_){
       isLoad = true;
@@ -51,12 +59,18 @@ class VideoFeedState extends State<VideoFeed>{
   void dispose() {
     timer.cancel();
     super.dispose();
-  }
+  }*/
 
   @override
   Widget build(BuildContext context) {
     //will place a loading screen if false otherwise will show video feed
-    return isLoad == false ? CircularProgressIndicator()
-      : feed[frame];
+    return latestFrame == null ? CircularProgressIndicator()
+      : Image.memory(
+      latestFrame!,
+      gaplessPlayback: true,
+      fit: BoxFit.cover,
+      width: MediaQuery.of(context).size.width,
+      height: MediaQuery.of(context).size.height,
+    );
   }
 }

@@ -2,6 +2,7 @@ import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
 import 'flight_screen.dart';
+import 'video_feed.dart';
 import 'settings_screen.dart';
 
 void main() async {
@@ -53,12 +54,13 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
 //creates list this will later be the get call for drone names
   final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
+  final GlobalKey<VideoFeedState> videoKey = GlobalKey<VideoFeedState>();
 
   @override
   void initState(){
     super.initState();
     Future.microtask(() async {
-      await connectToServer();
+      await connectToServer(videoKey);
     });
   }
 
@@ -125,7 +127,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       );
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen())
+                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(videoKey: videoKey,))
                                       );
                                     },
                                   );
