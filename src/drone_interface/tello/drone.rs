@@ -1,3 +1,4 @@
+use crate::app_network::DroneStateJSON;
 use super::packet;
 use crate::app_network::VideoCode::Png;
 use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
@@ -18,6 +19,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use mio::event::Source;
 use zerocopy::IntoBytes;
+use crate::app_network::InfoPacket;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -56,6 +58,8 @@ pub struct TelloDrone
 	last_frame_sent_time	: SystemTime,
 	curr_video_src			: Arc<Mutex<Option<Token>>>,
 	curr_video_dst			: Arc<Mutex<Option<Token>>>,
+
+	curr_state				: Option<FlightData>
 
 
 }
@@ -312,6 +316,23 @@ impl drone_interface::Drone for TelloDrone
 
 		Ok(())
 	}
+
+	fn get_state(&self) -> Option<DroneStateJSON> {
+		match &self.curr_state {
+			None => { None }
+			Some(flight_data) => {
+				Some(DroneStateJSON::new(
+					flight_data.battery_percent,
+					420.69, // I don't think I need to say why this is bad...
+					SystemTime::now().duration_since(self.time_created).unwrap_or(Duration::new(0, 0)), // FIXME:, not totally accurate, I would actually like to use the data provided by the drone here
+					flight_data.height,
+					flight_data.is_flying,
+					0, // Do we not actually have the signal strength?
+					None,
+				))
+			}
+		}
+	}
 }
 
 impl TelloDrone
@@ -405,6 +426,7 @@ impl TelloDrone
 			last_frame_sent_time: UNIX_EPOCH,
 			curr_video_src,
 			curr_video_dst,
+			curr_state: None,
 		}
 		));
 

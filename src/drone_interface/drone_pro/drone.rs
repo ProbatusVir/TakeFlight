@@ -16,6 +16,7 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use std::ops::BitXor;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::app_network::DroneStateJSON;
 
 #[derive(Debug)]
 pub struct Drone
@@ -257,6 +258,10 @@ impl drone_interface::Drone for Drone
 	}
 
 	fn disconnect(&mut self, ownership_map : &mut HashMap<Token, Connection>) -> Result<(), Error> {
+		todo!()
+	}
+
+	fn get_state(&self) -> Option<DroneStateJSON> {
 		todo!()
 	}
 }
