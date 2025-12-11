@@ -7,11 +7,12 @@ use image::{DynamicImage, ImageFormat};
 use lebe::io::ReadPrimitive;
 use mio::Token;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::io::ErrorKind::WouldBlock;
 use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 use lebe::Endian;
 use zerocopy::IntoBytes;
 use crate::drone_interface::Drone;
@@ -329,6 +330,18 @@ struct RcPacket
 	// there is a reserved byte.
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct DroneStateJSON
+{
+	battery			: u8,
+	temp			: f32,
+	flight_duration	: String,
+	height			: u16,
+	is_flying		: bool,
+	signal_strength	: u8,
+	extra			: Option<String>,
+}
+
 
 
 impl InfoPacket
@@ -371,11 +384,11 @@ impl InfoPacket
 		})
 	}
 	
-	pub fn new_drone_state(play : RoShamBo, connection_state: ConnectionState, mac_address : [u8;6]) -> Self
+	pub fn new_drone_connection_state(play : RoShamBo, connection_state: ConnectionState, mac_address : [u8;6]) -> Self
 	{
 		let mut payload = Vec::new();
-		payload.extend_from_slice(&(connection_state as u8));
 		payload.extend_from_slice(&mac_address);
+		payload.extend_from_slice((connection_state as u8).as_bytes());
 		Self
 		{
 			id: InfoID::DroneConnectionState,
@@ -383,7 +396,21 @@ impl InfoPacket
 			payload,
 		}
 	}
-	
+
+	/// This may need to be refactored.
+	/// This is only sent as a response to the client. Not really sent unsolicited.
+	pub fn new_drone_state_dump(origin_play : RoShamBo, mac_address : [u8;6], json : Option<&DroneStateJSON>) -> Result<Self, Error>
+	{
+		let mut payload = Vec::new();
+		payload.extend_from_slice(&mac_address);
+		serde_json::to_writer(&mut payload, &Some(&json))?;
+
+		Ok(Self {
+			id: InfoID::DroneStateDump,
+			play: origin_play.counterplay(),
+			payload,
+		})
+	}
 }
 
 impl RoShamBo
@@ -408,16 +435,46 @@ impl RoShamBo
 
 pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
 {
+	// FIXME: For the drone stuff, we're using the current drone, but that's not OK.
 	match packet.id
 	{
-		InfoID::SSIDs => { let return_packet = InfoPacket::new_ssid(packet.play.clone(), server)?; return_packet.write(origin)? ; server.logger.error("Sent the client a faux list of SSIDs.")?; }
-		InfoID::DroneStateDump => { todo!("Haven't implemented DroneStateDump yet.") }
+		InfoID::SSIDs => { let return_packet = InfoPacket::new_ssid(packet.play.clone(), server)?; return_packet.write(origin)? ; server.logger.error("Sent the client a faux list of SSIDs.") }
+		InfoID::DroneStateDump => {
+			match &server.curr_drone {
+				None => { Ok(()) }
+				Some(connection) => {
+					match &*connection.lock()?
+					{
+						Connection::Drone(drone) => {
+							let drone_lock = drone.lock()?;
+							match drone_lock.get_state() {
+								None => {
+									InfoPacket::new_drone_state_dump(
+										packet.play.counterplay(),
+										[0, 0, 0, 0, 0, 0],
+										None
+									)?;
+
+									Ok(())
+								}
+								Some(state) => {
+									InfoPacket::new_drone_state_dump(
+										packet.play.counterplay(),
+										[0, 0, 0, 0, 0, 0],
+										Some(&state))?;
+									Ok(())
+								}
+							}
+						}
+						_ => { Err(Error::Custom("While handling info packet, attempting to get drone, the connection was of the wrong type!")) }
+					}
+				}
+			}
+		}
 		InfoID::RecordRequest => { todo!("Haven't implemented RecordRequest yet.") }
 		InfoID::DroneConnectionState => { todo!("Haven't implemented response to DroneConnectionState request yet.") }
 		InfoID::Invalid => { Err(Error::Custom("Attempted to handle invalid info packet."))? }
 	}
-
-	Ok(())
 }
 
 pub(crate) fn handle_control_activity (
@@ -629,4 +686,35 @@ impl Command for RcPacket
 	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
 		drone.rc(self.right as i64, self.up as i64, self.forward as i64, self.rot as f32)
 	}
+}
+
+impl DroneStateJSON
+{
+	pub fn new(battery : u8, temp : f32, flight_duration : Duration, height : u16, is_flying : bool, signal_strength : u8, extra : Option<String>) -> Self
+	{
+		let seconds = flight_duration.as_secs();
+		let minutes = seconds / 60;
+		let hours = minutes / 60;
+		let mut flight_duration_string = format!("{:02}:{:02}:{:02}",
+												 hours % 24, // Yeah right, a 24 hours flight?
+												 minutes % 60,
+												 seconds % 60);
+
+		Self {
+			battery,
+			temp,
+			flight_duration : flight_duration_string,
+			height,
+			is_flying,
+			signal_strength,
+			extra,
+		}
+	}
+
+	/*#[allow(dead_code)]
+	pub fn read<R : Read>(stream : R) -> Result<Self, Error>
+	{
+		Self::deserialize(stream)
+	}*/
+
 }

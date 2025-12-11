@@ -279,9 +279,9 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 								{
 									logger.error("Failed to connect to drone!!!")?;
 									// CLARIFY: This should not be all 0's. This should be an actual MAC address.
-									let state_packet = InfoPacket::new_drone_state(server.ro_sham_bo.post_increment(),
-																ConnectionState::FailedConnect,
-																[0, 0, 0, 0, 0, 0],
+									let state_packet = InfoPacket::new_drone_connection_state(server.ro_sham_bo.post_increment(),
+																							  ConnectionState::FailedConnect,
+																							  [0, 0, 0, 0, 0, 0],
 									);
 
 									server.send_info(&state_packet, &ownership_map_lock)?;
@@ -316,9 +316,9 @@ fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger 
 				for drone in delete_drones
 				{
 					// CLARIFY: This should not be all 0's. This should be an actual MAC address.
-					let state_packet = InfoPacket::new_drone_state(server.ro_sham_bo.post_increment(),
-																	ConnectionState::Disconnected,
-																	[0, 0, 0, 0, 0, 0],
+					let state_packet = InfoPacket::new_drone_connection_state(server.ro_sham_bo.post_increment(),
+																			  ConnectionState::Disconnected,
+																			  [0, 0, 0, 0, 0, 0],
 					);
 					server.send_info(&state_packet, &ownership_map_lock)?;
 					drone.lock()?.disconnect(&mut ownership_map_lock)?;

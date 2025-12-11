@@ -4,8 +4,9 @@ pub mod tello;
 pub mod drone_pro;
 mod crc;
 
+use crate::app_network::DroneStateJSON;
 use std::collections::HashMap;
-use crate::app_network::{send_image, VideoCode};
+use crate::app_network::{send_image, InfoPacket, VideoCode};
 use crate::{Connection, Error, ServerMap};
 use image::DynamicImage;
 use mio::net::UdpSocket;
@@ -105,6 +106,8 @@ pub trait Drone : Debug
 	fn connected(&self) -> bool;
 	fn time_created(&self) -> SystemTime;
 	fn disconnect(&mut self, ownership_map : &mut HashMap<Token, Connection>) -> Result<(), Error>;
+
+	fn get_state(&self) -> Option<DroneStateJSON>;
 }
 
 pub(crate) trait _DroneInternal : Drone
