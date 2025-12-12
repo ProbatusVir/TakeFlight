@@ -1,6 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'connect.dart';
 
 class VideoFeed extends StatefulWidget{
   const VideoFeed({super.key});
@@ -17,49 +17,23 @@ class VideoFeedState extends State<VideoFeed>{
   List<Uint8List> currentFrame = [];
   Uint8List? latestFrame;
 
-  void onImageReceived(Uint8List received){
-    setState(() {
+  @override
+  void initState(){
+    super.initState();
+    onImageReceived();
+  }
+
+  void onImageReceived() async {
+    final vid = DroneVideo();
+    await vid.connect();
+    await vid.getDroneImg(latestFrame!);
+    currentFrame.add(latestFrame!);
+    /*setState(() {
       print('VideoFeedState received frame of ${received.length} bytes');
       latestFrame = received;
       currentFrame.add(latestFrame!);
-    });
+    });*/
   }
-  //on creation of the state sets the list time and frame
-  /*@override void initState() {
-    super.initState();
-    loadFeed().then((_){
-      isLoad = true;
-      //setState(() {});
-      start();
-    });
-  }
-  //separate them into functions
-  Future<void> loadFeed() async{
-    feed = [];
-    //loop through feed
-    for(var i = 1; i <= 200; i++){
-      //wait to load all images into memory
-      final bytes = await rootBundle.load('assets/simulated_feed/ezgif-frame-${i.toString().padLeft(3, '0')}.jpg');
-      final frameBytes = bytes.buffer.asUint8List();
-      currentFrame.add(frameBytes);
-      if(!mounted) return;
-      feed.add(Image.memory(frameBytes, gaplessPlayback: true, fit: BoxFit.cover, width: MediaQuery.of(context).size.width, height: MediaQuery.of(context).size.height,));
-    }
-  }
-
-  void start() {
-    timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      setState(() {
-        frame = (frame + 1) % feed.length;
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    timer.cancel();
-    super.dispose();
-  }*/
 
   @override
   Widget build(BuildContext context) {
