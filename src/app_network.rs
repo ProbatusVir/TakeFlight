@@ -474,7 +474,8 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 		}
 		InfoID::RecordRequest => { todo!("Haven't implemented RecordRequest yet.") }
 		InfoID::DroneConnectionState => { todo!("Haven't implemented response to DroneConnectionState request yet.") }
-		InfoID::Invalid => { Err(Error::Custom("Attempted to handle invalid info packet."))? }
+		InfoID::Invalid => { Err(Error::Custom("Attempted to handle invalid info packet."))? },
+		InfoID::DroneSelection => { todo!("Haven't implemented response to DroneSelection yet.") }
 	}
 }
 
