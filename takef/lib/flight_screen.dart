@@ -28,6 +28,7 @@ class RC{
 }
 
 final rcCon = RC();
+final control = ControlRC();
 
 bool isMobile(BuildContext context){
   bool mob = false;
@@ -67,7 +68,13 @@ class _FlightScreenState extends State<FlightScreen>{
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+    startConnection();
   }
+
+  void startConnection() async{
+    await control.connect(0x01);
+  }
+
   @override
   void dispose(){
     super.dispose();
@@ -223,7 +230,7 @@ class DeskFlight extends StatelessWidget {
                   final lr = x;
                   final fb = y;
                   rcCon.buildPacket(lr,0,fb,0);
-                  sendRC();
+                  control.sendRC();
                 },
               ),
             ),
@@ -239,7 +246,7 @@ class DeskFlight extends StatelessWidget {
                   final rot = x;
                   final ud = y;
                   rcCon.buildPacket(0,ud,0,rot);
-                  sendRC();
+                  control.sendRC();
                 },
               ),
             ),
