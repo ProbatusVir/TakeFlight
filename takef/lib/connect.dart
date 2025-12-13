@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
@@ -50,6 +51,7 @@ class Info{
     if(infoSoc != null){
       //send handshake
       infoSoc?.add([0x42, 0x42, 0x03]);
+      await infoSoc?.flush();
       print('Info Handshake was sent');
       //send data [INFO_ID : u8, RO_SHAM_BO : u8, payload_size : u16, PAYLOAD]
       final packet = Uint8List.fromList([
@@ -60,10 +62,13 @@ class Info{
       infoSoc?.add(packet);
       //one flush
       await infoSoc?.flush();
+      print('SSID packet sent');
     }
   }
 
-  Future<void> receiveInfo() async{
+  Future<List<String>> receiveInfo() async{
+    final completer = Completer<List<String>>(); //manual control of future
+
     //receive SSID
     List<String> recSSID = [];
     if(infoSoc != null){
@@ -77,8 +82,16 @@ class Info{
             final decoded = jsonDecode(jString); // decoded is a Map<String, dynamic>
             recSSID = List<String>.from(decoded['ssids']);
             print('The received SSIDs: $recSSID');
+
+            //fulfill the future with the SSIDs
+            if(!completer.isCompleted){
+              completer.complete(recSSID);
+            }
           },
           onError: (e){
+            if(!completer.isCompleted){
+              completer.completeError(e);
+            }
             print('Error on socket: $e');
             infoSoc?.destroy();
           },
@@ -88,6 +101,7 @@ class Info{
           }
       );
     }
+    return completer.future;
   }
 }
 

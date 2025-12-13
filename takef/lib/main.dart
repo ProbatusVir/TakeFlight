@@ -12,6 +12,8 @@ void main() async {
   runApp(const MyApp());
 }
 
+final info = Info();
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -53,15 +55,19 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
 //creates list this will later be the get call for drone names
-  final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
+  //final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
+  List<String> items = [];
   final GlobalKey<VideoFeedState> videoKey = GlobalKey<VideoFeedState>();
 
   @override
   void initState(){
     super.initState();
-    Future.microtask(() async {
-      await connectToServer(videoKey);
-    });
+    startInfo();
+  }
+
+  void startInfo() async{
+    await info.connect(0x00); //SSID
+    items = await info.receiveInfo();
   }
 
   @override
