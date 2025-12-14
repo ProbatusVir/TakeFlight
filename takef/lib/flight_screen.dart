@@ -9,14 +9,24 @@ import 'connect.dart';
 class RC{
   List<int> packet = [];
 
-  List<int> buildPacket(double lr, double ud, double fb, double rot){
+  List<int> landPacket = [
+    0x01, // Land command
+    0x01 //Graceful for now
+  ];
+
+  List<int> takeOffPacket = [
+    0x00, //Take off command
+          //Reserved
+  ];
+
+  void buildRcPacket(double lr, double ud, double fb, double rot){
     //multiply by 100 for -100.0 to 100;
     final leftRight = (lr * 100).toInt();
     final upDown = (ud * 100).toInt();
     final forwardBack = (fb * 100).toInt();
     final rotation = (rot * 100).toInt();
 
-    return packet = [
+    packet = [
       0x02, //Rc command code
       leftRight.toSigned(8),
       upDown.toSigned(8),
@@ -72,7 +82,7 @@ class _FlightScreenState extends State<FlightScreen>{
   }
 
   void startConnection() async{
-    await control.connect(0x01);
+    await control.connect();
   }
 
   @override
@@ -87,17 +97,19 @@ class _FlightScreenState extends State<FlightScreen>{
   }
   @override
   Widget build(BuildContext context) {
-    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey,) : DeskFlight(videoKey: widget.videoKey);
+    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey, isFlight: control.isFlying) : DeskFlight(videoKey: widget.videoKey, isFlight: control.isFlying);
   }
 }
 ///Mobile Design
 class MobileFlight extends StatelessWidget{
   const MobileFlight({
     super.key,
-    required this.videoKey
+    required this.videoKey,
+    required this.isFlight,
   });
 
   final GlobalKey<VideoFeedState> videoKey;
+  final bool isFlight;
 
   @override
   Widget build(BuildContext context) {
@@ -136,9 +148,17 @@ class MobileFlight extends StatelessWidget{
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    IconButton(
-                        onPressed: (){},
+                    isFlight ? IconButton(
+                        onPressed: (){
+                          control.sendTakeOff();
+                        },
                         icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
+                    )
+                        : IconButton(
+                        onPressed: (){
+                          control.sendGraceful();
+                        },
+                        icon: Icon(Icons.flight_land, color: Colors.white, size: 30.0,)
                     ),
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
@@ -163,9 +183,11 @@ class DeskFlight extends StatelessWidget {
   const DeskFlight({
     super.key,
     required this.videoKey,
+    required this.isFlight
   });
 
   final GlobalKey<VideoFeedState> videoKey;
+  final bool isFlight;
 
   @override
   Widget build(BuildContext context) {
@@ -200,9 +222,17 @@ class DeskFlight extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    IconButton(
-                        onPressed: (){},
-                        icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 50.0,)
+                    isFlight ? IconButton(
+                        onPressed: (){
+                          control.sendTakeOff();
+                        },
+                        icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
+                    )
+                        : IconButton(
+                        onPressed: (){
+                          control.sendGraceful();
+                        },
+                        icon: Icon(Icons.flight_land, color: Colors.white, size: 30.0,)
                     ),
                     //TODO::Implement actual recording logic here
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
@@ -229,7 +259,7 @@ class DeskFlight extends StatelessWidget {
                   //Will be movement logic here
                   final lr = x;
                   final fb = y;
-                  rcCon.buildPacket(lr,0,fb,0);
+                  rcCon.buildRcPacket(lr,0,fb,0);
                   control.sendRC();
                 },
               ),
@@ -245,7 +275,7 @@ class DeskFlight extends StatelessWidget {
                   //Will be height/axis control logic
                   final rot = x;
                   final ud = y;
-                  rcCon.buildPacket(0,ud,0,rot);
+                  rcCon.buildRcPacket(0,ud,0,rot);
                   control.sendRC();
                 },
               ),

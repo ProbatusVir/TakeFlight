@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart'; //For Uint8List
 import 'flight_screen.dart';
 class ControlRC{
   Socket? controlSoc;
-
+  bool isFlying = false;
   void sendRC(){
     if(controlSoc == null){
       print('socket not ready');
@@ -20,7 +20,35 @@ class ControlRC{
     controlSoc?.add(rcCon.packet);
   }
 
-  Future<void> connect(int handshake) async{
+  void sendTakeOff(){
+    if(controlSoc == null){
+      print('socket not ready');
+      return;
+    }
+    if(rcCon.packet.isEmpty){
+      print('Packet is currently empty');
+      return;
+    }
+    print('Sending Take off packet...');
+    controlSoc?.add(rcCon.takeOffPacket);
+    isFlying = true;
+  }
+
+  void sendGraceful(){
+    if(controlSoc == null){
+      print('socket not ready');
+      return;
+    }
+    if(rcCon.packet.isEmpty){
+      print('Packet is currently empty');
+      return;
+    }
+    print('Sending graceful landing packet...');
+    controlSoc?.add(rcCon.landPacket);
+    isFlying = false;
+  }
+
+  Future<void> connect() async{
     int port = await getServerPort();
     try{
       controlSoc = await Socket.connect('127.0.0.1', port);
@@ -30,7 +58,7 @@ class ControlRC{
     }
     //Send server handshake
     if(controlSoc != null){
-      controlSoc?.add([0x42, 0x42, handshake]);
+      controlSoc?.add([0x42, 0x42, 0x01]);
     }
   }
 
