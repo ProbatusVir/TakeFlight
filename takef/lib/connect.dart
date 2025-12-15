@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
 import 'package:flutter/foundation.dart'; //For Uint8List
+import 'package:flutter/services.dart';
 import 'flight_screen.dart';
 class ControlRC{
   Socket? controlSoc;
@@ -222,14 +223,20 @@ Future<int> getServerPort() async {
 
   // Start the server process using relative paths.
   // FIXME: Maybe you'll want a ternary operator to decide whether to use Debug or Release in the path.
-  final normalPath = Directory.current.parent.path.replaceAll("\\", "/");
-  final targetMode = (kDebugMode ? 'debug': 'release');
-  final process = Process.start(
-    "$normalPath/target/$targetMode/TakeFlight.exe",
-    [sock.port.toString(),],
-    mode: ProcessStartMode.inheritStdio,
-    workingDirectory: "..",
-  );
+  if(Platform.isAndroid){
+    //Launch RUST APK
+    const channel = MethodChannel('com.TakeFlight.launcher');
+    await channel.invokeMethod('launchServer', {'port': sock.port});
+  }else {
+    final normalPath = Directory.current.parent.path.replaceAll("\\", "/");
+    final targetMode = (kDebugMode ? 'debug' : 'release');
+    final process = Process.start(
+      "$normalPath/target/$targetMode/TakeFlight.exe",
+      [sock.port.toString(),],
+      mode: ProcessStartMode.inheritStdio,
+      workingDirectory: "..",
+    );
+  }
 
 
   // This is a blocking read until we get a readable message. The first -- and only -- message we receive should be a u16, though additional error handling can be implemented here.
