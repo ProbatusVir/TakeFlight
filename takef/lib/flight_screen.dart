@@ -43,8 +43,6 @@ final control = ControlRC();
 bool isMobile(BuildContext context){
   bool mob = false;
   final width = MediaQuery.of(context).size.width;
-  final height = MediaQuery.of(context).size.height;
-  final or = MediaQuery.of(context).orientation;
   //print('Width:$width \n\n Height: $height \n\n Orientation: $or');
 
   if(width <= 800){

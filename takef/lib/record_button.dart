@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
+//import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
@@ -78,7 +78,7 @@ class _RecordButtonState extends State<RecordButton>{
       await frameDir.create(recursive: true);
     }
 
-    FlutterQuickVideoEncoder.setup(
+    /*FlutterQuickVideoEncoder.setup(
         width: 480,
         height: 840,
         fps: 20,
@@ -88,7 +88,7 @@ class _RecordButtonState extends State<RecordButton>{
         audioBitrate: 0,
         sampleRate: 0,
         filepath: outPath
-    );
+    );*/
 
     //capture frames at 20 fps
     capture = Timer.periodic(Duration(milliseconds: 50), (timer) async {
@@ -108,7 +108,7 @@ class _RecordButtonState extends State<RecordButton>{
     //stops timer
     capture?.cancel();
     //Finishes the video encoder and saves it
-    FlutterQuickVideoEncoder.finish();
+    //FlutterQuickVideoEncoder.finish();
    /*final command = '-framerate 20 -i $frameDir/frame_%04d.png '
        '-c:v libx264 -pix_fmt yuv420p $outPath';
    await FFmpegKit.executeAsync(command);*/
