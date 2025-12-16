@@ -20,8 +20,7 @@ class ControlRC{
     controlSoc?.add(rcCon.packet);
   }
 
-  Future<void> connect(int handshake) async{
-    int port = await getServerPort();
+  Future<void> connect(int handshake, int port) async{
     try{
       controlSoc = await Socket.connect('127.0.0.1', port);
       print('Connected to Server over Control Socket: ${controlSoc?.remoteAddress}:${controlSoc?.remotePort}');
@@ -39,8 +38,7 @@ class ControlRC{
 class Info{
   Socket? infoSoc;
 
-  Future<void> connect (int infoID) async{
-    int port = await getServerPort();
+  Future<void> connect (int infoID, int port) async{
     try{
       infoSoc = await Socket.connect('127.0.0.1', port);
       //Prints are for debugging
@@ -108,8 +106,7 @@ class Info{
 class DroneVideo{
   Socket? videoSoc;
 
-  Future<void> connect() async {
-    int port = await getServerPort();
+  Future<void> connect(int port) async {
     try {
       videoSoc = await Socket.connect('127.0.0.1', port);
       //Prints are for debugging

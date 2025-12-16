@@ -44,8 +44,9 @@ bool isMobile(BuildContext context){
 }
 
 class FlightScreen extends StatefulWidget{
-  const FlightScreen({super.key, required this.videoKey});
+  const FlightScreen({super.key, required this.videoKey, required this.port});
   final GlobalKey<VideoFeedState> videoKey;
+  final int port;
 
   @override
   State<FlightScreen> createState() => _FlightScreenState();
@@ -72,7 +73,7 @@ class _FlightScreenState extends State<FlightScreen>{
   }
 
   void startConnection() async{
-    await control.connect(0x01);
+    await control.connect(0x01, widget.port);
   }
 
   @override
@@ -87,17 +88,19 @@ class _FlightScreenState extends State<FlightScreen>{
   }
   @override
   Widget build(BuildContext context) {
-    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey,) : DeskFlight(videoKey: widget.videoKey);
+    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey, port: widget.port,) : DeskFlight(videoKey: widget.videoKey, port: widget.port,);
   }
 }
 ///Mobile Design
 class MobileFlight extends StatelessWidget{
   const MobileFlight({
     super.key,
-    required this.videoKey
+    required this.videoKey,
+    required this.port
   });
 
   final GlobalKey<VideoFeedState> videoKey;
+  final int port;
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +124,7 @@ class MobileFlight extends StatelessWidget{
           Align(
             alignment: Alignment.center,
             //TODO:: Need to fix weird visual bug of the feed being small then readjusting to correct size
-            child: VideoFeed(key: videoKey),
+            child: VideoFeed(key: videoKey, port: port,),
           ),
           Align(
             alignment: Alignment.bottomCenter,
@@ -163,9 +166,11 @@ class DeskFlight extends StatelessWidget {
   const DeskFlight({
     super.key,
     required this.videoKey,
+    required this.port
   });
 
   final GlobalKey<VideoFeedState> videoKey;
+  final int port;
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +191,7 @@ class DeskFlight extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          Center(child: VideoFeed(key: videoKey,),),//placement for video feed and to record it
+          Center(child: VideoFeed(key: videoKey,port: port,),),//placement for video feed and to record it
           Align( //Aligns user menu to bottom center of the screen
             alignment: Alignment.bottomCenter,
             child: Padding(

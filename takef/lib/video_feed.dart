@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'connect.dart';
 
 class VideoFeed extends StatefulWidget{
-  const VideoFeed({super.key});
+  const VideoFeed({super.key, required this.port});
+  final int port;
 
   @override
   State<VideoFeed> createState() => VideoFeedState();
@@ -25,7 +26,7 @@ class VideoFeedState extends State<VideoFeed>{
 
   void onImageReceived() async {
     final vid = DroneVideo();
-    await vid.connect();
+    await vid.connect(widget.port);
     await vid.getDroneImg(latestFrame!);
     currentFrame.add(latestFrame!);
     /*setState(() {
