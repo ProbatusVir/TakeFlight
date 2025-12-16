@@ -79,7 +79,6 @@ struct ServerInstance
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
-	const MAX_EVENTS : usize = 1024;
 	const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
 
@@ -137,7 +136,6 @@ fn main() -> Result<(), Error> {
 
 	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
 	let ownership_map = Arc::new(Mutex::new(HashMap::<Token, Connection>::new()));
-	let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
 	logger.info("Server starting!!!")?;
 
@@ -169,247 +167,337 @@ fn main() -> Result<(), Error> {
 	 */
 
 	// Some multiplexing
-	let status = loop
-	{
-		// Receive and handle events
-		server.poll.lock()?.poll(&mut event_buffer, None)?;
-		let events_result = drain_events(&mut server, &mut event_buffer, &logger);
-
-		if events_result.is_ok() { continue }
-		let return_error = events_result.err().unwrap();
-
-		match &return_error
-		{
-			Error::IOError(e) => {
-				match e.kind()
-				{
-					ErrorKind::WouldBlock => { continue }
-					_ => break Err(return_error)
-				}
-			}
-
-			_ => { break Err(return_error) }
-		}
-
-	};
-
-	status
-}
-fn drain_events(server: &mut ServerInstance, event_buffer : &mut Events, logger : &Logger)
-				-> Result<(), Error>
-{
-	for event in event_buffer.iter()
-	{
-		// TODO: If one drone socket disconnects, do we want to let the drone decide what to do?
-		if Event::is_read_closed(event)
-		{
-			let token = event.token();
-			let socket_wrapped = server.ownership_map.lock()?.remove(&token);
-			match socket_wrapped {
-				Some(mut socket) => {
-					match &mut socket {
-						Connection::TCP(stream) => { server.poll.lock()?.registry().deregister(stream)?; }
-						Connection::UDP(datagram) => {server.poll.lock()?.registry().deregister(datagram)?; }
-						Connection::ClientControl(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
-						Connection::VideoOut(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
-						Connection::ServerInfo(_, stream) => { server.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
-						Connection::Drone(drone) => { todo!("We definitely want to let the drone decide what to do here. Take note that the ownership map is NOT locked right now. {:?}", drone) }
-						Connection::Camera() => { todo!("We still do not have support for cameras yet.") }
-					};
-
-					server.logger.info_from_string(format!("Disconnected {} socket: {}", socket.socket_type_name(), event.token().0))?;
-				}
-				None => { todo!("Somehow we received a 'read closed' event for a socket that isn't registered to the poll... This shouldn't be possible. Please try to reproduce this issue.") }
-			}
-			continue
-		}
-
-		match event.token()
-		{
-			LISTENER => {
-				// Accept all incoming streams.
-				loop {
-					let incoming = server.listener.accept();
-					match incoming
-					{
-						Ok((mut stream, address)) => {
-							let token = Token(address.port() as usize);
-							server.poll.lock()?.registry().register(
-								&mut stream,
-								token.clone(),
-								Interest::READABLE)?;
-
-							server.logger.info_from_string(format!("Accepting TCP stream: {}:{}", address.ip(), address.port()))?;
-
-							server.ownership_map.lock()?.insert(
-								token,
-								Connection::TCP(stream),
-							);
-						}
-						Err(e) => {
-							if e.kind() == ErrorKind::WouldBlock {break}
-							else { return Err(e.into()) }
-						}
-					}
-				}
-			}
-			HEARTBEAT => {
-				// Send heartbeat to all eligible connections
-				let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
-				let mut delete_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
-				let ownership_map_clone = server.ownership_map.clone();
-				let mut ownership_map_lock = ownership_map_clone.lock()?;
-				for connection in ownership_map_lock.iter() {
-					// This seems like a patchy solution. This combats sending multiple pings per cycle.
-					match connection.1
-					{
-						// TODO: This is sorely in need of a refactor...
-						Connection::Drone(drone) => {
-							if contacted_drones.iter().find(|ptr| { Arc::ptr_eq(ptr, drone) }).is_some() {
-								continue
-							}
-							else {
-								contacted_drones.push(drone.clone())
-							}
-
-							let mut drone_lock = drone.lock()?;
-							if !drone_lock.connected()
-							{
-								let now = SystemTime::now();
-								if now.duration_since(drone_lock.time_created())? > TIMEOUT
-								{
-									logger.error("Failed to connect to drone!!!")?;
-									// CLARIFY: This should not be all 0's. This should be an actual MAC address.
-									let state_packet = InfoPacket::new_drone_connection_state(server.ro_sham_bo.post_increment(),
-																							  ConnectionState::FailedConnect,
-																							  [0, 0, 0, 0, 0, 0],
-									);
-
-									server.send_info(&state_packet, &ownership_map_lock)?;
-									delete_drones.push(drone.clone());
-								}
-								continue;
-							}
-
-							let ping_result = drone_lock.send_heartbeat();
-							match ping_result {
-								Ok(_)	=> { continue; }
-								Err(e)	=> {
-									match e {
-										Error::IOError(io_error) => {
-											if io_error.kind() == std::io::ErrorKind::WouldBlock {
-												continue;
-											}
-											else {
-												return Err(Error::Custom("IO error occurred while pinging a drone!"));
-											}
-										}
-										_ => { return Err(Error::Custom("Generic error occurred while pinging a drone!")); }
-									}
-								}
-							}
-						}
-						_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
-					}
-				}
-
-				delete_drones.dedup_by(|left, right| {Arc::ptr_eq(&left, right)});
-				for drone in delete_drones
-				{
-					// CLARIFY: This should not be all 0's. This should be an actual MAC address.
-					let state_packet = InfoPacket::new_drone_connection_state(server.ro_sham_bo.post_increment(),
-																			  ConnectionState::Disconnected,
-																			  [0, 0, 0, 0, 0, 0],
-					);
-					server.send_info(&state_packet, &ownership_map_lock)?;
-					drone.lock()?.disconnect(&mut ownership_map_lock)?;
-				}
-			}
-			token => {
-
-				// This is gore.
-				// We need to remove the silly TCP stream to reassign it to a proper role. I desperately need to find a better way.
-				let cloned_connection = {
-					let ownership_map_clone = server.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
-					let mut ownership_map_lock = ownership_map_clone.lock()?;
-
-					let needs_reassigned = {
-						let found_connection_wrapped = ownership_map_lock.get(&token);
-						if found_connection_wrapped.is_none()
-						{
-							logger.error_from_string(format!("Unmapped port: {}", token.0))?;
-							return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
-						}
-
-						match found_connection_wrapped {
-							Some(Connection::TCP(_)) => { true }
-							_ => { false }
-						}
-					};
-
-					if needs_reassigned
-					{
-						let found_connection = ownership_map_lock.remove(&token);
-						let new_item = match found_connection
-						{
-							// Handle the connection.
-							Some(Connection::TCP(stream)) => { handle_connection(stream, server, &mut *ownership_map_lock)?}
-							_ => { continue }
-						};
-
-						// CLARIFY:
-						// 	This logic should be handled in the above function now.
-						//ownership_map_lock.insert(token, new_item);
-						continue;
-					}
-
-					let found_connection = ownership_map_lock.get(&token);
-					found_connection.unwrap().try_clone()
-				};
-
-				#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
-				server.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
-				// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
-				match cloned_connection
-				{
-					Some(found) => {
-						match found {
-							Connection::ServerInfo(..) => { handle_info_activity(token, server, &mut *server.ownership_map.clone().lock()?)?; }
-							Connection::Drone(drone) => {
-								// Receive signal will always go until an error is encountered.
-								// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
-								match drone.lock()?.receive_signal(token.0 as u16) {
-									Err(e) => {
-										match e
-										{
-											Error::IOError(io_error) => {
-												if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
-											}
-											_ => { Err(e)? }
-										}
-									}
-									_ => { /* noop */ }
-								}
-							}
-							Connection::ClientControl(..) => { handle_control_activity(token, server, &mut *server.ownership_map.clone().lock()?)? }
-							_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
-						};
-					}
-					None => panic!("We already checked that the connection exists.")
-				}
-			}
-			// It's assuring for the compiler to prove that this condition is unreachable.
-			#[allow(unreachable_patterns)]
-			_ => { todo!("What is this?") }
-		}
-	}
-
-	Ok(())
+	server.multiplex()
 }
 
 
 impl ServerInstance
 {
+	fn multiplex(&mut self) -> Result<(), Error>
+	{
+		// While I don't like the idea of this being a local variable
+		// it only makes sense given that event_buffer is used in precisely
+		// two places. The poll stage, and the top of the drain stage.
+		const MAX_EVENTS : usize = 1024;
+		let mut event_buffer = Events::with_capacity(MAX_EVENTS);
+
+		loop
+		{
+			// Receive and handle events
+			self.poll.lock()?.poll(&mut event_buffer, None)?;
+			let events_result = self.drain_events(&mut event_buffer);
+
+			if events_result.is_ok() { continue }
+			let return_error = events_result.err().unwrap();
+
+			match &return_error
+			{
+				Error::IOError(e) => {
+					match e.kind()
+					{
+						ErrorKind::WouldBlock => { continue }
+						_ => break Err(return_error)
+					}
+				}
+
+				_ => { break Err(return_error) }
+			}
+
+		}
+	}
+
+	fn drain_events(&mut self, event_buffer : &mut Events) -> Result<(), Error>
+	{
+
+		for event in event_buffer.iter()
+		{
+			// TODO: If one drone socket disconnects, do we want to let the drone decide what to do?
+			if Event::is_read_closed(event)
+			{
+				let token = event.token();
+				let socket_wrapped = self.ownership_map.lock()?.remove(&token);
+				match socket_wrapped {
+					Some(mut socket) => {
+						match &mut socket {
+							Connection::TCP(stream) => { self.poll.lock()?.registry().deregister(stream)?; }
+							Connection::UDP(datagram) => {self.poll.lock()?.registry().deregister(datagram)?; }
+							Connection::ClientControl(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+							Connection::VideoOut(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+							Connection::ServerInfo(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+							Connection::Drone(drone) => { todo!("We definitely want to let the drone decide what to do here. Take note that the ownership map is NOT locked right now. {:?}", drone) }
+							Connection::Camera() => { todo!("We still do not have support for cameras yet.") }
+						};
+
+						self.logger.info_from_string(format!("Disconnected {} socket: {}", socket.socket_type_name(), event.token().0))?;
+					}
+					None => { todo!("Somehow we received a 'read closed' event for a socket that isn't registered to the poll... This shouldn't be possible. Please try to reproduce this issue.") }
+				}
+				continue
+			}
+
+			match event.token()
+			{
+				LISTENER => {
+					// Accept all incoming streams.
+					loop {
+						let incoming = self.listener.accept();
+						match incoming
+						{
+							Ok((mut stream, address)) => {
+								let token = Token(address.port() as usize);
+								self.poll.lock()?.registry().register(
+									&mut stream,
+									token.clone(),
+									Interest::READABLE)?;
+
+								self.logger.info_from_string(format!("Accepting TCP stream: {}:{}", address.ip(), address.port()))?;
+
+								self.ownership_map.lock()?.insert(
+									token,
+									Connection::TCP(stream),
+								);
+							}
+							Err(e) => {
+								if e.kind() == ErrorKind::WouldBlock {break}
+								else { return Err(e.into()) }
+							}
+						}
+					}
+				}
+				HEARTBEAT => {
+					// Send heartbeat to all eligible connections
+					let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
+					let mut delete_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
+					let ownership_map_clone = self.ownership_map.clone();
+					let mut ownership_map_lock = ownership_map_clone.lock()?;
+					for connection in ownership_map_lock.iter() {
+						// This seems like a patchy solution. This combats sending multiple pings per cycle.
+						match connection.1
+						{
+							// TODO: This is sorely in need of a refactor...
+							Connection::Drone(drone) => {
+								if contacted_drones.iter().find(|ptr| { Arc::ptr_eq(ptr, drone) }).is_some() {
+									continue
+								}
+								else {
+									contacted_drones.push(drone.clone())
+								}
+
+								let mut drone_lock = drone.lock()?;
+								if !drone_lock.connected()
+								{
+									let now = SystemTime::now();
+									if now.duration_since(drone_lock.time_created())? > TIMEOUT
+									{
+										self.logger.error("Failed to connect to drone!!!")?;
+										// CLARIFY: This should not be all 0's. This should be an actual MAC address.
+										let state_packet = InfoPacket::new_drone_connection_state(self.ro_sham_bo.post_increment(),
+																								  ConnectionState::FailedConnect,
+																								  [0, 0, 0, 0, 0, 0],
+										);
+
+										self.send_info(&state_packet, &ownership_map_lock)?;
+										delete_drones.push(drone.clone());
+									}
+									continue;
+								}
+
+								let ping_result = drone_lock.send_heartbeat();
+								match ping_result {
+									Ok(_)	=> { continue; }
+									Err(e)	=> {
+										match e {
+											Error::IOError(io_error) => {
+												if io_error.kind() == std::io::ErrorKind::WouldBlock {
+													continue;
+												}
+												else {
+													return Err(Error::Custom("IO error occurred while pinging a drone!"));
+												}
+											}
+											_ => { return Err(Error::Custom("Generic error occurred while pinging a drone!")); }
+										}
+									}
+								}
+							}
+							_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
+						}
+					}
+
+					delete_drones.dedup_by(|left, right| {Arc::ptr_eq(&left, right)});
+					for drone in delete_drones
+					{
+						// CLARIFY: This should not be all 0's. This should be an actual MAC address.
+						let state_packet = InfoPacket::new_drone_connection_state(self.ro_sham_bo.post_increment(),
+																				  ConnectionState::Disconnected,
+																				  [0, 0, 0, 0, 0, 0],
+						);
+						self.send_info(&state_packet, &ownership_map_lock)?;
+						drone.lock()?.disconnect(&mut ownership_map_lock)?;
+					}
+				}
+				token => {
+
+					// This is gore.
+					// We need to remove the silly TCP stream to reassign it to a proper role. I desperately need to find a better way.
+					let cloned_connection = {
+						let ownership_map_clone = self.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
+						let mut ownership_map_lock = ownership_map_clone.lock()?;
+
+						let needs_reassigned = {
+							let found_connection_wrapped = ownership_map_lock.get(&token);
+							if found_connection_wrapped.is_none()
+							{
+								self.logger.error_from_string(format!("Unmapped port: {}", token.0))?;
+								return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
+							}
+
+							match found_connection_wrapped {
+								Some(Connection::TCP(_)) => { true }
+								_ => { false }
+							}
+						};
+
+						if needs_reassigned
+						{
+							let found_connection = ownership_map_lock.remove(&token);
+							match found_connection
+							{
+								// Handle the connection.
+								Some(Connection::TCP(stream)) => { handle_connection(stream, self, &mut *ownership_map_lock)?}
+								_ => { continue }
+							};
+
+							// CLARIFY:
+							// 	This logic should be handled in the above function now.
+							//ownership_map_lock.insert(token, new_item);
+							continue;
+						}
+
+						let found_connection = ownership_map_lock.get(&token);
+						found_connection.unwrap().try_clone()
+					};
+
+					#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
+					server.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
+					// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
+					match cloned_connection
+					{
+						Some(found) => {
+							match found {
+								Connection::ServerInfo(..) => { handle_info_activity(token, self, &mut *self.ownership_map.clone().lock()?)?; }
+								Connection::Drone(drone) => {
+									// Receive signal will always go until an error is encountered.
+									// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
+									match drone.lock()?.receive_signal(token.0 as u16) {
+										Err(e) => {
+											match e
+											{
+												Error::IOError(io_error) => {
+													if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
+												}
+												_ => { Err(e)? }
+											}
+										}
+										_ => { /* noop */ }
+									}
+								}
+								Connection::ClientControl(..) => { handle_control_activity(token, self, &mut *self.ownership_map.clone().lock()?)? }
+								_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
+							};
+						}
+						None => panic!("We already checked that the connection exists.")
+					}
+				}
+				// It's assuring for the compiler to prove that this condition is unreachable.
+				#[allow(unreachable_patterns)]
+				_ => { todo!("What is this?") }
+			}
+		}
+
+		Ok(())
+	}
+
+	/// If Some(true), `continue`
+	/// If Some(false), keep executing.
+	fn handle_token(&mut self, token : Token) -> Result<bool, Error>
+	{
+
+		// This is gore.
+		// We need to remove the silly TCP stream to reassign it to a proper role. I desperately need to find a better way.
+		let cloned_connection = {
+			let ownership_map_clone = self.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
+			let mut ownership_map_lock = ownership_map_clone.lock()?;
+
+			let needs_reassigned = {
+				let found_connection_wrapped = ownership_map_lock.get(&token);
+				if found_connection_wrapped.is_none()
+				{
+					self.logger.error_from_string(format!("Unmapped port: {}", token.0))?;
+					return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
+				}
+
+				match found_connection_wrapped {
+					Some(Connection::TCP(_)) => { true }
+					_ => { false }
+				}
+			};
+
+			if needs_reassigned
+			{
+				let found_connection = ownership_map_lock.remove(&token);
+				match found_connection
+				{
+					// Handle the connection.
+					Some(Connection::TCP(stream)) => { handle_connection(stream, self, &mut *ownership_map_lock)?}
+					_ => { return Ok(true) }
+				};
+
+				// CLARIFY:
+				// 	This logic should be handled in the above function now.
+				//ownership_map_lock.insert(token, new_item);
+				return Ok(true);
+			}
+
+			let found_connection = ownership_map_lock.get(&token);
+			found_connection.unwrap().try_clone()
+		};
+
+		#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
+		self.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
+		// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
+		match cloned_connection
+		{
+			Some(found) => {
+				match found {
+					Connection::ServerInfo(..) => { handle_info_activity(token, self, &mut *self.ownership_map.clone().lock()?)?; }
+					Connection::Drone(drone) => {
+						// Receive signal will always go until an error is encountered.
+						// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
+						match drone.lock()?.receive_signal(token.0 as u16) {
+							Err(e) => {
+								match e
+								{
+									Error::IOError(io_error) => {
+										if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
+									}
+									_ => { Err(e)? }
+								}
+							}
+							_ => { /* noop */ }
+						}
+					}
+					Connection::ClientControl(..) => { handle_control_activity(token, self, &mut *self.ownership_map.clone().lock()?)? }
+					_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
+				};
+			}
+			None => panic!("We already checked that the connection exists.")
+		}
+
+		Ok(false)
+}
+
+
 	/*fn send_image(&mut self) -> Result<(), Error>
 	{
 		// The only pessimization to this wrapper is the arc increment
@@ -458,8 +546,9 @@ impl ServerInstance
 		}
 
 	}
-
 }
+
+
 
 impl Connection
 {
