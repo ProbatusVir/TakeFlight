@@ -3,11 +3,10 @@ import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
 import 'package:flutter/foundation.dart'; //For Uint8List
-import 'package:flutter/services.dart';
 import 'flight_screen.dart';
 class ControlRC{
   Socket? controlSoc;
-  bool isFlying = false;
+
   void sendRC(){
     if(controlSoc == null){
       print('socket not ready');
@@ -21,36 +20,7 @@ class ControlRC{
     controlSoc?.add(rcCon.packet);
   }
 
-  void sendTakeOff(){
-    if(controlSoc == null){
-      print('socket not ready');
-      return;
-    }
-    if(rcCon.packet.isEmpty){
-      print('Packet is currently empty');
-      return;
-    }
-    print('Sending Take off packet...');
-    controlSoc?.add(rcCon.takeOffPacket);
-    isFlying = true;
-  }
-
-  void sendGraceful(){
-    if(controlSoc == null){
-      print('socket not ready');
-      return;
-    }
-    if(rcCon.packet.isEmpty){
-      print('Packet is currently empty');
-      return;
-    }
-    print('Sending graceful landing packet...');
-    controlSoc?.add(rcCon.landPacket);
-    isFlying = false;
-  }
-
-  Future<void> connect() async{
-    int port = await getServerPort();
+  Future<void> connect(int handshake, int port) async{
     try{
       controlSoc = await Socket.connect('127.0.0.1', port);
       print('Connected to Server over Control Socket: ${controlSoc?.remoteAddress}:${controlSoc?.remotePort}');
@@ -59,7 +29,7 @@ class ControlRC{
     }
     //Send server handshake
     if(controlSoc != null){
-      controlSoc?.add([0x42, 0x42, 0x01]);
+      controlSoc?.add([0x42, 0x42, handshake]);
     }
   }
 
@@ -68,8 +38,7 @@ class ControlRC{
 class Info{
   Socket? infoSoc;
 
-  Future<void> connect (int infoID) async{
-    int port = await getServerPort();
+  Future<void> connect (int infoID, int port) async{
     try{
       infoSoc = await Socket.connect('127.0.0.1', port);
       //Prints are for debugging
@@ -137,8 +106,7 @@ class Info{
 class DroneVideo{
   Socket? videoSoc;
 
-  Future<void> connect() async {
-    int port = await getServerPort();
+  Future<void> connect(int port) async {
     try {
       videoSoc = await Socket.connect('127.0.0.1', port);
       //Prints are for debugging
@@ -223,20 +191,14 @@ Future<int> getServerPort() async {
 
   // Start the server process using relative paths.
   // FIXME: Maybe you'll want a ternary operator to decide whether to use Debug or Release in the path.
-  if(Platform.isAndroid){
-    //Launch RUST APK
-    const channel = MethodChannel('com.TakeFlight.launcher');
-    await channel.invokeMethod('launchServer', {'port': sock.port});
-  }else {
-    final normalPath = Directory.current.parent.path.replaceAll("\\", "/");
-    final targetMode = (kDebugMode ? 'debug' : 'release');
-    final process = Process.start(
-      "$normalPath/target/$targetMode/TakeFlight.exe",
-      [sock.port.toString(),],
-      mode: ProcessStartMode.inheritStdio,
-      workingDirectory: "..",
-    );
-  }
+  final normalPath = Directory.current.parent.path.replaceAll("\\", "/");
+  final targetMode = (kDebugMode ? 'debug': 'release');
+  final process = Process.start(
+    "$normalPath/target/$targetMode/TakeFlight.exe",
+    [sock.port.toString(),],
+    mode: ProcessStartMode.inheritStdio,
+    workingDirectory: "..",
+  );
 
 
   // This is a blocking read until we get a readable message. The first -- and only -- message we receive should be a u16, though additional error handling can be implemented here.

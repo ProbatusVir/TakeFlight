@@ -57,6 +57,7 @@ class _MyHomePageState extends State<MyHomePage> {
 //creates list this will later be the get call for drone names
   //final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
   List<String> items = [];
+  int port = 0;
   final GlobalKey<VideoFeedState> videoKey = GlobalKey<VideoFeedState>();
 
   @override
@@ -66,7 +67,8 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void startInfo() async{
-    await info.connect(0x00); //SSID
+    port = await getServerPort();
+    await info.connect(0x00, port); //SSID
     items = await info.receiveInfo();
   }
 
@@ -133,7 +135,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       );
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(videoKey: videoKey,))
+                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(videoKey: videoKey,port: port,))
                                       );
                                     },
                                   );

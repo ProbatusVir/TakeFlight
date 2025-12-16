@@ -9,24 +9,14 @@ import 'connect.dart';
 class RC{
   List<int> packet = [];
 
-  List<int> landPacket = [
-    0x01, // Land command
-    0x01 //Graceful for now
-  ];
-
-  List<int> takeOffPacket = [
-    0x00, //Take off command
-          //Reserved
-  ];
-
-  void buildRcPacket(double lr, double ud, double fb, double rot){
+  List<int> buildPacket(double lr, double ud, double fb, double rot){
     //multiply by 100 for -100.0 to 100;
     final leftRight = (lr * 100).toInt();
     final upDown = (ud * 100).toInt();
     final forwardBack = (fb * 100).toInt();
     final rotation = (rot * 100).toInt();
 
-    packet = [
+    return packet = [
       0x02, //Rc command code
       leftRight.toSigned(8),
       upDown.toSigned(8),
@@ -43,6 +33,8 @@ final control = ControlRC();
 bool isMobile(BuildContext context){
   bool mob = false;
   final width = MediaQuery.of(context).size.width;
+  final height = MediaQuery.of(context).size.height;
+  final or = MediaQuery.of(context).orientation;
   //print('Width:$width \n\n Height: $height \n\n Orientation: $or');
 
   if(width <= 800){
@@ -52,8 +44,9 @@ bool isMobile(BuildContext context){
 }
 
 class FlightScreen extends StatefulWidget{
-  const FlightScreen({super.key, required this.videoKey});
+  const FlightScreen({super.key, required this.videoKey, required this.port});
   final GlobalKey<VideoFeedState> videoKey;
+  final int port;
 
   @override
   State<FlightScreen> createState() => _FlightScreenState();
@@ -80,7 +73,7 @@ class _FlightScreenState extends State<FlightScreen>{
   }
 
   void startConnection() async{
-    await control.connect();
+    await control.connect(0x01, widget.port);
   }
 
   @override
@@ -95,7 +88,7 @@ class _FlightScreenState extends State<FlightScreen>{
   }
   @override
   Widget build(BuildContext context) {
-    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey, isFlight: control.isFlying) : DeskFlight(videoKey: widget.videoKey, isFlight: control.isFlying);
+    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey, port: widget.port,) : DeskFlight(videoKey: widget.videoKey, port: widget.port,);
   }
 }
 ///Mobile Design
@@ -103,11 +96,11 @@ class MobileFlight extends StatelessWidget{
   const MobileFlight({
     super.key,
     required this.videoKey,
-    required this.isFlight,
+    required this.port
   });
 
   final GlobalKey<VideoFeedState> videoKey;
-  final bool isFlight;
+  final int port;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +124,7 @@ class MobileFlight extends StatelessWidget{
           Align(
             alignment: Alignment.center,
             //TODO:: Need to fix weird visual bug of the feed being small then readjusting to correct size
-            child: VideoFeed(key: videoKey),
+            child: VideoFeed(key: videoKey, port: port,),
           ),
           Align(
             alignment: Alignment.bottomCenter,
@@ -146,17 +139,9 @@ class MobileFlight extends StatelessWidget{
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    isFlight ? IconButton(
-                        onPressed: (){
-                          control.sendTakeOff();
-                        },
+                    IconButton(
+                        onPressed: (){},
                         icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
-                    )
-                        : IconButton(
-                        onPressed: (){
-                          control.sendGraceful();
-                        },
-                        icon: Icon(Icons.flight_land, color: Colors.white, size: 30.0,)
                     ),
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
@@ -181,11 +166,11 @@ class DeskFlight extends StatelessWidget {
   const DeskFlight({
     super.key,
     required this.videoKey,
-    required this.isFlight
+    required this.port
   });
 
   final GlobalKey<VideoFeedState> videoKey;
-  final bool isFlight;
+  final int port;
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +191,7 @@ class DeskFlight extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          Center(child: VideoFeed(key: videoKey,),),//placement for video feed and to record it
+          Center(child: VideoFeed(key: videoKey,port: port,),),//placement for video feed and to record it
           Align( //Aligns user menu to bottom center of the screen
             alignment: Alignment.bottomCenter,
             child: Padding(
@@ -220,17 +205,9 @@ class DeskFlight extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    isFlight ? IconButton(
-                        onPressed: (){
-                          control.sendTakeOff();
-                        },
-                        icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
-                    )
-                        : IconButton(
-                        onPressed: (){
-                          control.sendGraceful();
-                        },
-                        icon: Icon(Icons.flight_land, color: Colors.white, size: 30.0,)
+                    IconButton(
+                        onPressed: (){},
+                        icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 50.0,)
                     ),
                     //TODO::Implement actual recording logic here
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
@@ -257,7 +234,7 @@ class DeskFlight extends StatelessWidget {
                   //Will be movement logic here
                   final lr = x;
                   final fb = y;
-                  rcCon.buildRcPacket(lr,0,fb,0);
+                  rcCon.buildPacket(lr,0,fb,0);
                   control.sendRC();
                 },
               ),
@@ -273,7 +250,7 @@ class DeskFlight extends StatelessWidget {
                   //Will be height/axis control logic
                   final rot = x;
                   final ud = y;
-                  rcCon.buildRcPacket(0,ud,0,rot);
+                  rcCon.buildPacket(0,ud,0,rot);
                   control.sendRC();
                 },
               ),
