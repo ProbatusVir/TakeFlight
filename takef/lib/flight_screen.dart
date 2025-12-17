@@ -5,6 +5,7 @@ import 'joy_stick.dart';
 import 'settings_screen.dart';
 import 'video_feed.dart';
 import 'connect.dart';
+import 'flight_button.dart';
 
 class RC{
   List<int> packet = [];
@@ -139,10 +140,7 @@ class MobileFlight extends StatelessWidget{
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    IconButton(
-                        onPressed: (){},
-                        icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
-                    ),
+                    FlightButton(),
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
                         onPressed: () {
@@ -153,6 +151,37 @@ class MobileFlight extends StatelessWidget{
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+          Align( //Joy sticks bottom left
+            alignment: Alignment.bottomLeft,
+            child: Padding(
+              padding: const EdgeInsets.all(50),
+              child: ThumbStickController(
+                onChange: (x, y){
+                  //Will be movement logic here
+                  final lr = x;
+                  final fb = y;
+                  rcCon.buildPacket(lr,0,fb,0);
+                  control.sendRC();
+                },
+              ),
+            ),
+          ),
+          Align( //Joy sticks bottom right
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.all(50),
+              child: ThumbStickController(
+                input: 1,
+                onChange: (x, y){
+                  //Will be height/axis control logic
+                  final rot = x;
+                  final ud = y;
+                  rcCon.buildPacket(0,ud,0,rot);
+                  control.sendRC();
+                },
               ),
             ),
           ),
@@ -205,10 +234,7 @@ class DeskFlight extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    IconButton(
-                        onPressed: (){},
-                        icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 50.0,)
-                    ),
+                    FlightButton(),
                     //TODO::Implement actual recording logic here
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
@@ -228,7 +254,7 @@ class DeskFlight extends StatelessWidget {
           Align( //Joy sticks bottom left
             alignment: Alignment.bottomLeft,
             child: Padding(
-              padding: const EdgeInsets.all(100),
+              padding: const EdgeInsets.all(125),
               child: ThumbStickController(
                 onChange: (x, y){
                   //Will be movement logic here
@@ -243,7 +269,7 @@ class DeskFlight extends StatelessWidget {
           Align( //Joy sticks bottom right
             alignment: Alignment.bottomRight,
             child: Padding(
-              padding: const EdgeInsets.all(100),
+              padding: const EdgeInsets.all(125),
               child: ThumbStickController(
                 input: 1,
                 onChange: (x, y){
