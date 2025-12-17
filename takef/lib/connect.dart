@@ -20,6 +20,33 @@ class ControlRC{
     controlSoc?.add(rcCon.packet);
   }
 
+  void sendLanding(int landC){
+    if(controlSoc == null){
+      print('socket not ready');
+      return;
+    }
+    final landPac = [
+      0x01, //landing command
+      landC //Landing code
+    ];
+    print('Sending landing packet');
+    controlSoc?.add(landPac);
+  }
+
+  void sendTakeOff(){
+    if(controlSoc == null){
+      print('socket not ready');
+      return;
+    }
+    final takePac = [
+      0x00 //take off command
+          //reserved
+    ];
+
+    print('Sending Take off packet');
+    controlSoc?.add(takePac);
+  }
+
   Future<void> connect(int handshake, int port) async{
     try{
       controlSoc = await Socket.connect('127.0.0.1', port);
