@@ -193,8 +193,9 @@ Future<int> getServerPort() async {
   // FIXME: Maybe you'll want a ternary operator to decide whether to use Debug or Release in the path.
   final normalPath = Directory.current.parent.path.replaceAll("\\", "/");
   final targetMode = (kDebugMode ? 'debug': 'release');
+  final fileExt = Platform.isWindows ? '.exe' : '';
   final process = Process.start(
-    "$normalPath/target/$targetMode/TakeFlight.exe",
+    "$normalPath/target/$targetMode/TakeFlight$fileExt",
     [sock.port.toString(),],
     mode: ProcessStartMode.inheritStdio,
     workingDirectory: "..",
