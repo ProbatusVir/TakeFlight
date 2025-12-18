@@ -1,8 +1,11 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
+use image::codecs::png::PngEncoder;
+use image::{ExtendedColorType, ImageEncoder};
 use crate::Error;
-use mio::Token;
+use mio::{Interest, Poll, Token};
 use crate::logger::Logger;
+use crate::video::decode::{ raw_h264_to_rgb};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameType
@@ -74,10 +77,12 @@ impl VideoQueue
 
 	/// Start the work thread
 	/// May incorporate the logger.
-	pub fn start_work_thread(curr_src : Arc<Mutex<Option<Token>>>, logger: Logger) -> Result<(Self, mio_channel::Receiver<(Token, Box<[u8]>)>, thread::JoinHandle<Result<(), Error>>), Error>
+	pub fn start_work_thread(poll : &Poll, curr_src : Arc<Mutex<Option<Token>>>, logger: Logger) -> Result<(Self, mio_channel::Receiver<(Token, Box<[u8]>)>, thread::JoinHandle<Result<(), Error>>), Error>
 	{
 		let (queue, queue_receiver) = Self::new();
-		let (sender_to_server, server_receiver) = mio_channel::channel::<(Token, Box<[u8]>)>();
+		let (sender_to_server, mut server_receiver) = mio_channel::channel::<(Token, Box<[u8]>)>();
+
+		poll.registry().register(&mut server_receiver, crate::VIDEO_QUEUE, Interest::READABLE)?;
 
 		let thread_handle = std::thread::Builder::new()
 			.name("Video".into())
@@ -111,8 +116,27 @@ impl VideoQueue
 				VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!") }
 				VideoTask::Decode(from) => { todo!("Have not implemented decoding within the actual worker thread yet!") }
 				VideoTask::Transcode(from, to) => {
-					debug_assert_ne!(from, to);    // this would be stupid.
-					todo!("Have not implemented transcoding with actual worker thread yet!")
+					match (from, to)
+					{
+						(FrameType::TelloH264(), FrameType::Png()) => {
+							let upgraded_h264 = raw_h264_to_rgb(incoming_message.image_data);
+							match upgraded_h264 {
+								Some(image) => {
+									let mut png_buffer = Vec::new();
+									let mut png_encoder = PngEncoder::new(&mut png_buffer);
+									let (width, height) = image.dimensions();
+									png_encoder.write_image(&*image, width, height, ExtendedColorType::Rgb8)?;
+									sender.send((incoming_message.origin, png_buffer.into()))
+										// FIXME: determine how we want to handle this.
+										.unwrap_or(()); // If it fails to send, that's not big deal, for now...
+								}
+								None => { /* noop */ } // failed to transcode.
+							}
+
+						}
+						_ => todo!("Not sure how to transcode this yet.")
+					}
+
 				}
 				VideoTask::ShutDown => { break }
 			}; // match incoming_message

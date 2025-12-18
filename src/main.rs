@@ -16,7 +16,7 @@ mod database;
 #[cfg(test)]
 mod tests;
 
-use crate::app_network::{ConnectionState, InfoPacket, RoShamBo};
+use crate::app_network::{send_image, ConnectionState, InfoPacket, RoShamBo, VideoCode};
 use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
 use crate::drone_interface::Drone;
 use crate::logger::{do_logging, Logger};
@@ -29,7 +29,7 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -44,6 +44,7 @@ pub(crate) enum Connection
 {
 	TCP(TcpStream),
 	UDP(UdpSocket),
+	// FIXME: All of these should have distinct ClientSocketType...
 	ClientControl(ClientSocketType, Arc<Mutex<TcpStream>>),
 	VideoOut(ClientSocketType, Arc<Mutex<TcpStream>>), // This one is for sending video to the client. There will be a "VideoIn," which will be used for the CV pipeline.
 	ServerInfo(ClientSocketType, Arc<Mutex<TcpStream>>),
@@ -53,8 +54,9 @@ pub(crate) enum Connection
 
 type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
 
-const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
-const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
+pub(crate) const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
+pub(crate) const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
+pub(crate) const VIDEO_QUEUE : Token = Token(2);
 const LOG_DIR : &str = "logs/";
 const TIMEOUT : Duration = Duration::from_millis((1.5 * 1000.0) as u64);
 
@@ -75,6 +77,7 @@ struct ServerInstance
 	frame_time		: Arc<Duration>,
 	read_buffer		: [u8;1024],
 	curr_drone		: Option<Arc<Mutex<Connection>>>,
+	video_receiver	: mio_channel::Receiver<(Token, Box<[u8]>)>
 }
 
 const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
@@ -103,10 +106,6 @@ fn main() -> Result<(), Error> {
 	};
 	logger.info("Logger started!")?;
 
-	// Start the video queue
-	let video_src = Arc::new(Mutex::new(None));
-	let (queue_sender, queue_receiver, video_handle) = VideoQueue::start_work_thread(video_src.clone(), logger.clone())?;
-
 	// Start the server
 	let poll = Arc::new(Mutex::new(Poll::new()?));
 	let mut listener = TcpListener::bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
@@ -132,6 +131,10 @@ fn main() -> Result<(), Error> {
 	logger.info(&format!("Listening on all IPv4 interfaces. Network address: {}, port {}", local_ip()?, server_address.port()))?;
 
 
+	// Start the video queue
+	let video_src = Arc::new(Mutex::new(None));
+	let (queue_sender, video_receiver, video_handle) = VideoQueue::start_work_thread(&*poll.lock()?, video_src.clone(), logger.clone())?;
+
 	// Start heartbeat
 	let heartbeat_handle = do_heartbeat(&poll, continue_heartbeat.clone(), logger.clone())?;
 
@@ -154,11 +157,12 @@ fn main() -> Result<(), Error> {
 		frame_time		: Arc::new(FRAME_TIME),
 		read_buffer		: [0;1024],
 		curr_drone		: None,
+		video_receiver,
 	};
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
-	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
+	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone(), queue_sender.clone())?;
 	server.curr_drone = Some(Arc::new(Mutex::new(Connection::Drone(drone.clone()))));
 	/*drone.lock()?.takeoff()?;
 	sleep(Duration::from_secs(5));
@@ -350,7 +354,36 @@ impl ServerInstance
 						drone.lock()?.disconnect(&mut ownership_map_lock)?;
 					}
 				}
-				token => { 
+				VIDEO_QUEUE => {
+					dbg!("Received message from video queue!");
+					let message = self.video_receiver.try_recv().unwrap();
+					// FIXME: This should not be hardcoded.
+					let ownership_lock = self.ownership_map.lock()?;
+					let token = match &*self.video_out.lock()? {
+						Some(token) => { token.clone() }
+						None => { continue }
+					};
+
+					let out_sock = match ownership_lock.get(&token)
+					{
+						Some(sock) => { sock }
+						None => { continue }
+					};
+
+					match out_sock {
+						Connection::VideoOut(_, stream) => {
+							let mut stream_lock = stream.lock()?;
+							// FIXME: this should not require additional allocations.
+							let mut out_buffer = Vec::new();
+							out_buffer.write(&(VideoCode::Png as u8).to_be_bytes())?;
+							out_buffer.write(&(message.1.len() as u16).to_be_bytes())?;
+							out_buffer.write(&(message.1))?;
+							stream_lock.write_all(&out_buffer)?;
+						}
+						_ => todo!("Why is our video destination NOT a VideoOut????")
+					}
+				}
+				token => {
 					self.handle_token(token)?
 				}
 				// It's assuring for the compiler to prove that this condition is unreachable.
@@ -485,7 +518,7 @@ impl ServerInstance
 						}
 					}
 				}
-			}
+			} // Some(token)
 		}
 	}
 }
@@ -581,10 +614,14 @@ fn heartbeat_entrypoint(heartbeat : Waker, continue_heartbeat : Arc<Mutex<bool>>
 fn shutdown_video<T>(join_handle: JoinHandle<T>, queue_sender : VideoQueue) -> Result<(), Error>
 {
 	let thread_name = join_handle.thread().name().unwrap_or_default().to_string();
-	queue_sender.shutdown()?;
+	match queue_sender.shutdown()
+	{
+		Ok(_) => { println!("Sent shutdown signal to video queue.") }
+		Err(_) => { println!("Encountered an error sending shutdown signal to video queue. Continuing.") }
+	}
 	match join_handle.join() {
 		Ok(_) => { println!("Successfully closed thread \"{}\"!", thread_name) }
-		Err(e) => { println!("There may have been an error closing thread \"{}\". {:?}", thread_name, e)}
+		Err(e) => { println!("There may have been an error closing thread \"{}\", or the thread already closed.", thread_name)}
 	}
 
 	Ok(())
