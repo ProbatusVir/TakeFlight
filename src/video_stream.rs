@@ -39,15 +39,15 @@ pub(crate) struct VideoTaskFull
 /// Since the Video Queue has one purpose, it's fine for it to block.
 pub(crate) struct VideoQueue
 {
-	sender: mio_channel::Sender<VideoTaskFull>
+	sender: std::sync::mpsc::Sender<VideoTaskFull>
 }
 
 impl VideoQueue
 {
 	/// Sealed.
-	fn new() -> (Self, mio_channel::Receiver<VideoTaskFull>)
+	fn new() -> (Self, std::sync::mpsc::Receiver<VideoTaskFull>)
 	{
-		let (sender, receiver) = mio_channel::channel();
+		let (sender, receiver) = std::sync::mpsc::channel();
 		(Self { sender }, receiver)
 	}
 
@@ -67,13 +67,13 @@ impl VideoQueue
 
 	pub fn shutdown(&self) -> Result<(), Error>
 	{
-
-		self.send_to_queue(Token(0), None, Default::default(), VideoTask::ShutDown)
+		let vtf = VideoTaskFull { task: VideoTask::ShutDown, image_data: Box::new([]), origin : Token(0) };
+		self.sender.send(vtf).map_err(|_| { Error::Custom("Failed to send shutdown to the video stream thread. Did thread crash?") })
 	}
 
 	/// Start the work thread
 	/// May incorporate the logger.
-	pub fn start_work_thread(curr_src : Arc<Mutex<Option<Token>>>, logger: Logger, continue_video: Arc<Mutex<bool>>) -> Result<(Self, mio_channel::Receiver<(Token, Box<[u8]>)>, thread::JoinHandle<Result<(), Error>>), Error>
+	pub fn start_work_thread(curr_src : Arc<Mutex<Option<Token>>>, logger: Logger) -> Result<(Self, mio_channel::Receiver<(Token, Box<[u8]>)>, thread::JoinHandle<Result<(), Error>>), Error>
 	{
 		let (queue, queue_receiver) = Self::new();
 		let (sender_to_server, server_receiver) = mio_channel::channel::<(Token, Box<[u8]>)>();
@@ -93,38 +93,32 @@ impl VideoQueue
 	/// The producers own A_{Sender}, and the server owns B_{Receiver}, the other two are used for IO with the queue.
 	/// This may seem like a complicated setup, but it's just a fat pointer being moved around, so minimal allocations are necessary.
 	//  The parameters reflect the flow of this method.
-	fn work(mut receiver: mio_channel::Receiver<VideoTaskFull>, sender : mio_channel::Sender<(Token, Box<[u8]>)>, curr_src : Arc<Mutex<Option<Token>>>, logger : Logger) -> Result<(), Error>
+	fn work(receiver: std::sync::mpsc::Receiver<VideoTaskFull>, sender : mio_channel::Sender<(Token, Box<[u8]>)>, curr_src : Arc<Mutex<Option<Token>>>, logger : Logger) -> Result<(), Error>
 	{
 		logger.info("Starting working queue!")?;
-		let mut event_queue = Events::with_capacity(5); // I think that we only need 1 or 3, but why not be on the safe side?
-		let mut poll = Poll::new()?;
-		poll.registry().register(&mut receiver, Token(0), Interest::READABLE)?;
-
 
 		loop {
-			poll.poll(&mut event_queue, None)?;
-			println!("Moved past poll in video_stream.rs");
+			// We do not need to match the token, since we only ever expect one activity.
+			let incoming_message = match receiver.recv() {
+				Ok(message) => { message }
+				Err(error) => { continue; } // opaque error.
+			};
 
-			// There is no read_closed for channels.
-			for event in event_queue.iter() {
-				// We do not need to match the token, since we only ever expect one activity.
+			dbg!("Received a message in video_stream.rs");
 
-				let incoming_message = match receiver.try_recv() {
-					Ok(message) => { message }
-					Err(error) => { continue; } // opaque error.
-				};
+			let frame = match incoming_message.task {
+				VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!") }
+				VideoTask::Decode(from) => { todo!("Have not implemented decoding within the actual worker thread yet!") }
+				VideoTask::Transcode(from, to) => {
+					debug_assert_ne!(from, to);    // this would be stupid.
+					todo!("Have not implemented transcoding with actual worker thread yet!")
+				}
+				VideoTask::ShutDown => { break }
+			}; // match incoming_message
+		} // loop
 
-				let frame = match incoming_message.task {
-					VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!") }
-					VideoTask::Decode(from) => { todo!("Have not implemented decoding within the actual worker thread yet!") }
-					VideoTask::Transcode(from, to) => {
-						debug_assert_ne!(from, to);    // this would be stupid.
-						todo!("Have not implemented transcoding with actual worker thread yet!")
-					}
-					VideoTask::ShutDown => { Err(Error::Custom("Shutting down video queue worker!"))? }
-				}; // match incoming_message
-			} // drain events loop
-		} // poll loop
+		logger.warn("Shutting down!")?;
+		Ok(())
 	} // work
 
 	#[inline(always)]
@@ -157,7 +151,7 @@ impl VideoQueue
 			}
 			// If there is no current source of video, do nothing.
 			None => { Ok(()) }
-		}
+		} // match curr_src
 	} // send_to_queue
 } // VideoQueue
 
