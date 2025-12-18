@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'connect.dart';
@@ -11,29 +13,26 @@ class VideoFeed extends StatefulWidget{
 }
 
 class VideoFeedState extends State<VideoFeed>{
-  /*late Timer timer;
-  int frame = 0;
-  late List<Image> feed;
-  bool isLoad = false;*/
   List<Uint8List> currentFrame = [];
   Uint8List? latestFrame;
 
   @override
   void initState(){
     super.initState();
-    onImageReceived();
   }
 
-  void onImageReceived() async {
-    final vid = DroneVideo();
-    await vid.connect(widget.port);
-    await vid.getDroneImg(latestFrame!);
-    currentFrame.add(latestFrame!);
-    /*setState(() {
-      print('VideoFeedState received frame of ${received.length} bytes');
+  void onImageReceived(Uint8List frames) async {
+    setState(() {
+      print('VideoFeedState received frame of ${frames.length} bytes');
+      latestFrame = frames;
+      currentFrame.add(latestFrame!);
+    });
+    /*final received = await vid.getDroneImg();
+    if (received != null) {
       latestFrame = received;
       currentFrame.add(latestFrame!);
-    });*/
+      print('VideoFeedState received frame of ${received.length} bytes');
+    }*/
   }
 
   @override

@@ -55,10 +55,9 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
 //creates list this will later be the get call for drone names
-  //final List<String> items = List.generate(3, (index) => 'Drone ${index + 1}');
+  final List<String> fakeItems = List.generate(3, (index) => 'Drone ${index + 1}');
   List<String> items = [];
   int port = 0;
-  final GlobalKey<VideoFeedState> videoKey = GlobalKey<VideoFeedState>();
 
   @override
   void initState(){
@@ -74,6 +73,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    if(items.isEmpty){
+      items = fakeItems;
+    }
     return Scaffold(
       //TODO::Change out logo text with SVG text fix logo size for mobile
       backgroundColor: Colors.black,//changes the overall scaffold color which is the background of the screen itself
@@ -135,7 +137,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       );
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(videoKey: videoKey,port: port,))
+                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port,))
                                       );
                                     },
                                   );
