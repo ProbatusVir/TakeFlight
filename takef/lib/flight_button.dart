@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'connect.dart';
 
 class FlightButton extends StatefulWidget{
-  const FlightButton({super.key});
+  const FlightButton({super.key, required this.control});
+  final ControlRC control;
 
   @override
   State<FlightButton> createState() => _FlightButtonState();
@@ -10,28 +11,28 @@ class FlightButton extends StatefulWidget{
 
 class _FlightButtonState extends State<FlightButton>{
   bool isFlying = false;
-  final control = ControlRC();
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: (){
-        setState(() {
-          isFlying = !isFlying;
-        });
-      },
       child: isFlying ? IconButton(
           onPressed: (){
-            control.sendTakeOff();
-          },
-          icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
-      ) :
-      IconButton(
-          onPressed: (){
-            control.sendLanding(0x01);
+            widget.control.sendLanding(0x01);
+            setState(() {
+              isFlying = false;
+            });
           },
           icon: Icon(Icons.flight_land, color: Colors.white, size: 30.0,)
-      ),
+      ) :
+        IconButton(
+            onPressed: (){
+              widget.control.sendTakeOff();
+              setState(() {
+                isFlying = true;
+              });
+            },
+            icon: Icon(Icons.flight_takeoff, color: Colors.white, size: 30.0,)
+        )
     );
   }
 }

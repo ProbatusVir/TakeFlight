@@ -142,7 +142,7 @@ class MobileFlight extends StatelessWidget{
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    FlightButton(),
+                    FlightButton(control: control,),
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
                         onPressed: () {
@@ -236,7 +236,7 @@ class DeskFlight extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    FlightButton(),
+                    FlightButton(control: control,),
                     //TODO::Implement actual recording logic here
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
