@@ -37,6 +37,7 @@ pub(crate) struct VideoTaskFull
 
 /// This is strictly between sources of video and the Video Queue
 /// Since the Video Queue has one purpose, it's fine for it to block.
+#[derive(Clone)]
 pub(crate) struct VideoQueue
 {
 	sender: std::sync::mpsc::Sender<VideoTaskFull>
