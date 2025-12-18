@@ -85,7 +85,6 @@ fn main() -> Result<(), Error> {
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
 
 	let mut continue_logger = Arc::new(Mutex::new(true));
-	let mut continue_video = Arc::new(Mutex::new(true));
 	let mut continue_heartbeat = Arc::new(Mutex::new(true));
 
 	// TODO: Add logic for determining log file.
@@ -107,7 +106,7 @@ fn main() -> Result<(), Error> {
 
 	// Start the video queue
 	let video_src = Arc::new(Mutex::new(None));
-	let (queue_sender, queue_receiver, video_handle) = VideoQueue::start_work_thread(video_src.clone(), logger.clone(), continue_video.clone())?;
+	let (queue_sender, queue_receiver, video_handle) = VideoQueue::start_work_thread(video_src.clone(), logger.clone())?;
 
 	// Start the server
 	let poll = Arc::new(Mutex::new(Poll::new()?));
@@ -174,20 +173,8 @@ fn main() -> Result<(), Error> {
 	match server.multiplex()
 	{
 		Ok(_) => { /* noop */ }
-		Err(_) => { logger.error("Server encountered error, shutting down!")? }
+		Err(e) => { logger.error_from_string(format!("Server an encountered error, shutting down:\n\"\"\"\n{e}\n\"\"\""))? }
 	}
-
-	println!("Please wait the first 2 seconds");
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
-	println!("Please wait 2 seconds");
-	sleep(Duration::from_secs(2));
 
 	try_join(heartbeat_handle, &mut continue_heartbeat)?;
 	shutdown_video(video_handle, queue_sender)?;
@@ -590,7 +577,7 @@ fn heartbeat_entrypoint(heartbeat : Waker, continue_heartbeat : Arc<Mutex<bool>>
 		heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
 	}
 
-	logger.info("Shutting down!").unwrap();
+	logger.warn("Shutting down!").unwrap();
 }
 
 
