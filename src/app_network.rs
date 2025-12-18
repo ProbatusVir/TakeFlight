@@ -149,7 +149,7 @@ pub fn handle_connection(mut stream : TcpStream,
 				server.logger.info_from_string(format!("New video destination: {peer_port}" ))?;
 				//*server.video_out.lock()? = Some(Token(peer_port));
 				ownership_map.insert(Token(peer_port), Connection::VideoOut(Video, Arc::new(Mutex::new(stream))));
-				*server.video_out.lock()? = Some(token);
+				*server.video_out.lock()? = Some(Token(peer_port));
 			}
 			ClientSocketType::Info => {
 				server.info_token = Some(Token(peer_port));
