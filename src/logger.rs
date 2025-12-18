@@ -5,6 +5,7 @@ use std::io::Write;
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, };
+use std::thread;
 
 pub(crate) enum LoggingLevel
 {
@@ -18,6 +19,8 @@ pub(crate) struct LogMessage
 	pub logging_level: LoggingLevel,
 	pub time : chrono::DateTime<Local>,
 	pub msg : String,
+	// I'll see if I like this...
+	pub thread : String,
 }
 
 /// Only make one of these.
@@ -30,7 +33,7 @@ pub struct Logger
 impl Logger
 {
 	/// Please only make one of these.
-	pub fn new() -> (Logger, Receiver<LogMessage>)
+	pub fn new() -> (Self, Receiver<LogMessage>)
 	{
 		let (sender, receiver) = std::sync::mpsc::channel();
 		(Self { sender }, receiver)
@@ -77,28 +80,44 @@ impl Logger
 	fn send_log_message_string(&self, logging_level: LoggingLevel, msg : String) -> Result<(), Error>
 	{
 		let time = chrono::Local::now();
-		self.sender.send(LogMessage { logging_level, time, msg, }).map_err(|_| Error::Custom("Failed to send message to logger!"))
+		let thread = thread::current().name().unwrap().into();
+		self.sender.send(LogMessage { logging_level, time, msg, thread}).map_err(|_| Error::Custom("Failed to send message to logger!"))
 	}
 }
 
 /// I would love to make this return Result<!, Error> once it becomes stable.
-pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>) -> Result<(), Error>
+pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>, continue_logger : Arc<Mutex<bool>>) -> Result<(), Error>
 {
-	loop {
-		// Receive our message
-		let log_message = receiver.recv().map_err(|_| Error::Custom("Logger failed!"))?;
+	let mut continue_loop = true;
+	while *continue_logger.lock()? {
+		// Receive our message, but make sure that we actually have one.
+		let log_message = match receiver.recv() {
+				Ok(message) => { message }
+				Err(error) => {
+					let error_message = error.to_string();
+					continue_loop = false;
+					LogMessage
+					{
+						logging_level: LoggingLevel::Error,
+						time: chrono::Local::now(),
+						msg: "Error receiving messages. Did 'main' panic? Shutting down logger.".to_string(),
+						thread: thread::current().name().unwrap().into(), // I'd be very surprised if this was uninitialized somehow...
+					}
+				}
+			};
 
 		// Format our message
 		let message_out = {
-				format!("[{}] ({:02}:{:02}:{:02}): \"{}\"",
+				format!("[{}]({:02}:{:02}:{:02}): [{}] \"{}\"",
 						match log_message.logging_level {
 							LoggingLevel::Info => { "INFO" }
 							LoggingLevel::Warning => { "WARN" }
-							LoggingLevel::Error => { "ERR" }
+							LoggingLevel::Error => { "ERR " }
 						},
 						log_message.time.hour(),
 						log_message.time.minute(),
 						log_message.time.second(),
+						log_message.thread,
 						log_message.msg,
 				)
 			};
@@ -119,5 +138,8 @@ pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<Fi
 				None => {}
 			}
 		}
+		if !continue_loop { Err(Error::Custom("Error receiving messages. Did 'main' panic? Shutting down logger."))? }
 	}
+	
+	Ok(())
 }
