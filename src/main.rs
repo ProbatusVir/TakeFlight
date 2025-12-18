@@ -34,8 +34,10 @@ use std::io::ErrorKind;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime};
 use takeflight_computer_vision as computer_vision;
+use crate::video_stream::VideoQueue;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -76,11 +78,15 @@ struct ServerInstance
 	curr_drone		: Option<Arc<Mutex<Connection>>>,
 }
 
+const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<(), Error> {
-	const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
+
+	let mut continue_logger = Arc::new(Mutex::new(true));
+	let mut continue_video = Arc::new(Mutex::new(true));
+	let mut continue_heartbeat = Arc::new(Mutex::new(true));
 
 	// TODO: Add logic for determining log file.
 	let log_file = "log_file";
@@ -89,15 +95,19 @@ fn main() -> Result<(), Error> {
 	let (logger, receiver) = logger::Logger::new();
 
 	// Start the logger
-	{
+	let logger_handle = {
 		let cloned_file = file.clone();
+		let cloned_continue_logger = continue_logger.clone();
 		thread::Builder::new()
 			.name(String::from("Logger"))
-			.spawn(move || { do_logging(receiver, cloned_file).unwrap()
-			})?;
-	}
-
+			.spawn(move || { do_logging(receiver, cloned_file, cloned_continue_logger).unwrap()
+			})?
+	};
 	logger.info("Logger started!")?;
+
+	// Start the video queue
+	let video_src = Arc::new(Mutex::new(None));
+	let (queue_sender, queue_receiver, video_handle) = VideoQueue::start_work_thread(video_src.clone(), logger.clone(), continue_video.clone())?;
 
 	// Start the server
 	let poll = Arc::new(Mutex::new(Poll::new()?));
@@ -125,13 +135,7 @@ fn main() -> Result<(), Error> {
 
 
 	// Start heartbeat
-	{
-		let heartbeat = Waker::new(poll.lock()?.registry(), HEARTBEAT)?;
-		thread::spawn(move || { loop {
-			thread::sleep(HEARTBEAT_TIME);
-			heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
-		} });
-	}
+	let heartbeat_handle = do_heartbeat(&poll, continue_heartbeat.clone(), logger.clone())?;
 
 
 	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
@@ -144,7 +148,7 @@ fn main() -> Result<(), Error> {
 		ownership_map,
 		poll,
 		logger 			: logger.clone(),
-		video_src		: Arc::new(Mutex::new(None)),
+		video_src,
 		video_out		: Arc::new(Mutex::new(None)),
 		drone_control	: None,
 		info_token		: None,
@@ -167,20 +171,47 @@ fn main() -> Result<(), Error> {
 	 */
 
 	// Some multiplexing
-	server.multiplex()
-}
+	match server.multiplex()
+	{
+		Ok(_) => { /* noop */ }
+		Err(_) => { logger.error("Server encountered error, shutting down!")? }
+	}
+
+	println!("Please wait the first 2 seconds");
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	queue_sender.encode(Token(0), None, video_stream::FrameType::H264(), Default::default())?;
+	println!("Please wait 2 seconds");
+	sleep(Duration::from_secs(2));
+
+	try_join(heartbeat_handle, &mut continue_heartbeat)?;
+	shutdown_video(video_handle, queue_sender)?;
+
+	logger.info("Server shutting down.")?;
+	try_join(logger_handle, &mut continue_logger)?;
+
+	Ok(())
+} // main
 
 
 impl ServerInstance
 {
 	fn multiplex(&mut self) -> Result<(), Error>
 	{
-		// While I don't like the idea of this being a local variable
+		// While I don't like the idea of this being a local variable,
 		// it only makes sense given that event_buffer is used in precisely
 		// two places. The poll stage, and the top of the drain stage.
 		const MAX_EVENTS : usize = 1024;
 		let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
+
+
+		Err(Error::Custom("Oh no, the main server logic crashed!!1!"))?;
 		loop
 		{
 			// Receive and handle events
@@ -336,78 +367,8 @@ impl ServerInstance
 						drone.lock()?.disconnect(&mut ownership_map_lock)?;
 					}
 				}
-				token => {
-
-					// This is gore.
-					// We need to remove the silly TCP stream to reassign it to a proper role. I desperately need to find a better way.
-					let cloned_connection = {
-						let ownership_map_clone = self.ownership_map.clone(); // Avoids a partial borrow which stops borrowing the whole object later, doesn't really add overhead.
-						let mut ownership_map_lock = ownership_map_clone.lock()?;
-
-						let needs_reassigned = {
-							let found_connection_wrapped = ownership_map_lock.get(&token);
-							if found_connection_wrapped.is_none()
-							{
-								self.logger.error_from_string(format!("Unmapped port: {}", token.0))?;
-								return Err(Error::Custom("Somehow registry included an unmapped value! Shutting down server!"));
-							}
-
-							match found_connection_wrapped {
-								Some(Connection::TCP(_)) => { true }
-								_ => { false }
-							}
-						};
-
-						if needs_reassigned
-						{
-							let found_connection = ownership_map_lock.remove(&token);
-							match found_connection
-							{
-								// Handle the connection.
-								Some(Connection::TCP(stream)) => { handle_connection(stream, self, &mut *ownership_map_lock)?}
-								_ => { continue }
-							};
-
-							// CLARIFY:
-							// 	This logic should be handled in the above function now.
-							//ownership_map_lock.insert(token, new_item);
-							continue;
-						}
-
-						let found_connection = ownership_map_lock.get(&token);
-						found_connection.unwrap().try_clone()
-					};
-
-					#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
-					server.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
-					// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
-					match cloned_connection
-					{
-						Some(found) => {
-							match found {
-								Connection::ServerInfo(..) => { handle_info_activity(token, self, &mut *self.ownership_map.clone().lock()?)?; }
-								Connection::Drone(drone) => {
-									// Receive signal will always go until an error is encountered.
-									// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
-									match drone.lock()?.receive_signal(token.0 as u16) {
-										Err(e) => {
-											match e
-											{
-												Error::IOError(io_error) => {
-													if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
-												}
-												_ => { Err(e)? }
-											}
-										}
-										_ => { /* noop */ }
-									}
-								}
-								Connection::ClientControl(..) => { handle_control_activity(token, self, &mut *self.ownership_map.clone().lock()?)? }
-								_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
-							};
-						}
-						None => panic!("We already checked that the connection exists.")
-					}
+				token => { 
+					self.handle_token(token)?
 				}
 				// It's assuring for the compiler to prove that this condition is unreachable.
 				#[allow(unreachable_patterns)]
@@ -420,7 +381,7 @@ impl ServerInstance
 
 	/// If Some(true), `continue`
 	/// If Some(false), keep executing.
-	fn handle_token(&mut self, token : Token) -> Result<bool, Error>
+	fn handle_token(&mut self, token : Token) -> Result<(), Error>
 	{
 
 		// This is gore.
@@ -450,13 +411,13 @@ impl ServerInstance
 				{
 					// Handle the connection.
 					Some(Connection::TCP(stream)) => { handle_connection(stream, self, &mut *ownership_map_lock)?}
-					_ => { return Ok(true) }
+					_ => { return Ok(()) }
 				};
 
 				// CLARIFY:
 				// 	This logic should be handled in the above function now.
 				//ownership_map_lock.insert(token, new_item);
-				return Ok(true);
+				return Ok(());
 			}
 
 			let found_connection = ownership_map_lock.get(&token);
@@ -494,7 +455,7 @@ impl ServerInstance
 			None => panic!("We already checked that the connection exists.")
 		}
 
-		Ok(false)
+		Ok(())
 }
 
 
@@ -539,12 +500,10 @@ impl ServerInstance
 								Err(Error::Custom("While attempting to send info, found that the info socket was the wrong type of connection!"))
 							}
 						}
-
 					}
 				}
 			}
 		}
-
 	}
 }
 
@@ -593,4 +552,57 @@ impl TryInto<TcpStream> for Connection
 }
 
 
+fn try_join<T>(join_handle: JoinHandle<T>, predicate : &mut Arc<Mutex<bool>>) -> Result<(), Error>
+{
+	let thread_name = join_handle.thread().name().unwrap_or_default().to_string();
+	match predicate.lock()
+	{
+		Ok(mut predicate_inner) => { *predicate_inner = !*predicate_inner; }
+		// It's OK if this thread crashed, we're only trying to close out the threads.
+		Err(_) => { println!("It appears that thread \"{}\" had a poisoned mutex. It likely crashed.", thread_name); }
+	} // match predicate
 
+	// This is fine due to the errors this returns
+	// If the thread panics, it bubbles the error -- we're shutting down anyway
+	match join_handle.join() {
+		Ok(_) => { println!("Successfully closed thread \"{}\"!", thread_name) }
+		Err(e) => { println!("There may have been an error closing thread \"{}\". {:?}", thread_name, e)}
+	}
+
+	Ok(())
+}
+
+
+// FIXME, make this safer???
+fn do_heartbeat(poll : &Arc<Mutex<Poll>>, continue_heartbeat : Arc<Mutex<bool>>, logger : Logger) -> Result<JoinHandle<()>, Error>
+{
+	let heartbeat = Waker::new(poll.lock().unwrap().registry(), HEARTBEAT)?;
+	Ok(thread::Builder::new()
+		.name("Heart".into())
+		.spawn(|| heartbeat_entrypoint(heartbeat, continue_heartbeat, logger))?)
+}
+
+fn heartbeat_entrypoint(heartbeat : Waker, continue_heartbeat : Arc<Mutex<bool>>, logger : Logger)
+{
+	while *continue_heartbeat.lock().unwrap()
+	{
+		thread::sleep(crate::HEARTBEAT_TIME);
+		heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
+	}
+
+	logger.info("Shutting down!").unwrap();
+}
+
+
+// FIXME: make this safer???
+fn shutdown_video<T>(join_handle: JoinHandle<T>, queue_sender : VideoQueue) -> Result<(), Error>
+{
+	let thread_name = join_handle.thread().name().unwrap_or_default().to_string();
+	queue_sender.shutdown()?;
+	match join_handle.join() {
+		Ok(_) => { println!("Successfully closed thread \"{}\"!", thread_name) }
+		Err(e) => { println!("There may have been an error closing thread \"{}\". {:?}", thread_name, e)}
+	}
+
+	Ok(())
+}
