@@ -14,6 +14,7 @@ dependencies = [
  "lebe",
  "local-ip-address",
  "mio",
+ "mio_channel",
  "nokhwa",
  "num_enum",
  "openh264",
@@ -1102,6 +1103,15 @@ dependencies = [
  "log",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "mio_channel"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb1b1e4610c2e54ac340ef82b9c79982cea6b22c8b56035f205bbf50a4c86837"
+dependencies = [
+ "mio",
 ]
 
 [[package]]

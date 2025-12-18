@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use crate::error::Error;
 use chrono::{Local, Timelike};
 use std::fs::File;
@@ -5,6 +6,7 @@ use std::io::Write;
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, };
+use std::thread;
 
 pub(crate) enum LoggingLevel
 {
@@ -15,9 +17,10 @@ pub(crate) enum LoggingLevel
 
 pub(crate) struct LogMessage
 {
-	pub logging_level: LoggingLevel,
-	pub time : chrono::DateTime<Local>,
-	pub msg : String,
+	thread : String,
+	logging_level: LoggingLevel,
+	time : chrono::DateTime<Local>,
+	msg : String,
 }
 
 /// Only make one of these.
@@ -30,7 +33,7 @@ pub struct Logger
 impl Logger
 {
 	/// Please only make one of these.
-	pub fn new() -> (Logger, Receiver<LogMessage>)
+	pub fn new() -> (Self, Receiver<LogMessage>)
 	{
 		let (sender, receiver) = std::sync::mpsc::channel();
 		(Self { sender }, receiver)
@@ -76,48 +79,94 @@ impl Logger
 
 	fn send_log_message_string(&self, logging_level: LoggingLevel, msg : String) -> Result<(), Error>
 	{
-		let time = chrono::Local::now();
-		self.sender.send(LogMessage { logging_level, time, msg, }).map_err(|_| Error::Custom("Failed to send message to logger!"))
+		self.sender.send(LogMessage::new(logging_level, msg)).map_err(|_| Error::Custom("Failed to send message to logger!"))
 	}
 }
 
 /// I would love to make this return Result<!, Error> once it becomes stable.
-pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>) -> Result<(), Error>
+pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>, continue_logger : Arc<Mutex<bool>>) -> Result<(), Error>
 {
-	loop {
-		// Receive our message
-		let log_message = receiver.recv().map_err(|_| Error::Custom("Logger failed!"))?;
-
-		// Format our message
-		let message_out = {
-				format!("[{}] ({:02}:{:02}:{:02}): \"{}\"",
-						match log_message.logging_level {
-							LoggingLevel::Info => { "INFO" }
-							LoggingLevel::Warning => { "WARN" }
-							LoggingLevel::Error => { "ERR" }
-						},
-						log_message.time.hour(),
-						log_message.time.minute(),
-						log_message.time.second(),
-						log_message.msg,
-				)
-			};
-
-		// Actually write out the message
-		match log_message.logging_level {
-			LoggingLevel::Info		=> {  println!("{message_out}"); }
-			LoggingLevel::Warning	=> { eprintln!("{message_out}"); }
-			LoggingLevel::Error		=> { eprintln!("{message_out}"); }
-		}
-
-		{
-			let mut log_file_lock = log_file.lock().map_err(|_| Error::Custom("Logger unable to get a lock on the log_file pointer!"))?;
-
-			match &mut *log_file_lock
-			{
-				Some(log_file_lock) => { log_file_lock.write(format!("{message_out}\n").as_bytes())?; }
-				None => {}
+	while *continue_logger.lock()? {
+		// Receive our message, but make sure that we actually have one.
+		match receiver.recv() {
+			Ok(message) => {
+				write_message_out(message, &log_file)?
 			}
+			Err(error) => {
+				const ERROR_MESSAGE : &str = "Error receiving messages. Did 'main' panic? Shutting down logger.";
+				write_message_out(LogMessage::new(LoggingLevel::Error, ERROR_MESSAGE), &log_file)?;
+				break;
+			} // Err
+		} // match
+	}
+
+	let final_message = LogMessage::new(LoggingLevel::Info, "Shutting down!");
+	write_message_out(final_message, &log_file)?;
+
+	Ok(())
+}
+
+fn write_message_out(message : LogMessage, log_file : &Arc<Mutex<Option<File>>>) -> Result<(), Error>
+{
+	match message.logging_level {
+		LoggingLevel::Info		=> {  println!("{message}")}
+		LoggingLevel::Warning	=> { eprintln!("{message}")}
+		LoggingLevel::Error		=> { eprintln!("{message}")}
+	}
+
+	{
+		let mut log_file_lock = log_file.lock().map_err(|_| Error::Custom("Logger unable to get a lock on the log_file pointer!"))?;
+
+		match &mut *log_file_lock
+		{
+			Some(log_file_lock) => { writeln!(log_file_lock, "{message}")?; }
+			None => { /* noop */ }
 		}
+
+		Ok(())
+	}
+}
+
+
+impl LogMessage
+{
+	/// Sealed.
+	fn new<T : ToString>(logging_level : LoggingLevel, msg : T) -> Self
+	{
+		/*
+		pub logging_level: LoggingLevel,
+		pub time : chrono::DateTime<Local>,
+		pub msg : String,
+		// I'll see if I like this...
+		pub thread : String,
+		 */
+		let time = chrono::Local::now();
+		let thread = thread::current().name().unwrap_or_default().into();
+
+		Self
+		{
+			logging_level,
+			time,
+			msg : msg.to_string(),
+			thread,
+		}
+	}
+}
+
+impl Display for LogMessage
+{
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		write!(f, "[{}]({:02}:{:02}:{:02}): [{}] \"{}\"",
+			match self.logging_level {
+				LoggingLevel::Info		=> { "INFO" }
+				LoggingLevel::Warning	=> { "WARN" }
+				LoggingLevel::Error		=> { "ERR " }
+			},
+			self.time.hour(),
+			self.time.minute(),
+			self.time.second(),
+			self.thread,
+			self.msg,
+		)
 	}
 }

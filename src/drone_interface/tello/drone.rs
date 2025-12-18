@@ -377,9 +377,9 @@ impl TelloDrone
 		let vid_token = Token(video_sock.local_addr()?.port() as usize);
 		let nfo_token = Token(info_sock.local_addr()?.port() as usize);
 
-		logger.info_from_string(format!("Command socket connected to: {}",		com_token.0))?;
-		logger.info_from_string(format!("Video socket connected to: {}",		vid_token.0))?;
-		logger.info_from_string(format!("Info socket connected to: {}",		nfo_token.0))?;
+		logger.info_from_string(format!("Command socket opened on: {}",		com_token.0))?;
+		logger.info_from_string(format!("Video socket opened on: {}",		vid_token.0))?;
+		logger.info_from_string(format!("Info socket opened on: {}",		nfo_token.0))?;
 
 		// Register all the sockets...
 		{

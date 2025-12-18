@@ -1,2 +1,2 @@
-[env]
+[platform.windows.env]
 TFLITEC_PREBUILT_PATH={value="3rd_party\\tensorflowlite_c.dll", relative=true}
