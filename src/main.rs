@@ -1,5 +1,4 @@
 mod helper;
-mod video_stream;
 mod drone_interface;
 mod error;
 //#[cfg(debug_assertions)]
@@ -34,10 +33,10 @@ use std::io::ErrorKind;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::thread::{sleep, JoinHandle};
+use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 use takeflight_computer_vision as computer_vision;
-use crate::video_stream::VideoQueue;
+use video::video_queue::VideoQueue;
 
 #[allow(dead_code)]
 #[derive(Debug)]

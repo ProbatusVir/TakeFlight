@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
 use crate::Error;
-use mio::{Events, Interest, Poll, Token};
+use mio::Token;
 use crate::logger::Logger;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -104,7 +104,7 @@ impl VideoQueue
 				Err(error) => { continue; } // opaque error.
 			};
 
-			dbg!("Received a message in video_stream.rs");
+			dbg!("Received a message in video_queue");
 
 			let frame = match incoming_message.task {
 				VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!") }
