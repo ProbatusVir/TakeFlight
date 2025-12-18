@@ -75,8 +75,8 @@ class _FlightScreenState extends State<FlightScreen>{
 
   void startConnection() async{
     await control.connect(0x01, widget.port);
-    await vid.connect(widget.port, videoKey);
-    //await vid.getDroneImg(videoKey);
+    await vid.connect(widget.port);
+    await vid.getDroneImg(videoKey);
   }
 
   @override

@@ -135,7 +135,7 @@ class Info{
 class DroneVideo{
   Socket? videoSoc;
 
-  Future<void> connect(int port, GlobalKey<VideoFeedState> videoKey) async {
+  Future<void> connect(int port) async {
     try {
       videoSoc = await Socket.connect('127.0.0.1', port);
       //Prints are for debugging
@@ -149,33 +149,6 @@ class DroneVideo{
     if(videoSoc != null){
       videoSoc?.add([0x42, 0x42, 0x02]); //sends the header bytes along with the ID of video stream
       //socket.flush(); //ensures all data is sent
-    }
-    List<int> imageDataBytes = [];
-    if(videoSoc != null) {
-      videoSoc?.listen(
-              (Uint8List data) {
-            //print('Received chunk of ${data.length} bytes: ${data.take(16).toList()}');
-            imageDataBytes.addAll(data);
-            //loop through to find the start of the png then reassemble
-            while (true) {
-              int sigIndex = findStart(imageDataBytes);
-              if (sigIndex == -1) break;
-
-              //Look for PNG end marker
-              int endIndex = findEnd(imageDataBytes, sigIndex);
-              if (endIndex == -1) break; //not complete
-
-              //Extract full PNG
-              Uint8List pngBytes = Uint8List.fromList(
-                  imageDataBytes.sublist(sigIndex, endIndex));
-              print('Successfully found png in connect file');
-              videoKey.currentState?.onImageReceived(pngBytes);
-
-              //Remove consumed bytes
-              imageDataBytes.removeRange(0, endIndex + 8);
-            }
-          }
-      );
     }
   }
 
