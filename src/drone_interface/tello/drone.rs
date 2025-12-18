@@ -20,6 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use mio::event::Source;
 use zerocopy::IntoBytes;
 use crate::app_network::InfoPacket;
+use crate::video::video_queue::{FrameType, VideoQueue};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -59,8 +60,9 @@ pub struct TelloDrone
 	curr_video_src			: Arc<Mutex<Option<Token>>>,
 	curr_video_dst			: Arc<Mutex<Option<Token>>>,
 
-	curr_state				: Option<FlightData>
+	curr_state				: Option<FlightData>,
 
+	video_queue 			: VideoQueue,
 
 }
 
@@ -340,6 +342,7 @@ impl TelloDrone
 	#[allow(dead_code)]
 	pub(crate) fn new(poll: Arc<Mutex<Poll>>, connection_map: Arc<Mutex<HashMap<Token, Connection>>>, logger : Logger,
 					  curr_video_src : Arc<Mutex<Option<Token>>>, curr_video_dst : Arc<Mutex<Option<Token>>>, frame_time : Arc<Duration>,
+					  video_queue: VideoQueue,
 	) -> Result<Arc<Mutex<Self>>, Error> {
 		let mut command_sock = {
 			const COMMAND_PORT: u16 = 8889;
@@ -427,6 +430,7 @@ impl TelloDrone
 			curr_video_src,
 			curr_video_dst,
 			curr_state: None,
+			video_queue,
 		}
 		));
 
@@ -675,46 +679,7 @@ impl TelloDrone
 						image_buffer.extend_from_slice(&self.frame_buffer);
 
 
-						let mut decoder = openh264::decoder::Decoder::new()?;
-						let decoder_result = decoder.decode(&image_buffer);
-						match decoder_result
-						{
-							Ok(decoded_option) =>
-								{
-									/*
-									let decoded = decoded_option.unwrap();
-									let (w,h) = decoded.dimensions();
-									self.logger.info_from_string(format!("We successfully decoded frame {frame_number}, {w}x{h}"))?;
-									let mut file = File::create(format!("test_results/frame{frame_number}.rgb"))?;
-									decoded.write_rgb8(&mut file_buffer);
-									file.write_all(&file_buffer)?;*/
-
-									// Send the image to the client, if possible.
-									// TODO: I think this can be optimized for space if we initialize our image once, etc. etc.
-									let decoded = decoded_option.unwrap();
-									let (w,h) = decoded.dimensions();
-									let mut decoded_image = image::RgbImage::new(w as u32, h as u32);
-									decoded.write_rgb8(&mut decoded_image);
-									self.image = Some(decoded_image.into());
-
-									let now = SystemTime::now();
-									if now.duration_since(self.last_frame_sent_time)? >= *self.frame_time
-									{
-										match self.send_image(Png)
-										{
-											Err(Error::NoVideoSource) => { self.logger.info("Tello didn't consider itself a valid video source?")? }
-											Err(Error::NoVideoTarget) => { self.logger.info("No valid video destination.")? }
-											Ok(_) => { self.logger.info("Video sent")?; }
-											e => { self.logger.warn("Some error occurred while Tello was sending video...")?; e? }
-										}
-									}
-								}
-							Err(_) =>
-								{ 	//We actually don't really care about this error.
-									//self.logger.error_from_string(format!("Received malformed video frame {frame_number}"))?;
-									//File::create(format!("test_results/malformed{frame_number}"))?.write_all(&image_buffer)?
-								}
-						}
+						self.video_queue.transcode(Token(self.video_sock.local_addr()?.port() as usize), self.curr_video_src.lock()?.clone(), FrameType::TelloH264(), FrameType::Png(), image_buffer.into_boxed_slice())?;
 					}
 					self.vid_frame_number = frame_number;
 					self.frame_buffer.clear();

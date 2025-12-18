@@ -5,3 +5,4 @@ pub mod rtp;
 #[allow(dead_code)]
 mod nalu;
 pub mod video_queue;
+mod decode;
