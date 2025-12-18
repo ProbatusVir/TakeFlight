@@ -13,6 +13,7 @@ openh264 = "0.9.0"
 image = { version="0.25.8", features = ["png", "jpeg"] }
 rusqlite = { version="0.37.0", features = ["bundled", "chrono"]}
 concat-arrays = "0.1.2"
+mio_channel = "0.2.0"
 #opencv = { version="0.97.2"}
 
 # This section is just to make the code more expressive.
