@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart'; //For Uint8List
 import 'flight_screen.dart';
+import 'video_feed.dart';
 class ControlRC{
   Socket? controlSoc;
 
@@ -18,6 +20,33 @@ class ControlRC{
     }
     print('Sending movement packet...');
     controlSoc?.add(rcCon.packet);
+  }
+
+  void sendLanding(int landC){
+    if(controlSoc == null){
+      print('socket not ready');
+      return;
+    }
+    final landPac = [
+      0x01, //landing command
+      landC //Landing code
+    ];
+    print('Sending landing packet');
+    controlSoc?.add(landPac);
+  }
+
+  void sendTakeOff(){
+    if(controlSoc == null){
+      print('socket not ready');
+      return;
+    }
+    final takePac = [
+      0x00 //take off command
+          //reserved
+    ];
+
+    print('Sending Take off packet');
+    controlSoc?.add(takePac);
   }
 
   Future<void> connect(int handshake, int port) async{
@@ -106,7 +135,7 @@ class Info{
 class DroneVideo{
   Socket? videoSoc;
 
-  Future<void> connect(int port) async {
+  Future<void> connect(int port, GlobalKey<VideoFeedState> videoKey) async {
     try {
       videoSoc = await Socket.connect('127.0.0.1', port);
       //Prints are for debugging
@@ -121,10 +150,64 @@ class DroneVideo{
       videoSoc?.add([0x42, 0x42, 0x02]); //sends the header bytes along with the ID of video stream
       //socket.flush(); //ensures all data is sent
     }
+    List<int> imageDataBytes = [];
+    if(videoSoc != null) {
+      videoSoc?.listen(
+              (Uint8List data) {
+            //print('Received chunk of ${data.length} bytes: ${data.take(16).toList()}');
+            imageDataBytes.addAll(data);
+            //loop through to find the start of the png then reassemble
+            while (true) {
+              int sigIndex = findStart(imageDataBytes);
+              if (sigIndex == -1) break;
+
+              //Look for PNG end marker
+              int endIndex = findEnd(imageDataBytes, sigIndex);
+              if (endIndex == -1) break; //not complete
+
+              //Extract full PNG
+              Uint8List pngBytes = Uint8List.fromList(
+                  imageDataBytes.sublist(sigIndex, endIndex));
+              print('Successfully found png in connect file');
+              videoKey.currentState?.onImageReceived(pngBytes);
+
+              //Remove consumed bytes
+              imageDataBytes.removeRange(0, endIndex + 8);
+            }
+          }
+      );
+    }
   }
 
-  Future<void> getDroneImg(Uint8List bytes) async{
+  Future<void> getDroneImg(GlobalKey<VideoFeedState> videoKey) async{
     List<int> imageDataBytes = [];
+    if(videoSoc != null) {
+      videoSoc?.listen(
+              (Uint8List data) {
+            //print('Received chunk of ${data.length} bytes: ${data.take(16).toList()}');
+            imageDataBytes.addAll(data);
+            //loop through to find the start of the png then reassemble
+            while (true) {
+              int sigIndex = findStart(imageDataBytes);
+              if (sigIndex == -1) break;
+
+              //Look for PNG end marker
+              int endIndex = findEnd(imageDataBytes, sigIndex);
+              if (endIndex == -1) break; //not complete
+
+              //Extract full PNG
+              Uint8List pngBytes = Uint8List.fromList(
+                  imageDataBytes.sublist(sigIndex, endIndex));
+              print('Successfully found png in connect file');
+              videoKey.currentState?.onImageReceived(pngBytes);
+
+              //Remove consumed bytes
+              imageDataBytes.removeRange(0, endIndex + 8);
+            }
+          }
+      );
+    }
+    /*final completer = Completer<Uint8List?>();
     //receiving image data
     if(videoSoc != null){
       videoSoc?.listen(
@@ -141,23 +224,30 @@ class DroneVideo{
               if(endIndex == -1)break; //not complete
 
               //Extract full PNG
-              bytes = Uint8List.fromList(imageDataBytes.sublist(sigIndex, endIndex));
+              final pngBytes = Uint8List.fromList(imageDataBytes.sublist(sigIndex, endIndex));
               print('Successfully found png in connect file');
+
 
               //Remove consumed bytes
               imageDataBytes.removeRange(0, endIndex+8);
+              if(!completer.isCompleted){
+                completer.complete(pngBytes);
+              }
             }
           },
           onDone: (){
             print('Server disconnected');
             videoSoc?.destroy();
+            if (!completer.isCompleted) completer.complete(null);
           },
           onError: (error){
             print('Error on socket: $error');
             videoSoc?.destroy();
+            if (!completer.isCompleted) completer.complete(null);
           }
       );
     }
+    return completer.future;*/
   }
 
   int findStart(List<int> buf) {
