@@ -195,9 +195,6 @@ impl ServerInstance
 		const MAX_EVENTS : usize = 1024;
 		let mut event_buffer = Events::with_capacity(MAX_EVENTS);
 
-
-
-		Err(Error::Custom("Oh no, the main server logic crashed!!1!"))?;
 		loop
 		{
 			// Receive and handle events
