@@ -30,6 +30,7 @@ class RC{
 
 final rcCon = RC();
 final control = ControlRC();
+final vid = DroneVideo();
 
 bool isMobile(BuildContext context){
   bool mob = false;
@@ -45,15 +46,14 @@ bool isMobile(BuildContext context){
 }
 
 class FlightScreen extends StatefulWidget{
-  const FlightScreen({super.key, required this.videoKey, required this.port});
-  final GlobalKey<VideoFeedState> videoKey;
+  const FlightScreen({super.key,required this.port});
   final int port;
 
   @override
   State<FlightScreen> createState() => _FlightScreenState();
 }
 class _FlightScreenState extends State<FlightScreen>{
-
+  final GlobalKey<VideoFeedState> videoKey = GlobalKey<VideoFeedState>();
   /*static void rc(double lr, double ud, double fb, double rot) async{
     //TODO::Change to future async once server connection is there
     final rcController = RC();
@@ -75,6 +75,8 @@ class _FlightScreenState extends State<FlightScreen>{
 
   void startConnection() async{
     await control.connect(0x01, widget.port);
+    await vid.connect(widget.port, videoKey);
+    //await vid.getDroneImg(videoKey);
   }
 
   @override
@@ -89,7 +91,7 @@ class _FlightScreenState extends State<FlightScreen>{
   }
   @override
   Widget build(BuildContext context) {
-    return isMobile(context) ? MobileFlight(videoKey: widget.videoKey, port: widget.port,) : DeskFlight(videoKey: widget.videoKey, port: widget.port,);
+    return isMobile(context) ? MobileFlight(videoKey: videoKey, port: widget.port,) : DeskFlight(videoKey: videoKey, port: widget.port,);
   }
 }
 ///Mobile Design
@@ -125,7 +127,7 @@ class MobileFlight extends StatelessWidget{
           Align(
             alignment: Alignment.center,
             //TODO:: Need to fix weird visual bug of the feed being small then readjusting to correct size
-            child: VideoFeed(key: videoKey, port: port,),
+            child: VideoFeed(key: videoKey,port: port,),
           ),
           Align(
             alignment: Alignment.bottomCenter,
