@@ -14,7 +14,7 @@ dependencies = [
  "lebe",
  "local-ip-address",
  "mio",
- "mio_channel",
+ "mio-wakeq",
  "nokhwa",
  "num_enum",
  "openh264",
@@ -1196,10 +1196,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "mio_channel"
-version = "0.2.0"
+name = "mio-wakeq"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb1b1e4610c2e54ac340ef82b9c79982cea6b22c8b56035f205bbf50a4c86837"
+checksum = "f32171b040e074c2308aeaa750831c0e5774178f8a65695ee9fb80be4938ce5c"
 dependencies = [
  "mio",
 ]

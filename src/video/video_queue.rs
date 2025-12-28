@@ -1,9 +1,11 @@
+use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use image::codecs::png::PngEncoder;
 use image::{ExtendedColorType, ImageEncoder};
-use crate::Error;
-use mio::{Interest, Poll, Token};
+use crate::{Error, InternalSignal};
+use mio::{ Poll, Token};
+use mio_wakeq::{WakeQ, WakeQSender};
 use crate::logger::Logger;
 use crate::video::decode::{ raw_h264_to_rgb};
 
@@ -77,18 +79,16 @@ impl VideoQueue
 
 	/// Start the work thread
 	/// May incorporate the logger.
-	pub fn start_work_thread(poll : &Poll, curr_src : Arc<Mutex<Option<Token>>>, logger: Logger) -> Result<(Self, mio_channel::Receiver<(Token, Box<[u8]>)>, thread::JoinHandle<Result<(), Error>>), Error>
+	pub fn start_work_thread(poll : &Poll, curr_src : Arc<Mutex<Option<Token>>>, logger: Logger, internal_signaller : WakeQSender<InternalSignal>) -> Result<(Self, thread::JoinHandle<Result<(), Error>>), Error>
 	{
 		let (queue, queue_receiver) = Self::new();
-		let (sender_to_server, mut server_receiver) = mio_channel::channel::<(Token, Box<[u8]>)>();
-
-		poll.registry().register(&mut server_receiver, crate::VIDEO_QUEUE, Interest::READABLE)?;
+		//let mut server_receiver = WakeQ::new(poll, crate::INTERNAL_SIGNALLER)?;
 
 		let thread_handle = std::thread::Builder::new()
 			.name("Video".into())
-			.spawn(|| Self::work(queue_receiver, sender_to_server, curr_src, logger))?;
+			.spawn(|| Self::work(queue_receiver, internal_signaller, curr_src, logger))?;
 
-		Ok((queue, server_receiver, thread_handle))
+		Ok((queue, thread_handle))
 	}
 
 	/// A producer will send an image to the work queue
@@ -99,7 +99,7 @@ impl VideoQueue
 	/// The producers own A_{Sender}, and the server owns B_{Receiver}, the other two are used for IO with the queue.
 	/// This may seem like a complicated setup, but it's just a fat pointer being moved around, so minimal allocations are necessary.
 	//  The parameters reflect the flow of this method.
-	fn work(receiver: std::sync::mpsc::Receiver<VideoTaskFull>, sender : mio_channel::Sender<(Token, Box<[u8]>)>, curr_src : Arc<Mutex<Option<Token>>>, logger : Logger) -> Result<(), Error>
+	fn work(receiver: std::sync::mpsc::Receiver<VideoTaskFull>, sender : WakeQSender<InternalSignal>, curr_src : Arc<Mutex<Option<Token>>>, logger : Logger) -> Result<(), Error>
 	{
 		logger.info("Starting working queue!")?;
 
@@ -126,7 +126,7 @@ impl VideoQueue
 									let mut png_encoder = PngEncoder::new(&mut png_buffer);
 									let (width, height) = image.dimensions();
 									png_encoder.write_image(&*image, width, height, ExtendedColorType::Rgb8)?;
-									sender.send((incoming_message.origin, png_buffer.into()))
+									sender.send_event(InternalSignal::FromVideoQueue((incoming_message.origin, png_buffer.into())))
 										// FIXME: determine how we want to handle this.
 										.unwrap_or(()); // If it fails to send, that's not big deal, for now...
 								}
@@ -194,3 +194,4 @@ impl VideoTaskFull
 		}
 	}
 }
+

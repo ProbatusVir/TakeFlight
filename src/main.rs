@@ -15,7 +15,6 @@ mod database;
 
 #[cfg(test)]
 mod tests;
-
 use crate::app_network::{send_image, ConnectionState, InfoPacket, RoShamBo, VideoCode};
 use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
 use crate::drone_interface::Drone;
@@ -31,12 +30,15 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{ErrorKind, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
+use mio_wakeq::{WakeQ, WakeQSender};
 use takeflight_computer_vision as computer_vision;
 use video::video_queue::VideoQueue;
+use crate::video::video_queue::VideoTaskFull;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -52,11 +54,22 @@ pub(crate) enum Connection
 	Camera(), // FIXME: This needs fields.
 }
 
+#[derive(Debug)]
+#[repr(usize)]
+pub(crate) enum InternalSignal
+{
+	PingEveryone,
+	//ToVideoQueue(VideoTaskFull),		// I don't think this will be used.
+	FromVideoQueue((Token, Box<[u8]>)),	// The token will always be a "Video Source," no refactoring it out.
+}
+
+
 type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
 
-pub(crate) const LISTENER : Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
-pub(crate) const HEARTBEAT : Token = Token(1); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
-pub(crate) const VIDEO_QUEUE : Token = Token(2);
+pub(crate) const LISTENER			: Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
+const TOKEN_START: usize = u16::MAX as usize;
+pub(crate) const INTERNAL_SIGNALLER	: Token = Token(TOKEN_START + 1 ); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
+
 const LOG_DIR : &str = "logs/";
 const TIMEOUT : Duration = Duration::from_millis((1.5 * 1000.0) as u64);
 
@@ -77,7 +90,7 @@ struct ServerInstance
 	frame_time		: Arc<Duration>,
 	read_buffer		: [u8;1024],
 	curr_drone		: Option<Arc<Mutex<Connection>>>,
-	video_receiver	: mio_channel::Receiver<(Token, Box<[u8]>)>
+	internal_signal_receiver : Rc<WakeQ<InternalSignal>>
 }
 
 const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
@@ -130,13 +143,15 @@ fn main() -> Result<(), Error> {
 	//test
 	logger.info(&format!("Listening on all IPv4 interfaces. Network address: {}, port {}", local_ip()?, server_address.port()))?;
 
+	// Get the internal signaller set up
+	let internal_signal_receiver = WakeQ::new(&*poll.lock()?, INTERNAL_SIGNALLER)?;
 
 	// Start the video queue
 	let video_src = Arc::new(Mutex::new(None));
-	let (queue_sender, video_receiver, video_handle) = VideoQueue::start_work_thread(&*poll.lock()?, video_src.clone(), logger.clone())?;
+	let (queue_sender, video_handle) = VideoQueue::start_work_thread(&*poll.lock()?, video_src.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
 
 	// Start heartbeat
-	let heartbeat_handle = do_heartbeat(&poll, continue_heartbeat.clone(), logger.clone())?;
+	let heartbeat_handle = do_heartbeat(continue_heartbeat.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
 
 
 	// We will be implementing the TakeFlight server backend here. Since the process is spawned we can do our anything here
@@ -148,16 +163,16 @@ fn main() -> Result<(), Error> {
 		listener,
 		ownership_map,
 		poll,
-		logger 			: logger.clone(),
+		logger 						: logger.clone(),
 		video_src,
-		video_out		: Arc::new(Mutex::new(None)),
-		drone_control	: None,
-		info_token		: None,
-		ro_sham_bo		: RoShamBo::Rock,
-		frame_time		: Arc::new(FRAME_TIME),
-		read_buffer		: [0;1024],
-		curr_drone		: None,
-		video_receiver,
+		video_out					: Arc::new(Mutex::new(None)),
+		drone_control				: None,
+		info_token					: None,
+		ro_sham_bo					: RoShamBo::Rock,
+		frame_time					: Arc::new(FRAME_TIME),
+		read_buffer					: [0;1024],
+		curr_drone					: None,
+		internal_signal_receiver	: internal_signal_receiver.into(),
 	};
 
 	// test
@@ -232,168 +247,37 @@ impl ServerInstance
 			// TODO: If one drone socket disconnects, do we want to let the drone decide what to do?
 			if Event::is_read_closed(event)
 			{
-				let token = event.token();
-				let socket_wrapped = self.ownership_map.lock()?.remove(&token);
-				match socket_wrapped {
-					Some(mut socket) => {
-						match &mut socket {
-							Connection::TCP(stream) => { self.poll.lock()?.registry().deregister(stream)?; }
-							Connection::UDP(datagram) => {self.poll.lock()?.registry().deregister(datagram)?; }
-							Connection::ClientControl(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
-							Connection::VideoOut(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
-							Connection::ServerInfo(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
-							Connection::Drone(drone) => { todo!("We definitely want to let the drone decide what to do here. Take note that the ownership map is NOT locked right now. {:?}", drone) }
-							Connection::Camera() => { todo!("We still do not have support for cameras yet.") }
-						};
-
-						self.logger.info_from_string(format!("Disconnected {} socket: {}", socket.socket_type_name(), event.token().0))?;
-					}
-					None => { todo!("Somehow we received a 'read closed' event for a socket that isn't registered to the poll... This shouldn't be possible. Please try to reproduce this issue.") }
-				}
+				self.disconnect_client(&event);
 				continue
 			}
 
+
 			match event.token()
 			{
-				LISTENER => {
-					// Accept all incoming streams.
-					loop {
-						let incoming = self.listener.accept();
-						match incoming
-						{
-							Ok((mut stream, address)) => {
-								let token = Token(address.port() as usize);
-								self.poll.lock()?.registry().register(
-									&mut stream,
-									token.clone(),
-									Interest::READABLE)?;
-
-								self.logger.info_from_string(format!("Accepting TCP stream: {}:{}", address.ip(), address.port()))?;
-
-								self.ownership_map.lock()?.insert(
-									token,
-									Connection::TCP(stream),
-								);
-							}
-							Err(e) => {
-								if e.kind() == ErrorKind::WouldBlock {break}
-								else { return Err(e.into()) }
-							}
-						}
-					}
-				}
-				HEARTBEAT => {
-					// Send heartbeat to all eligible connections
-					let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
-					let mut delete_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
-					let ownership_map_clone = self.ownership_map.clone();
-					let mut ownership_map_lock = ownership_map_clone.lock()?;
-					for connection in ownership_map_lock.iter() {
-						// This seems like a patchy solution. This combats sending multiple pings per cycle.
-						match connection.1
-						{
-							// TODO: This is sorely in need of a refactor...
-							Connection::Drone(drone) => {
-								if contacted_drones.iter().find(|ptr| { Arc::ptr_eq(ptr, drone) }).is_some() {
-									continue
-								}
-								else {
-									contacted_drones.push(drone.clone())
-								}
-
-								let mut drone_lock = drone.lock()?;
-								if !drone_lock.connected()
-								{
-									let now = SystemTime::now();
-									if now.duration_since(drone_lock.time_created())? > TIMEOUT
-									{
-										self.logger.error("Failed to connect to drone!!!")?;
-										// CLARIFY: This should not be all 0's. This should be an actual MAC address.
-										let state_packet = InfoPacket::new_drone_connection_state(self.ro_sham_bo.post_increment(),
-																								  ConnectionState::FailedConnect,
-																								  [0, 0, 0, 0, 0, 0],
-										);
-
-										self.send_info(&state_packet, &ownership_map_lock)?;
-										delete_drones.push(drone.clone());
-									}
-									continue;
-								}
-
-								let ping_result = drone_lock.send_heartbeat();
-								match ping_result {
-									Ok(_)	=> { continue; }
-									Err(e)	=> {
-										match e {
-											Error::IOError(io_error) => {
-												if io_error.kind() == std::io::ErrorKind::WouldBlock {
-													continue;
-												}
-												else {
-													return Err(Error::Custom("IO error occurred while pinging a drone!"));
-												}
-											}
-											_ => { return Err(Error::Custom("Generic error occurred while pinging a drone!")); }
-										}
-									}
-								}
-							}
-							_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
-						}
-					}
-
-					delete_drones.dedup_by(|left, right| {Arc::ptr_eq(&left, right)});
-					for drone in delete_drones
+				LISTENER => { self.handle_listener_events() }
+				//HEARTBEAT => { self.handle_heartbeat_events() }
+				//VIDEO_QUEUE => { self.handle_video_queue_events() }
+				INTERNAL_SIGNALLER => {
+					for internal_signal in self.internal_signal_receiver.clone().iter_pending_events()
 					{
-						// CLARIFY: This should not be all 0's. This should be an actual MAC address.
-						let state_packet = InfoPacket::new_drone_connection_state(self.ro_sham_bo.post_increment(),
-																				  ConnectionState::Disconnected,
-																				  [0, 0, 0, 0, 0, 0],
-						);
-						self.send_info(&state_packet, &ownership_map_lock)?;
-						drone.lock()?.disconnect(&mut ownership_map_lock)?;
+						match internal_signal
+						{
+							InternalSignal::PingEveryone => { self.handle_heartbeat_events() }
+							InternalSignal::FromVideoQueue(event) => { self.handle_video_queue_events(event) }
+						}?
 					}
-				}
-				VIDEO_QUEUE => {
-					dbg!("Received message from video queue!");
-					let message = self.video_receiver.try_recv().unwrap();
-					// FIXME: This should not be hardcoded.
-					let ownership_lock = self.ownership_map.lock()?;
-					let token = match &*self.video_out.lock()? {
-						Some(token) => { token.clone() }
-						None => { continue }
-					};
 
-					let out_sock = match ownership_lock.get(&token)
-					{
-						Some(sock) => { sock }
-						None => { continue }
-					};
-
-					match out_sock {
-						Connection::VideoOut(_, stream) => {
-							let mut stream_lock = stream.lock()?;
-							// FIXME: this should not require additional allocations.
-							let mut out_buffer = Vec::new();
-							out_buffer.write(&(VideoCode::Png as u8).to_be_bytes())?;
-							out_buffer.write(&(message.1.len() as u16).to_be_bytes())?;
-							out_buffer.write(&(message.1))?;
-							stream_lock.write_all(&out_buffer)?;
-						}
-						_ => todo!("Why is our video destination NOT a VideoOut????")
-					}
+					Ok(())
 				}
-				token => {
-					self.handle_token(token)?
-				}
+				token => { self.handle_token(token) }
 				// It's assuring for the compiler to prove that this condition is unreachable.
 				#[allow(unreachable_patterns)]
 				_ => { todo!("What is this?") }
-			}
+			}?
 		}
 
 		Ok(())
-	}
+	} // fn drain_events
 
 	/// If Some(true), `continue`
 	/// If Some(false), keep executing.
@@ -517,11 +401,182 @@ impl ServerInstance
 							}
 						}
 					}
-				}
+				} // match ownership_map.get(token)
 			} // Some(token)
+		} // match &self.info_token
+	} // fn send_info
+
+
+	fn disconnect_client(&mut self, event : &Event) -> Result<(), Error>
+	{
+		let token = event.token();
+		let socket_wrapped = self.ownership_map.lock()?.remove(&token);
+		match socket_wrapped {
+			Some(mut socket) => {
+				match &mut socket {
+					Connection::TCP(stream) => { self.poll.lock()?.registry().deregister(stream)?; }
+					Connection::UDP(datagram) => {self.poll.lock()?.registry().deregister(datagram)?; }
+					Connection::ClientControl(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+					Connection::VideoOut(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+					Connection::ServerInfo(_, stream) => { self.poll.lock()?.registry().deregister(&mut *stream.lock()?)?; }
+					Connection::Drone(drone) => { todo!("We definitely want to let the drone decide what to do here. Take note that the ownership map is NOT locked right now. {:?}", drone) }
+					Connection::Camera() => { todo!("We still do not have support for cameras yet.") }
+				};
+
+				self.logger.info_from_string(format!("Disconnected {} socket: {}", socket.socket_type_name(), event.token().0))?;
+			}
+			None => { todo!("Somehow we received a 'read closed' event for a socket that isn't registered to the poll... This shouldn't be possible. Please try to reproduce this issue.") }
 		}
-	}
-}
+
+		Ok(())
+	} // fn disconnect_client
+
+	fn handle_listener_events(&mut self) -> Result<(), Error>
+	{
+		// Accept all incoming streams.
+		loop {
+			let incoming = self.listener.accept();
+			match incoming
+			{
+				Ok((mut stream, address)) => {
+					let token = Token(address.port() as usize);
+					self.poll.lock()?.registry().register(
+						&mut stream,
+						token.clone(),
+						Interest::READABLE)?;
+
+					self.logger.info_from_string(format!("Accepting TCP stream: {}:{}", address.ip(), address.port()))?;
+
+					self.ownership_map.lock()?.insert(
+						token,
+						Connection::TCP(stream),
+					);
+				}
+				Err(e) => {
+					if e.kind() == ErrorKind::WouldBlock { break Ok(()) }
+					else { return Err(e.into()) }
+				}
+			}
+		}
+	} // fn handle_listener_events
+
+	fn handle_heartbeat_events(&mut self) -> Result<(), Error>
+	{
+		// Send heartbeat to all eligible connections
+		let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
+		let mut delete_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
+		let ownership_map_clone = self.ownership_map.clone();
+		let mut ownership_map_lock = ownership_map_clone.lock()?;
+		for connection in ownership_map_lock.iter() {
+			// This seems like a patchy solution. This combats sending multiple pings per cycle.
+			match connection.1
+			{
+				// TODO: This is sorely in need of a refactor...
+				Connection::Drone(drone) => {
+					if contacted_drones.iter().find(|ptr| { Arc::ptr_eq(ptr, drone) }).is_some() {
+						continue
+					}
+					else {
+						contacted_drones.push(drone.clone())
+					}
+
+					let mut drone_lock = drone.lock()?;
+					if !drone_lock.connected()
+					{
+						let now = SystemTime::now();
+						if now.duration_since(drone_lock.time_created())? > TIMEOUT
+						{
+							self.logger.error("Failed to connect to drone!!!")?;
+							// CLARIFY: This should not be all 0's. This should be an actual MAC address.
+							let state_packet = InfoPacket::new_drone_connection_state(self.ro_sham_bo.post_increment(),
+																					  ConnectionState::FailedConnect,
+																					  [0, 0, 0, 0, 0, 0],
+							);
+
+							self.send_info(&state_packet, &ownership_map_lock)?;
+							delete_drones.push(drone.clone());
+						}
+						continue;
+					}
+
+					let ping_result = drone_lock.send_heartbeat();
+					match ping_result {
+						Ok(_)	=> { continue; }
+						Err(e)	=> {
+							match e {
+								Error::IOError(io_error) => {
+									if io_error.kind() == std::io::ErrorKind::WouldBlock {
+										continue;
+									}
+									else {
+										return Err(Error::Custom("IO error occurred while pinging a drone!"));
+									}
+								}
+								_ => { return Err(Error::Custom("Generic error occurred while pinging a drone!")); }
+							}
+						}
+					}
+				}
+				_ => { /* noop. TCP automatically sends pings, UDP doesn't have enough information to keep alive. */ }
+			}
+		}
+
+		delete_drones.dedup_by(|left, right| {Arc::ptr_eq(&left, right)});
+		for drone in delete_drones
+		{
+			// CLARIFY: This should not be all 0's. This should be an actual MAC address.
+			let state_packet = InfoPacket::new_drone_connection_state(self.ro_sham_bo.post_increment(),
+																	  ConnectionState::Disconnected,
+																	  [0, 0, 0, 0, 0, 0],
+			);
+			self.send_info(&state_packet, &ownership_map_lock)?;
+			drone.lock()?.disconnect(&mut ownership_map_lock)?;
+		}
+
+		Ok(())
+	} // fn handle_heartbeat_events
+
+	/// This function may have no effect if it receives an event that is no longer relevant.
+	/// Such cases may happen when switching video sources.
+	fn handle_video_queue_events(&mut self, video_event : (Token, Box<[u8]>)) -> Result<(), Error>
+	{
+		let internal_signal = self.internal_signal_receiver.iter_pending_events().nth(0).unwrap();
+		let message = {
+			if let InternalSignal::FromVideoQueue(message) = internal_signal { message }
+			else { return Err(Error::Custom("Somehow a non-video_queue event ended up here...")) } // FIXME: I'm not sure that this is right...
+		};
+		todo!("Erm, haven't gotten that far yet...");
+		// FIXME: This should not be hardcoded.
+		let ownership_lock = self.ownership_map.lock()?;
+		let token = match &*self.video_out.lock()? {
+			Some(token) => { token.clone() }
+			None => { return Ok(()) }
+		};
+
+		let out_sock = match ownership_lock.get(&token)
+		{
+			Some(sock) => { sock }
+			None => { return Ok(()) }
+		};
+
+		match out_sock {
+			Connection::VideoOut(_, stream) => {
+				let mut stream_lock = stream.lock()?;
+				// FIXME: this should not require additional allocations.
+				let mut out_buffer = Vec::new();
+				out_buffer.write(&(VideoCode::Png as u8).to_be_bytes())?;
+				out_buffer.write(&(message.1.len() as u16).to_be_bytes())?;
+				out_buffer.write(&(message.1))?;
+				stream_lock.write_all(&out_buffer)?;
+			}
+			_ => todo!("Why is our video destination NOT a VideoOut????")
+		}
+
+		Ok(())
+	} // fn handle_video_queue_events
+
+
+} // impl ServerInstance
 
 
 
@@ -590,23 +645,22 @@ fn try_join<T>(join_handle: JoinHandle<T>, predicate : &mut Arc<Mutex<bool>>) ->
 
 
 // FIXME, make this safer???
-fn do_heartbeat(poll : &Arc<Mutex<Poll>>, continue_heartbeat : Arc<Mutex<bool>>, logger : Logger) -> Result<JoinHandle<()>, Error>
+fn do_heartbeat(continue_heartbeat : Arc<Mutex<bool>>, logger : Logger, sender : WakeQSender<InternalSignal>) -> Result<JoinHandle<()>, Error>
 {
-	let heartbeat = Waker::new(poll.lock().unwrap().registry(), HEARTBEAT)?;
 	Ok(thread::Builder::new()
 		.name("Heart".into())
-		.spawn(|| heartbeat_entrypoint(heartbeat, continue_heartbeat, logger))?)
+		.spawn(|| heartbeat_entrypoint(sender, continue_heartbeat, logger).unwrap())?)
 }
 
-fn heartbeat_entrypoint(heartbeat : Waker, continue_heartbeat : Arc<Mutex<bool>>, logger : Logger)
+fn heartbeat_entrypoint(sender : WakeQSender<InternalSignal>, continue_heartbeat : Arc<Mutex<bool>>, logger : Logger) -> Result<(), Error>
 {
 	while *continue_heartbeat.lock().unwrap()
 	{
 		thread::sleep(crate::HEARTBEAT_TIME);
-		heartbeat.wake().unwrap_or(()); // No shot this fails, but if it does, we don't care anyway.
+		sender.send_event(InternalSignal::PingEveryone)?; // No shot this fails, but if it does, we don't care anyway.
 	}
 
-	logger.warn("Shutting down!").unwrap();
+	logger.warn("Shutting down!")
 }
 
 
