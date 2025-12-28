@@ -16,6 +16,7 @@ use std::time::Duration;
 use lebe::Endian;
 use zerocopy::IntoBytes;
 use crate::drone_interface::Drone;
+use crate::Result;
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]
@@ -108,7 +109,7 @@ pub enum LandCode
 pub fn handle_connection(mut stream : TcpStream,
 						 server		: &mut ServerInstance,
 						 ownership_map : &mut HashMap<Token, Connection>
-) -> Result<(), Error>
+) -> Result<()>
 {
 	// : &mut HashMap<Token, Connection>
 	// Arc<Mutex<Option<Token>>>
@@ -168,7 +169,7 @@ pub fn handle_connection(mut stream : TcpStream,
 	Ok(())
 }
 
-fn send_image_packet_tcp(out : &mut TcpStream, image_type : VideoCode, image_buffer : &Vec<u8>) -> Result<(), Error>
+fn send_image_packet_tcp(out : &mut TcpStream, image_type : VideoCode, image_buffer : &Vec<u8>) -> Result<()>
 {
 	out.write_all(&(image_type			as u8).to_be_bytes())?; // While this does look ugly, I do like that we have to_be_bytes here. While I don't expect this to ever change, it feels good to just enforce this pattern.
 	out.write_all(&(image_buffer.len()	as u16).to_be_bytes())?;
@@ -183,7 +184,7 @@ pub(crate) fn send_image(
 	out				: &mut Connection,
 	image			: &DynamicImage,
 	image_type		: VideoCode,
-) -> Result<(), Error>
+) -> Result<()>
 {
 	let mut image_buffer = Vec::new();
 	// Write encoded image data to a buffer. This scoped to avoid mutable and immutable borrows occurring at once.
@@ -219,7 +220,7 @@ pub(crate) fn send_image(
 ///
 /// The first tuple item is src, the second is out.
 #[inline] // doing a borrow of an arc is really stupid, so I hope this gets inlined.
-pub(crate) fn _validate_tokens_exist(src : &Option<Token>, out : &Option<Token>) -> Result<(Token, Token), Error>
+pub(crate) fn _validate_tokens_exist(src : &Option<Token>, out : &Option<Token>) -> Result<(Token, Token)>
 {
 	let video_out_token = out.as_ref().ok_or(Error::NoVideoTarget)?.clone();
 	let video_src_token = src.as_ref().ok_or(Error::NoVideoSource)?.clone();
@@ -231,7 +232,7 @@ pub(crate) fn handle_info_activity(
 	origin	: Token,
 	server	: &mut ServerInstance,
 	ownership_map : &mut HashMap<Token, Connection>,
-) -> Result<(), Error>
+) -> Result<()>
 {
 	if server.info_token.is_none() { todo!("The server did not have an info socket, yet still received activity!") }
 
@@ -348,7 +349,7 @@ pub(crate) struct DroneStateJSON
 impl InfoPacket
 {
 	/// This does assume that the stream is big endian. Git gud if it's not???
-	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self>
 	{
 		let id : InfoID = u8::read_from_big_endian(stream)?.into(); // again, I know this is redundant for a u8, but whatevs, it's a noop.
 		let play : RoShamBo = u8::read_from_big_endian(stream)?.into();
@@ -363,7 +364,7 @@ impl InfoPacket
 		})
 	}
 
-	pub fn write<W : Write>(&self, stream : &mut W) -> Result<(), Error>
+	pub fn write<W : Write>(&self, stream : &mut W) -> Result<()>
 	{
 		stream.write_all((self.id.to_owned() as u8).as_bytes())?;
 		stream.write_all((self.play.to_owned() as u8).as_bytes())?;
@@ -373,7 +374,7 @@ impl InfoPacket
 		Ok(())
 	}
 
-	pub fn new_ssid(origin_play : RoShamBo, _server : &ServerInstance) -> Result<Self, Error>
+	pub fn new_ssid(origin_play : RoShamBo, _server : &ServerInstance) -> Result<Self>
 	{
 		let list_of_ssids = crate::app_network::SSIDs { ssids : vec![String::from_str("Hello")?, String::from_str("world")?, String::from_str("!")?, ] };
 		let json = serde_json::to_vec(&list_of_ssids)?;
@@ -400,7 +401,7 @@ impl InfoPacket
 
 	/// This may need to be refactored.
 	/// This is only sent as a response to the client. Not really sent unsolicited.
-	pub fn new_drone_state_dump(origin_play : RoShamBo, mac_address : [u8;6], json : Option<&DroneStateJSON>) -> Result<Self, Error>
+	pub fn new_drone_state_dump(origin_play : RoShamBo, mac_address : [u8;6], json : Option<&DroneStateJSON>) -> Result<Self>
 	{
 		let mut payload = Vec::new();
 		payload.extend_from_slice(&mac_address);
@@ -434,7 +435,7 @@ impl RoShamBo
 	}
 }
 
-pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
+pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<()>
 {
 	// FIXME: For the drone stuff, we're using the current drone, but that's not OK.
 	match packet.id
@@ -483,7 +484,7 @@ pub(crate) fn handle_control_activity (
 	origin	: Token,
 	server: &mut ServerInstance,
 	ownership_map : &mut HashMap<Token, Connection>
-) -> Result<(), Error>
+) -> Result<()>
 {
 	let peer_port_number = origin.0;
 	match server.drone_control
@@ -547,7 +548,7 @@ pub(crate) fn handle_control_activity (
 	Ok(())
 }
 
-pub(self) fn handle_control_packet(packet : &CommandPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<(), Error>
+pub(self) fn handle_control_packet(packet : &CommandPacket, origin : &mut TcpStream, server : &mut ServerInstance) -> Result<()>
 {
 	//TODO: make sure that the right socket is making executive calls here.
 
@@ -580,12 +581,12 @@ pub(self) fn handle_control_packet(packet : &CommandPacket, origin : &mut TcpStr
 
 trait Command
 {
-	fn issue(&self, drone : &mut dyn Drone) -> Result<(), Error>;
+	fn issue(&self, drone : &mut dyn Drone) -> Result<()>;
 }
 
 impl CommandPacket
 {
-	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self>
 	{
 		// Again, the BE is unnecessary, but it's also a noop, so I don't care.
 		let command_code: CommandCode = u8::read_from_big_endian(stream)?.into();
@@ -610,7 +611,7 @@ impl CommandPacket
 impl TakeoffPacket
 {
 	/// This assumes that the COMMAND_CODE has already been consumed.
-	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self>
 	{
 		let _reserved = u8::read_from_big_endian(stream)?;
 		Ok(Self{})
@@ -621,7 +622,7 @@ impl TakeoffPacket
 impl LandPacket
 {
 	/// This assumes that the COMMAND_CODE has already been consumed.
-	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self>
 	{
 		let land_code : LandCode = u8::read_from_big_endian(stream)?.into();
 		Ok(Self {
@@ -633,7 +634,7 @@ impl LandPacket
 impl RcPacket
 {
 	/// This assumes that the COMMAND_CODE has already been consumed.
-	pub fn read<R : Read>(stream : &mut R) -> Result<Self, Error>
+	pub fn read<R : Read>(stream : &mut R) -> Result<Self>
 	{
 		let forward = i8::read_from_big_endian(stream)?.into();
 		let right = i8::read_from_big_endian(stream)?.into();
@@ -654,7 +655,7 @@ impl RcPacket
 
 impl Command for CommandPacket
 {
-	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+	fn issue(&self, drone: &mut dyn Drone) -> Result<()> {
 		match self {
 			CommandPacket::Takeoff(takeoff) => { takeoff.issue(drone) }
 			CommandPacket::Land(land) => { land.issue(drone) }
@@ -665,14 +666,14 @@ impl Command for CommandPacket
 
 impl Command for TakeoffPacket
 {
-	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+	fn issue(&self, drone: &mut dyn Drone) -> Result<()> {
 		drone.takeoff()
 	}
 }
 
 impl Command for LandPacket
 {
-	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+	fn issue(&self, drone: &mut dyn Drone) -> Result<()> {
 		match self.land_code
 		{
 			LandCode::Graceful => { drone.graceful_land() }
@@ -685,7 +686,7 @@ impl Command for LandPacket
 }
 impl Command for RcPacket
 {
-	fn issue(&self, drone: &mut dyn Drone) -> Result<(), Error> {
+	fn issue(&self, drone: &mut dyn Drone) -> Result<()> {
 		drone.rc(self.right as i64, self.up as i64, self.forward as i64, self.rot as f32)
 	}
 }

@@ -37,7 +37,7 @@ use std::time::{Duration, SystemTime};
 use mio_wakeq::{WakeQ, WakeQSender};
 use takeflight_computer_vision as computer_vision;
 use video::video_queue::VideoQueue;
-use crate::video::video_queue::VideoTaskFull;
+use crate::error::Result;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -95,7 +95,7 @@ struct ServerInstance
 const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 //Main fn that executes the application within a localhost http with the return signature Result<(), Error>
 //Allowing for proper error handling in case the application can not be opened
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
 
 	let mut continue_logger = Arc::new(Mutex::new(true));
@@ -205,7 +205,7 @@ fn main() -> Result<(), Error> {
 
 impl ServerInstance
 {
-	fn multiplex(&mut self) -> Result<(), Error>
+	fn multiplex(&mut self) -> Result<()>
 	{
 		// While I don't like the idea of this being a local variable,
 		// it only makes sense given that event_buffer is used in precisely
@@ -238,7 +238,7 @@ impl ServerInstance
 		}
 	}
 
-	fn drain_events(&mut self, event_buffer : &mut Events) -> Result<(), Error>
+	fn drain_events(&mut self, event_buffer : &mut Events) -> Result<()>
 	{
 
 		for event in event_buffer.iter()
@@ -280,7 +280,7 @@ impl ServerInstance
 
 	/// If Some(true), `continue`
 	/// If Some(false), keep executing.
-	fn handle_token(&mut self, token : Token) -> Result<(), Error>
+	fn handle_token(&mut self, token : Token) -> Result<()>
 	{
 
 		// This is gore.
@@ -366,7 +366,7 @@ impl ServerInstance
 
 	/// Doesn't throw error if there is no info socket. Instead, it's a noop.
 	/// FIXME: I want to do a little less passing in of ownership maps...
-	fn send_info(&mut self, packet : &InfoPacket, ownership_map: &HashMap<Token, Connection>) -> Result<(), Error>
+	fn send_info(&mut self, packet : &InfoPacket, ownership_map: &HashMap<Token, Connection>) -> Result<()>
 	{
 		match &self.info_token
 		{
@@ -406,7 +406,7 @@ impl ServerInstance
 	} // fn send_info
 
 
-	fn disconnect_client(&mut self, event : &Event) -> Result<(), Error>
+	fn disconnect_client(&mut self, event : &Event) -> Result<()>
 	{
 		let token = event.token();
 		let socket_wrapped = self.ownership_map.lock()?.remove(&token);
@@ -430,7 +430,7 @@ impl ServerInstance
 		Ok(())
 	} // fn disconnect_client
 
-	fn handle_listener_events(&mut self) -> Result<(), Error>
+	fn handle_listener_events(&mut self) -> Result<()>
 	{
 		// Accept all incoming streams.
 		loop {
@@ -459,7 +459,7 @@ impl ServerInstance
 		}
 	} // fn handle_listener_events
 
-	fn handle_heartbeat_events(&mut self) -> Result<(), Error>
+	fn handle_heartbeat_events(&mut self) -> Result<()>
 	{
 		// Send heartbeat to all eligible connections
 		let mut contacted_drones : Vec<Arc<Mutex<dyn Drone + 'static>>> = Vec::new();
@@ -537,7 +537,7 @@ impl ServerInstance
 
 	/// This function may have no effect if it receives an event that is no longer relevant.
 	/// Such cases may happen when switching video sources.
-	fn handle_video_queue_events(&mut self, video_event : (Token, Box<[u8]>)) -> Result<(), Error>
+	fn handle_video_queue_events(&mut self, video_event : (Token, Box<[u8]>)) -> Result<()>
 	{
 		let internal_signal = self.internal_signal_receiver.iter_pending_events().nth(0).unwrap();
 		let message = {
@@ -613,7 +613,7 @@ impl TryInto<TcpStream> for Connection
 {
 	type Error = crate::Error;
 
-	fn try_into(self) -> Result<TcpStream, Self::Error> {
+	fn try_into(self) -> Result<TcpStream> {
 		match self {
 			Connection::TCP(stream) => Ok(stream),
 			_ => Err(Error::Custom("Not a TCP stream buddy...")),
@@ -622,7 +622,7 @@ impl TryInto<TcpStream> for Connection
 }
 
 
-fn try_join<T>(join_handle: JoinHandle<T>, predicate : &mut Arc<Mutex<bool>>) -> Result<(), Error>
+fn try_join<T>(join_handle: JoinHandle<T>, predicate : &mut Arc<Mutex<bool>>) -> Result<()>
 {
 	let thread_name = join_handle.thread().name().unwrap_or_default().to_string();
 	match predicate.lock()
@@ -644,14 +644,14 @@ fn try_join<T>(join_handle: JoinHandle<T>, predicate : &mut Arc<Mutex<bool>>) ->
 
 
 // FIXME, make this safer???
-fn do_heartbeat(continue_heartbeat : Arc<Mutex<bool>>, logger : Logger, sender : WakeQSender<InternalSignal>) -> Result<JoinHandle<()>, Error>
+fn do_heartbeat(continue_heartbeat : Arc<Mutex<bool>>, logger : Logger, sender : WakeQSender<InternalSignal>) -> Result<JoinHandle<()>>
 {
 	Ok(thread::Builder::new()
 		.name("Heart".into())
 		.spawn(|| heartbeat_entrypoint(sender, continue_heartbeat, logger).unwrap())?)
 }
 
-fn heartbeat_entrypoint(sender : WakeQSender<InternalSignal>, continue_heartbeat : Arc<Mutex<bool>>, logger : Logger) -> Result<(), Error>
+fn heartbeat_entrypoint(sender : WakeQSender<InternalSignal>, continue_heartbeat : Arc<Mutex<bool>>, logger : Logger) -> Result<()>
 {
 	while *continue_heartbeat.lock().unwrap()
 	{
@@ -664,7 +664,7 @@ fn heartbeat_entrypoint(sender : WakeQSender<InternalSignal>, continue_heartbeat
 
 
 // FIXME: make this safer???
-fn shutdown_video<T>(join_handle: JoinHandle<T>, queue_sender : VideoQueue) -> Result<(), Error>
+fn shutdown_video<T>(join_handle: JoinHandle<T>, queue_sender : VideoQueue) -> Result<()>
 {
 	let thread_name = join_handle.thread().name().unwrap_or_default().to_string();
 	match queue_sender.shutdown()
