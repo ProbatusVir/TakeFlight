@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, };
 use std::thread;
+use crate::Result;
 
 pub(crate) enum LoggingLevel
 {
@@ -39,52 +40,52 @@ impl Logger
 		(Self { sender }, receiver)
 	}
 
-	pub fn info(&self, msg : &str) -> Result<(), Error>
+	pub fn info(&self, msg : &str) -> Result<()>
 	{
 		self.send_log_message(LoggingLevel::Info, msg).map_err(|_| Error::Custom("Unable send INFO message to logger!"))
 	}
 
-	pub fn warn(&self, msg : &str) -> Result<(), Error>
+	pub fn warn(&self, msg : &str) -> Result<()>
 	{
 		self.send_log_message(LoggingLevel::Warning, msg).map_err(|_| Error::Custom("Unable send WARN message to logger!"))
 	}
 
 	// It makes sense that, for the most, part, we want more descriptive error messages.
 	#[allow(dead_code)]
-	pub fn error(&self, msg : &str) -> Result<(), Error>
+	pub fn error(&self, msg : &str) -> Result<()>
 	{
 		self.send_log_message(LoggingLevel::Error, msg).map_err(|_| Error::Custom("Unable send ERROR message to logger!"))
 	}
 
-	pub fn error_from_string(&self, msg : String) -> Result<(), Error>
+	pub fn error_from_string(&self, msg : String) -> Result<()>
 	{
 		self.send_log_message_string(LoggingLevel::Error, msg)
 	}
 
-	pub fn warn_from_string(&self, msg : String) -> Result<(), Error>
+	pub fn warn_from_string(&self, msg : String) -> Result<()>
 	{
 		self.send_log_message_string(LoggingLevel::Warning, msg)
 	}
 
-	pub fn info_from_string(&self, msg : String) -> Result<(), Error>
+	pub fn info_from_string(&self, msg : String) -> Result<()>
 	{
 		self.send_log_message_string(LoggingLevel::Info, msg)
 	}
 
-	fn send_log_message(&self, logging_level: LoggingLevel, msg : &str) -> Result<(), Error>
+	fn send_log_message(&self, logging_level: LoggingLevel, msg : &str) -> Result<()>
 	{
 		let msg = String::from_str(msg)?;
 		self.send_log_message_string(logging_level, msg)
 	}
 
-	fn send_log_message_string(&self, logging_level: LoggingLevel, msg : String) -> Result<(), Error>
+	fn send_log_message_string(&self, logging_level: LoggingLevel, msg : String) -> Result<()>
 	{
 		self.sender.send(LogMessage::new(logging_level, msg)).map_err(|_| Error::Custom("Failed to send message to logger!"))
 	}
 }
 
 /// I would love to make this return Result<!, Error> once it becomes stable.
-pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>, continue_logger : Arc<Mutex<bool>>) -> Result<(), Error>
+pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>, continue_logger : Arc<Mutex<bool>>) -> Result<()>
 {
 	while *continue_logger.lock()? {
 		// Receive our message, but make sure that we actually have one.
@@ -106,7 +107,7 @@ pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<Fi
 	Ok(())
 }
 
-fn write_message_out(message : LogMessage, log_file : &Arc<Mutex<Option<File>>>) -> Result<(), Error>
+fn write_message_out(message : LogMessage, log_file : &Arc<Mutex<Option<File>>>) -> Result<()>
 {
 	match message.logging_level {
 		LoggingLevel::Info		=> {  println!("{message}")}
