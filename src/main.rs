@@ -14,16 +14,18 @@ mod database;
 
 #[cfg(test)]
 mod tests;
-use crate::app_network::{send_image, ConnectionState, InfoPacket, RoShamBo, VideoCode};
 use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
+use crate::app_network::{ConnectionState, InfoPacket, RoShamBo, VideoCode};
 use crate::drone_interface::Drone;
+use crate::error::Result;
 use crate::logger::{do_logging, Logger};
 use error::Error;
 use local_ip_address::local_ip;
 use mio;
 use mio::event::Event;
 use mio::net::{TcpListener, TcpStream, UdpSocket};
-use mio::{Events, Interest, Poll, Token, Waker};
+use mio::{Events, Interest, Poll, Token};
+use mio_wakeq::{WakeQ, WakeQSender};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
@@ -34,10 +36,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
-use mio_wakeq::{WakeQ, WakeQSender};
 use takeflight_computer_vision as computer_vision;
 use video::video_queue::VideoQueue;
-use crate::error::Result;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -147,7 +147,7 @@ fn main() -> Result<()> {
 
 	// Start the video queue
 	let video_src = Arc::new(Mutex::new(None));
-	let (queue_sender, video_handle) = VideoQueue::start_work_thread(&*poll.lock()?, video_src.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
+	let (queue_sender, video_handle) = VideoQueue::start_work_thread(video_src.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
 
 	// Start heartbeat
 	let heartbeat_handle = do_heartbeat(continue_heartbeat.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
@@ -246,7 +246,7 @@ impl ServerInstance
 			// TODO: If one drone socket disconnects, do we want to let the drone decide what to do?
 			if Event::is_read_closed(event)
 			{
-				self.disconnect_client(&event);
+				self.disconnect_client(&event)?;
 				continue
 			}
 
@@ -539,12 +539,6 @@ impl ServerInstance
 	/// Such cases may happen when switching video sources.
 	fn handle_video_queue_events(&mut self, video_event : (Token, Box<[u8]>)) -> Result<()>
 	{
-		let internal_signal = self.internal_signal_receiver.iter_pending_events().nth(0).unwrap();
-		let message = {
-			if let InternalSignal::FromVideoQueue(message) = internal_signal { message }
-			else { return Err(Error::Custom("Somehow a non-video_queue event ended up here...")) } // FIXME: I'm not sure that this is right...
-		};
-		todo!("Erm, haven't gotten that far yet...");
 		// FIXME: This should not be hardcoded.
 		let ownership_lock = self.ownership_map.lock()?;
 		let token = match &*self.video_out.lock()? {
@@ -564,8 +558,8 @@ impl ServerInstance
 				// FIXME: this should not require additional allocations.
 				let mut out_buffer = Vec::new();
 				out_buffer.write(&(VideoCode::Png as u8).to_be_bytes())?;
-				out_buffer.write(&(message.1.len() as u16).to_be_bytes())?;
-				out_buffer.write(&(message.1))?;
+				out_buffer.write(&(video_event.1.len() as u16).to_be_bytes())?;
+				out_buffer.write(&(video_event.1))?;
 				stream_lock.write_all(&out_buffer)?;
 			}
 			_ => todo!("Why is our video destination NOT a VideoOut????")
@@ -674,7 +668,7 @@ fn shutdown_video<T>(join_handle: JoinHandle<T>, queue_sender : VideoQueue) -> R
 	}
 	match join_handle.join() {
 		Ok(_) => { println!("Successfully closed thread \"{}\"!", thread_name) }
-		Err(e) => { println!("There may have been an error closing thread \"{}\", or the thread already closed.", thread_name)}
+		Err(_e) => { println!("There may have been an error closing thread \"{}\", or the thread already closed.", thread_name)}
 	}
 
 	Ok(())

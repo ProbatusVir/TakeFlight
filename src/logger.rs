@@ -1,13 +1,13 @@
-use std::fmt::{Display, Formatter};
 use crate::error::Error;
+use crate::Result;
 use chrono::{Local, Timelike};
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, };
 use std::thread;
-use crate::Result;
 
 pub(crate) enum LoggingLevel
 {

@@ -1,28 +1,33 @@
-use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use crate::logger::Logger;
+use crate::video::decode::raw_h264_to_rgb;
+use crate::{Error, InternalSignal};
 use image::codecs::png::PngEncoder;
 use image::{ExtendedColorType, ImageEncoder};
-use crate::{Error, InternalSignal};
-use mio::{ Poll, Token};
-use mio_wakeq::{WakeQ, WakeQSender};
-use crate::logger::Logger;
-use crate::video::decode::{ raw_h264_to_rgb};
+use mio::{ Token };
+use mio_wakeq::WakeQSender;
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameType
 {
-	H264(),
 	TelloH264(),
 	Png(),
+
+	#[allow(dead_code)]
+	H264(),
 }
 
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum VideoTask
 {
+	#[allow(dead_code)]
 	/// Should take an RGB image.
 	Encode(FrameType),
+	#[allow(dead_code)]
 	/// Should produce an RGB image.
 	Decode(FrameType),
 	/// From(FrameType) -> To(FrameType)
@@ -57,11 +62,13 @@ impl VideoQueue
 		(Self { sender }, receiver)
 	}
 
+	#[allow(dead_code)]
 	pub fn encode(&self, origin : Token, curr_src : Option<Token>, frame_type : FrameType, image_data : Box<[u8]>) -> Result<(), Error>
 	{
 		self.send_to_queue(origin, curr_src, image_data, VideoTask::Encode(frame_type))
 	}
 
+	#[allow(dead_code)]
 	pub fn decode(&self, origin : Token, curr_src : Option<Token>, frame_type : FrameType, image_data : Box<[u8]>) -> Result<(), Error>
 	{
 		self.send_to_queue(origin, curr_src, image_data, VideoTask::Decode(frame_type))
@@ -79,10 +86,9 @@ impl VideoQueue
 
 	/// Start the work thread
 	/// May incorporate the logger.
-	pub fn start_work_thread(poll : &Poll, curr_src : Arc<Mutex<Option<Token>>>, logger: Logger, internal_signaller : WakeQSender<InternalSignal>) -> Result<(Self, thread::JoinHandle<Result<(), Error>>), Error>
+	pub fn start_work_thread(curr_src : Arc<Mutex<Option<Token>>>, logger: Logger, internal_signaller : WakeQSender<InternalSignal>) -> Result<(Self, thread::JoinHandle<Result<(), Error>>), Error>
 	{
 		let (queue, queue_receiver) = Self::new();
-		//let mut server_receiver = WakeQ::new(poll, crate::INTERNAL_SIGNALLER)?;
 
 		let thread_handle = std::thread::Builder::new()
 			.name("Video".into())
@@ -107,7 +113,7 @@ impl VideoQueue
 			// We do not need to match the token, since we only ever expect one activity.
 			let incoming_message = match receiver.recv() {
 				Ok(message) => { message }
-				Err(error) => { continue; } // opaque error.
+				Err(_) => { continue; } // opaque error. We can't properly handle it, since we don't know its severity.
 			};
 
 			dbg!("Received a message in video_queue");
@@ -123,7 +129,7 @@ impl VideoQueue
 							match upgraded_h264 {
 								Some(image) => {
 									let mut png_buffer = Vec::new();
-									let mut png_encoder = PngEncoder::new(&mut png_buffer);
+									let png_encoder = PngEncoder::new(&mut png_buffer);
 									let (width, height) = image.dimensions();
 									png_encoder.write_image(&*image, width, height, ExtendedColorType::Rgb8)?;
 									sender.send_event(InternalSignal::FromVideoQueue((incoming_message.origin, png_buffer.into())))

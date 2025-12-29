@@ -5,12 +5,12 @@ pub mod drone_pro;
 mod crc;
 
 use crate::app_network::DroneStateJSON;
-use std::collections::HashMap;
-use crate::app_network::{send_image, InfoPacket, VideoCode};
+use crate::app_network::{send_image, VideoCode};
 use crate::{Connection, Error, ServerMap};
 use image::DynamicImage;
 use mio::net::UdpSocket;
 use mio::Token;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -110,6 +110,7 @@ pub trait Drone : Debug
 	fn get_state(&self) -> Option<DroneStateJSON>;
 }
 
+#[allow(dead_code)]
 pub(crate) trait _DroneInternal : Drone
 {
 	/// Does not acquire lock or anything. Importantly, this does not *borrow* from the Drone.

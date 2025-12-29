@@ -1,22 +1,20 @@
-use std::collections::HashMap;
-use std::io;
 use crate::app_network::ClientSocketType::Info;
+use crate::drone_interface::Drone;
 use crate::ClientSocketType::{Control, Video};
+use crate::Result;
 use crate::{Connection, Error, ServerInstance, TcpStream};
 use image::{DynamicImage, ImageFormat};
 use lebe::io::ReadPrimitive;
 use mio::Token;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::ErrorKind::WouldBlock;
 use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use lebe::Endian;
 use zerocopy::IntoBytes;
-use crate::drone_interface::Drone;
-use crate::Result;
 
 #[derive(Debug, IntoPrimitive, FromPrimitive, Clone, Copy)]
 #[repr(u8)]
@@ -385,7 +383,7 @@ impl InfoPacket
 			payload: json,
 		})
 	}
-	
+
 	pub fn new_drone_connection_state(play : RoShamBo, connection_state: ConnectionState, mac_address : [u8;6]) -> Self
 	{
 		let mut payload = Vec::new();
