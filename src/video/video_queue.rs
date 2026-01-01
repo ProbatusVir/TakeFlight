@@ -116,8 +116,6 @@ impl VideoQueue
 				Err(_) => { continue; } // opaque error. We can't properly handle it, since we don't know its severity.
 			};
 
-			dbg!("Received a message in video_queue");
-
 			let frame = match incoming_message.task {
 				VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!") }
 				VideoTask::Decode(from) => { todo!("Have not implemented decoding within the actual worker thread yet!") }
