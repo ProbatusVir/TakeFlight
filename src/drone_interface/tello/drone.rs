@@ -70,6 +70,7 @@ impl drone_interface::Drone for TelloDrone
 
 		sleep(Duration::from_secs(3));
 */
+		self.logger.info("[Tello] Taking off...")?;
 		self.command_sock.send(&packet::takeoff(self.seq_number))?;
 		self.seq_number += 1;
 
@@ -93,6 +94,7 @@ impl drone_interface::Drone for TelloDrone
 
 		Ok(())*/
 
+		self.logger.info("[Tello] Landing gracefully...")?;
 		self.command_sock.send(&land(self.seq_number))?;
 		self.seq_number += 1;
 		Ok(())
