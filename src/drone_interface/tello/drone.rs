@@ -24,7 +24,6 @@ pub struct TelloDrone
 {
 	command_sock	: UdpSocket,
 	video_sock		: UdpSocket,
-	info_sock		: UdpSocket,
 	is_connected	: bool,
 	time_created	: SystemTime,
 
@@ -247,8 +246,18 @@ impl drone_interface::Drone for TelloDrone
 	 */
 
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
+		// Only set sticks if we're actively flying.
 		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+		return Ok(());
 
+		match &self.curr_state {
+			Some(state) => {
+				if state.is_flying {
+					self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
+				}
+			}
+			None => { /* noop */}
+		}
 		Ok(())
 	}
 
@@ -270,10 +279,10 @@ impl drone_interface::Drone for TelloDrone
 		{
 			self.receive_video()
 		}
-		else if port == self.info_sock.local_addr()?.port()
+		else if port == self.command_sock.local_addr()?.port()
 		{
 			loop {
-				let bytes_read = self.info_sock.recv(&mut self.inner_read_buf)?;
+				let bytes_read = self.command_sock.recv(&mut self.inner_read_buf)?;
 				self.logger.info_from_string(format!("[[Info Sock Message]]{}" , crate::debug_utils::raw_hex_to_string(&self.inner_read_buf[..bytes_read])))?;
 			}
 		}
@@ -292,14 +301,12 @@ impl drone_interface::Drone for TelloDrone
 		{
 			ownership_map.remove(&Token(self.video_sock.local_addr()?.port() as usize));
 			ownership_map.remove(&Token(self.command_sock.local_addr()?.port() as usize));
-			ownership_map.remove(&Token(self.info_sock.local_addr()?.port() as usize));
 		}
 
 		{
 			let poll_lock = self.poll.lock()?;
 			self.video_sock.deregister(poll_lock.registry())?;
 			self.command_sock.deregister(poll_lock.registry())?;
-			self.info_sock.deregister(poll_lock.registry())?;
 		}
 
 		{
@@ -353,7 +360,7 @@ impl TelloDrone
 			command_sock
 		};
 
-		let mut info_sock = {
+		/*let mut info_sock = {
 			const INFO_PORT: u16 = 8890;
 			const CONN_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 10, 1);
 			const CONN_SOCK: SocketAddrV4 = SocketAddrV4::new(CONN_ADDR, INFO_PORT);
@@ -361,7 +368,7 @@ impl TelloDrone
 			info_sock.connect(SocketAddr::V4(CONN_SOCK))?;
 
 			info_sock
-		};
+		};*/
 
 		let mut video_sock = {
 			const VIDEO_PORT: u16 = 11111;
@@ -376,11 +383,9 @@ impl TelloDrone
 
 		let com_token = Token(command_sock.local_addr()?.port() as usize);
 		let vid_token = Token(video_sock.local_addr()?.port() as usize);
-		let nfo_token = Token(info_sock.local_addr()?.port() as usize);
 
 		logger.info_from_string(format!("Command socket opened on: {}",		com_token.0))?;
 		logger.info_from_string(format!("Video socket opened on: {}",		vid_token.0))?;
-		logger.info_from_string(format!("Info socket opened on: {}",		nfo_token.0))?;
 
 		// Register all the sockets...
 		{
@@ -389,7 +394,6 @@ impl TelloDrone
 
 			registry.register(&mut command_sock,	com_token, Interest::READABLE)?;
 			registry.register(&mut video_sock,		vid_token, Interest::READABLE)?;
-			registry.register(&mut info_sock,		nfo_token, Interest::READABLE)?;
 		}
 
 		let seq_number = 0;
@@ -400,7 +404,6 @@ impl TelloDrone
 		let this_drone = Arc::new(Mutex::new(Self {
 			command_sock,
 			video_sock,
-			info_sock,
 			is_connected	: false,
 			time_created	: SystemTime::now(),
 			seq_number,
@@ -439,7 +442,6 @@ impl TelloDrone
 				let mut map_lock = drone_lock.connection_map.lock()?;
 				map_lock.insert(com_token, Connection::Drone(this_drone.clone()));
 				map_lock.insert(vid_token, Connection::Drone(this_drone.clone()));
-				map_lock.insert(nfo_token, Connection::Drone(this_drone.clone()));
 			}
 
 			drone_lock.connect()?;
@@ -496,13 +498,13 @@ impl TelloDrone
 				}
 			}
 			Command::TakeOff => {
-				self.logger.info("Taking off...")?;
+				self.logger.info("Tello confirmed: Taking off...")?;
 			}
 			Command::SetSticks => {
 				self.logger.warn("It appears an error occurred when setting the movement.")?;
 			}
 			Command::Land => {
-				self.logger.warn("Landing...")?;
+				self.logger.warn("Tello confirmed: Landing...")?;
 			}
 			Command::Flip => {
 				self.logger.warn("It appears a problem occurred while flipping.")?;
