@@ -556,12 +556,6 @@ pub(self) fn handle_control_packet(packet : &CommandPacket, origin : &mut TcpStr
 			match &mut *connection.lock()?
 			{
 				Connection::Drone(drone) => {
-					match packet {
-						CommandPacket::Takeoff(_) => { drone.lock()?.takeoff() }
-						CommandPacket::Land(_) => { drone.lock()?.graceful_land() } //server.logger.error("Landing!") }
-						CommandPacket::RC(_) => { server.logger.error("RC...ing! (that's a lie. Fix that in app_network.)") }
-					}?;
-
 					packet.issue(&mut *drone.lock()?)?
 				}
 				_ => { todo!("handle_control_packet not a drone."); }
