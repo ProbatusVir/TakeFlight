@@ -41,8 +41,8 @@ class ControlRC{
       return;
     }
     final takePac = [
-      0x00 //take off command
-          //reserved
+      0x00, //take off command
+      0x00, //reserved
     ];
 
     print('Sending Take off packet');
