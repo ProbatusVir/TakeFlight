@@ -7,7 +7,7 @@ pub fn raw_h264_to_rgb(image_buffer : Box<[u8]>) -> Option<RgbImage>
 		Ok(de) => { de }
 		Err(e) => { None? }
 	};
-	
+
 	let decoder_result = decoder.decode(&image_buffer);
 	match decoder_result
 	{
@@ -22,7 +22,7 @@ pub fn raw_h264_to_rgb(image_buffer : Box<[u8]>) -> Option<RgbImage>
 				file.write_all(&file_buffer)?;*/
 
 				// Send the image to the client, if possible.
-				let decoded = decoded_option.unwrap();
+				let decoded = decoded_option?;
 				let (w,h) = decoded.dimensions();
 				let mut decoded_image = image::RgbImage::new(w as u32, h as u32);
 				decoded.write_rgb8(&mut decoded_image);
