@@ -176,10 +176,12 @@ fn main() -> Result<()> {
 
 	// test
 	//let drone = crate::drone_interface::drone_pro::Drone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone())?;
+
 	let drone = crate::drone_interface::tello::drone::TelloDrone::new(server.poll.clone(), server.ownership_map.clone(), server.logger.clone(), server.video_src.clone(), server.video_out.clone(), server.frame_time.clone(), queue_sender.clone())?;
 	server.curr_drone = Some(Arc::new(Mutex::new(Connection::Drone(drone.clone()))));
-	/*drone.lock()?.takeoff()?;
-	sleep(Duration::from_secs(5));
+
+	//drone.lock()?.takeoff()?;
+	/*sleep(Duration::from_secs(5));
 	drone.lock()?.rc(0, 99, 0, 0.0)?;
 	sleep(Duration::from_secs(5));
 	print!("\x07");
@@ -190,7 +192,7 @@ fn main() -> Result<()> {
 	match server.multiplex()
 	{
 		Ok(_) => { /* noop */ }
-		Err(e) => { logger.error_from_string(format!("Server an encountered error, shutting down:\n\"\"\"\n{e}\n\"\"\""))? }
+		Err(e) => { logger.error_from_string(format!("Server an encountered error, shutting down:\n\"\"\"\n{e}\n\"\"\""))?; }
 	}
 
 	try_join(heartbeat_handle, &mut continue_heartbeat)?;
