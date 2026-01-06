@@ -210,49 +210,12 @@ impl drone_interface::Drone for TelloDrone
 		Ok(())
 	}
 
-	/*
-	// FIXME: This is for debug purposes *only*
-	#[cfg(debug_assertions)]
-	fn send_heartbeat(&mut self) -> Result<(), Error> {
-		static mut DEBUG_NUMBER : usize = 0;
-
-		let debug_number = unsafe { DEBUG_NUMBER };
-
-		if debug_number == 0 {
-			self.takeoff()?;
-		}
-		else if debug_number > 20 {
-			self.graceful_land()?;
-		}
-		else if debug_number > 10 {
-			self.rotate_percent = 50;
-			self.logger.info_from_string(format!("Rotation: {}", self.rotate_percent))?;
-			self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-		}
-		else {
-			self.rotate_percent = 0;
-			self.logger.info_from_string(format!("rotation: {}\tvertical: {}\tsideways: {}\tforward: {}", self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-			self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-		}
-
-		unsafe {
-			DEBUG_NUMBER += 1;
-		}
-
-		self.seq_number += 1;
-
-		Ok(())
-	}
-	 */
-
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
 		// Only set sticks if we're actively flying.
-		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-		return Ok(());
-
 		match &self.curr_state {
 			Some(state) => {
 				if state.is_flying {
+					dbg!("Sending sticks");
 					self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
 				}
 			}

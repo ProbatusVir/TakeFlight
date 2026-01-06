@@ -14,6 +14,8 @@ mod database;
 
 #[cfg(test)]
 mod tests;
+mod system_camera;
+
 use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
 use crate::app_network::{ConnectionState, InfoPacket, RoShamBo, VideoCode};
 use crate::drone_interface::Drone;
@@ -33,11 +35,13 @@ use std::io::{ErrorKind, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 use takeflight_computer_vision as computer_vision;
 use video::video_queue::VideoQueue;
+use crate::system_camera::CameraThread;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -89,7 +93,7 @@ struct ServerInstance
 	frame_time		: Arc<Duration>,
 	read_buffer		: [u8;1024],
 	curr_drone		: Option<Arc<Mutex<Connection>>>,
-	internal_signal_receiver : Rc<WakeQ<InternalSignal>>
+	internal_signal_receiver : Rc<WakeQ<InternalSignal>>,
 }
 
 const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
@@ -112,7 +116,7 @@ fn main() -> Result<()> {
 		let cloned_file = file.clone();
 		let cloned_continue_logger = continue_logger.clone();
 		thread::Builder::new()
-			.name(String::from("Logger"))
+			.name("Logger".into())
 			.spawn(move || { do_logging(receiver, cloned_file, cloned_continue_logger).unwrap()
 			})?
 	};
@@ -148,6 +152,12 @@ fn main() -> Result<()> {
 	// Start the video queue
 	let video_src = Arc::new(Mutex::new(None));
 	let (queue_sender, video_handle) = VideoQueue::start_work_thread(video_src.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
+
+	// start camera thread
+	let continue_running = Arc::new(AtomicBool::new(true));
+	let take_pictures = Arc::new(AtomicBool::new(true));
+	let camera_thread = CameraThread::spawn(logger.clone(), take_pictures.clone(), continue_running.clone())?;
+	
 
 	// Start heartbeat
 	let heartbeat_handle = do_heartbeat(continue_heartbeat.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
