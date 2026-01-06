@@ -1,15 +1,16 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error
 {
 	IOError(std::io::Error),
-	Custom(&'static str),
+	Custom(&'static str),							// 16 bytes
 	LocalIPError,
-	ImageError(image::ImageError),
-	H264Error(openh264::Error),
+	ImageError(Box<image::ImageError>),				// 64 bytes
+	H264Error(Box<openh264::Error>),				// 88 bytes
 	Infallible(std::convert::Infallible),
 	MutexError,
 	PoisonError,
@@ -19,11 +20,12 @@ pub enum Error
 	NoVideoTarget,
 	NoVideoSource,
 	ParseIntError(std::num::ParseIntError),
-	SqliteError(rusqlite::Error),
+	SqliteError(Box<rusqlite::Error>),					// 64 bytes
 	SerdeJSON(serde_json::Error),
-	FromUtf8Error(std::string::FromUtf8Error),
-	SystemTimeError(std::time::SystemTimeError),
+	FromUtf8Error(Box<std::string::FromUtf8Error>),		// 40 bytes
+	SystemTimeError(Box<std::time::SystemTimeError>),	// 16 bytes
 	TryFromSliceError(std::array::TryFromSliceError),
+	NokhwaError(Box<nokhwa::NokhwaError>),				// 72 bytes
 }
 
 
@@ -34,13 +36,13 @@ impl From<std::array::TryFromSliceError> for Error
 
 impl From<std::time::SystemTimeError> for Error
 {
-	fn from(value: std::time::SystemTimeError) -> Self { Error::SystemTimeError(value) }
+	fn from(value: std::time::SystemTimeError) -> Self { Error::SystemTimeError(Box::new(value)) }
 }
 
 
 impl From<std::string::FromUtf8Error> for Error
 {
-	fn from(value: std::string::FromUtf8Error) -> Self { Error::FromUtf8Error(value) }
+	fn from(value: std::string::FromUtf8Error) -> Self { Error::FromUtf8Error(Box::new(value)) }
 }
 
 impl From<serde_json::Error> for Error
@@ -50,7 +52,7 @@ impl From<serde_json::Error> for Error
 
 impl From<rusqlite::Error> for Error
 {
-	fn from(value: rusqlite::Error) -> Self { Error::SqliteError(value) }
+	fn from(value: rusqlite::Error) -> Self { Error::SqliteError(Box::new(value)) }
 }
 
 impl From<std::num::ParseIntError> for Error
@@ -69,7 +71,7 @@ impl From<anyhow::Error> for Error
 impl From<openh264::Error> for Error
 {
 	fn from(value: openh264::Error) -> Self {
-		Error::H264Error(value)
+		Error::H264Error(Box::new(value))
 	}
 }
 
@@ -97,7 +99,7 @@ impl From<local_ip_address::Error> for Error
 impl From<image::ImageError> for Error
 {
 	fn from(value: image::ImageError) -> Self {
-		Error::ImageError(value)
+		Error::ImageError(Box::new(value))
 	}
 }
 
@@ -114,6 +116,10 @@ impl<T> From<std::sync::PoisonError<T>> for Error
 impl From<std::net::AddrParseError> for Error
 {
 	fn from(value : std::net::AddrParseError) -> Self { Error::AddrParseError(value) }
+}
+
+impl From<nokhwa::NokhwaError> for Error {
+	fn from(value : nokhwa::NokhwaError) -> Self { Error::NokhwaError(Box::new(value)) }
 }
 
 impl Display for Error {
@@ -139,6 +145,7 @@ impl Display for Error {
 			Error::FromUtf8Error(e) => { e.fmt(f) }
 			Error::SystemTimeError(e) => { e.fmt(f) }
 			Error::TryFromSliceError(e) => { e.fmt(f) }
+			Error::NokhwaError(e) => { e.fmt(f) }
 		}
 	}
 }
