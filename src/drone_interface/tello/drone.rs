@@ -642,7 +642,7 @@ impl TelloDrone
 						image_buffer.extend_from_slice(&self.frame_buffer);
 
 
-						self.video_queue.transcode(Token(self.video_sock.local_addr()?.port() as usize), self.curr_video_src.lock()?.clone(), FrameType::TelloH264(), FrameType::Png(), image_buffer.into_boxed_slice())?;
+						self.video_queue.transcode(Token(self.video_sock.local_addr()?.port() as usize), self.curr_video_src.lock()?.clone(), FrameType::TelloH264, FrameType::Png, image_buffer.into_boxed_slice())?;
 					}
 					self.vid_frame_number = frame_number;
 					self.frame_buffer.clear();

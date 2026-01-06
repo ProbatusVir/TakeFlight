@@ -13,11 +13,13 @@ use std::thread;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameType
 {
-	TelloH264(),
-	Png(),
+	TelloH264,
+	Png,
+	Rgb,
+
 
 	#[allow(dead_code)]
-	H264(),
+	H264,
 }
 
 
@@ -32,6 +34,12 @@ pub(crate) enum VideoTask
 	Decode(FrameType),
 	/// From(FrameType) -> To(FrameType)
 	Transcode(FrameType, FrameType),
+	
+	/// Any type of image will do
+	/// This is meant for images
+	/// to be fed to the model to
+	/// control the drone.
+	CV(FrameType),
 
 	ShutDown,
 }
@@ -92,7 +100,7 @@ impl VideoQueue
 
 		let thread_handle = std::thread::Builder::new()
 			.name("Video".into())
-			.spawn(|| Self::work(queue_receiver, internal_signaller, curr_src, logger))?;
+			.spawn(|| Self::do_work(queue_receiver, internal_signaller, curr_src, logger))?;
 
 		Ok((queue, thread_handle))
 	}
@@ -105,7 +113,7 @@ impl VideoQueue
 	/// The producers own A_{Sender}, and the server owns B_{Receiver}, the other two are used for IO with the queue.
 	/// This may seem like a complicated setup, but it's just a fat pointer being moved around, so minimal allocations are necessary.
 	//  The parameters reflect the flow of this method.
-	fn work(receiver: std::sync::mpsc::Receiver<VideoTaskFull>, sender : WakeQSender<InternalSignal>, curr_src : Arc<Mutex<Option<Token>>>, logger : Logger) -> Result<(), Error>
+	fn do_work(receiver: std::sync::mpsc::Receiver<VideoTaskFull>, sender : WakeQSender<InternalSignal>, curr_src : Arc<Mutex<Option<Token>>>, logger : Logger) -> Result<(), Error>
 	{
 		logger.info("Starting working queue!")?;
 
@@ -122,7 +130,7 @@ impl VideoQueue
 				VideoTask::Transcode(from, to) => {
 					match (from, to)
 					{
-						(FrameType::TelloH264(), FrameType::Png()) => {
+						(FrameType::TelloH264, FrameType::Png) => {
 							let upgraded_h264 = raw_h264_to_rgb(incoming_message.image_data);
 							match upgraded_h264 {
 								Some(image) => {
