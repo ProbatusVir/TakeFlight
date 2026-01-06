@@ -6,7 +6,6 @@ use nokhwa::NokhwaError;
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat};
 use nokhwa::utils::RequestedFormatType::AbsoluteHighestFrameRate;
-use sdl2::rect::Point;
 use crate::logger::Logger;
 use crate::Error;
 
@@ -125,42 +124,13 @@ impl CameraThreadInfo {
 		let (width, height) = camera.resolution();
 		self.logger.info("Camera started!")?;
 
-		let ctx = sdl2::init().unwrap();
-		let video = ctx.video().unwrap();
-		let window = video.window("Bruh", width, height)
-			.position_centered()
-			.build()
-			.unwrap();
-		let mut canvas = window.into_canvas().build().unwrap();
-		canvas.present();
-
 		// We don't need strong guarantees on order-of-operations.
 		while self.continue_running.load(Relaxed) {
 			let (w, h) = camera.resolution();
 			let image = camera.get_rgb()?;
 
-			// do the first draw, a unique case due to divide by zero
-			// This does, of course, assume that there are at least 3 bytes. Not out there though.
-			{
-				let pixel = &image[..3usize];
-				canvas.set_draw_color(sdl2::pixels::Color::RGB(pixel[0], pixel[1], pixel[2]));
-				canvas.draw_point(Point::new(0, 0)).unwrap();
-			}
-
-			for (i, pixel) in image[3usize..].chunks_exact(3usize).enumerate()
-			{
-				let idx = i as u32;
-				let x = idx % w;
-				let y = idx / w;
-
-				canvas.set_draw_color(sdl2::pixels::Color::RGB(pixel[0], pixel[1], pixel[2]));
-				canvas.draw_point(Point::new(x as i32, y as i32)).unwrap(); // uh-oh!!!
-			}
-			canvas.present();
-
-
-		}
+		} // while continue_running
 
 		Ok(())
-	}
-}
+	} // do_work
+} // impl CameraThreadInfo
