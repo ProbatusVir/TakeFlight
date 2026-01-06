@@ -1,2 +1,4 @@
 [platform.windows.env]
 TFLITEC_PREBUILT_PATH={value="3rd_party\\tensorflowlite_c.dll", relative=true}
+[env]
+TFLITEC_PREBUILT_PATH={value="/usr/lib/libtensorflowlite_c.so"} # According to FHS convention. *May not work for Nix
