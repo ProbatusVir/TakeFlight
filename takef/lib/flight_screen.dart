@@ -6,6 +6,7 @@ import 'settings_screen.dart';
 import 'video_feed.dart';
 import 'connect.dart';
 import 'flight_button.dart';
+import 'msettings_screen.dart';
 
 class RC{
   List<int> packet = [];
@@ -17,7 +18,7 @@ class RC{
     final forwardBack = (fb * 100).toInt();
     final rotation = (rot * 100).toInt();
 
-    return packet = [
+    packet = [
       0x02, //Rc command code
       leftRight.toSigned(8),
       upDown.toSigned(8),
@@ -25,6 +26,9 @@ class RC{
       rotation.toSigned(8),
       0x00 //Reserved
     ];
+    //print('Current movement packet: $packet');
+
+    return packet;
   }
 }
 
@@ -146,8 +150,9 @@ class MobileFlight extends StatelessWidget{
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
                         onPressed: () {
-                          //TODO:: Create separate settings screen for mobile side
-                          throw UnimplementedError('Mobile Settings coming soon');
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (BuildContext context) => MsettingsScreen())
+                          );
                         },
                         icon: Icon(Icons.settings_outlined, color: Colors.white, size: 30.0,)
                     ),
