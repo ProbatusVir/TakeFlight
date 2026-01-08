@@ -43,6 +43,12 @@ class MyApp extends StatelessWidget {
       ),
       debugShowCheckedModeBanner: false, //gets rid of debug sash
       home: const MyHomePage(title: 'TakeFlight'),
+      routes: {
+        '/personalization': (_) =>  throw UnimplementedError(),//const PersonalizationPage(),
+        '/drone-info': (_) => throw UnimplementedError(),//const DroneInfoPage(),
+        '/gesture-control': (_) => throw UnimplementedError(),//const GestureControlPage(),
+        '/flight-logs': (_) => throw UnimplementedError(),//const FlightLogsPage()
+      },
     );
   }
 }
@@ -89,10 +95,11 @@ class _MyHomePageState extends State<MyHomePage> {
             Navigator.of(context).push(
                 MaterialPageRoute(builder: (BuildContext context) => MsettingsScreen())
             );
-          }
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (BuildContext context) => Settings())
+          }else{
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext context) => Settings())
             );
+          }
           },
           child: Icon(
             Icons.settings_outlined,
