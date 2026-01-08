@@ -101,6 +101,7 @@ const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<()> {
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
+	const BUILD : &str = env!("BUILD");
 
 	let mut continue_logger = Arc::new(Mutex::new(true));
 	let mut continue_heartbeat = Arc::new(Mutex::new(true));
@@ -120,7 +121,6 @@ fn main() -> Result<()> {
 			.spawn(move || { do_logging(receiver, cloned_file, cloned_continue_logger).unwrap()
 			})?
 	};
-	logger.info("Logger started!")?;
 
 	// Start the server
 	let poll = Arc::new(Mutex::new(Poll::new()?));
@@ -335,8 +335,8 @@ impl ServerInstance
 			found_connection.unwrap().try_clone()
 		};
 
-		#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
-		self.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
+		//#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
+		//self.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
 		// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
 		match cloned_connection
 		{

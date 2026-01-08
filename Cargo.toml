@@ -33,6 +33,7 @@ rstest = "0.26.1"
 rusqlite = { version="0.37.0", features = ["bundled"]}
 anyhow = "1.0.100"
 const_format = "0.2.35"
+chrono = "0.4.42"	# For simplifying time operations (should be the same interface as C++).
 
 [profile.test]
 opt-level = 3
