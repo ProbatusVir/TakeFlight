@@ -111,10 +111,10 @@ fn test_takeoff()
 pub fn set_sticks(sequence_number : u16, rx : i16, ry : i16, lx : i16, ly : i16) -> [u8;22]
 {
 	//const MULTIPLE : i16 = i16::MAX / 100;
-	debug_assert!(rx >= 0 && rx < 100);
-	debug_assert!(ry >= 0 && ry < 100);
-	debug_assert!(lx >= 0 && lx < 100);
-	debug_assert!(ly >= 0 && ly < 100);
+	debug_assert!(rx >= -100 && rx < 100);
+	debug_assert!(ry >= -100 && ry < 100);
+	debug_assert!(lx >= -100 && lx < 100);
+	debug_assert!(ly >= -100 && ly < 100);
 
 	// I wish SIMD wasn't just nightly...
 	/*rot	*= MULTIPLE;
