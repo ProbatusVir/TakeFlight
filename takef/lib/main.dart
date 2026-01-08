@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
+
 import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
 import 'flight_screen.dart';
-import 'video_feed.dart';
 import 'settings_screen.dart';
+import 'msettings_screen.dart';
 
 void main() async {
   //WidgetsFlutterBinding.ensureInitialized(); //ensures flutter is initialized
@@ -83,6 +85,11 @@ class _MyHomePageState extends State<MyHomePage> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
           onPressed: (){
+          if(defaultTargetPlatform == TargetPlatform.android){
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext context) => MsettingsScreen())
+            );
+          }
           Navigator.of(context).push(
             MaterialPageRoute(builder: (BuildContext context) => Settings())
             );
