@@ -1,3 +1,4 @@
+use std::ffi::c_void;
 use crate::logger::Logger;
 use crate::video::decode::raw_h264_to_rgb;
 use crate::{Error, InternalSignal};
@@ -8,14 +9,15 @@ use mio_wakeq::WakeQSender;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::thread;
-
+use takeflight_computer_vision as tfcv;
+use takeflight_computer_vision::HandLandmarker;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameType
 {
 	TelloH264,
 	Png,
-	Rgb,
+	Rgb(u32, u32), // width and height
 
 
 	#[allow(dead_code)]
@@ -34,7 +36,7 @@ pub(crate) enum VideoTask
 	Decode(FrameType),
 	/// From(FrameType) -> To(FrameType)
 	Transcode(FrameType, FrameType),
-	
+
 	/// Any type of image will do
 	/// This is meant for images
 	/// to be fed to the model to
@@ -59,6 +61,15 @@ pub(crate) struct VideoTaskFull
 pub(crate) struct VideoQueue
 {
 	sender: std::sync::mpsc::Sender<VideoTaskFull>
+}
+
+struct VideoQueueThreadInfo
+{
+	receiver	: std::sync::mpsc::Receiver<VideoTaskFull>,
+	sender		: WakeQSender<InternalSignal>,
+	curr_src	: Arc<Mutex<Option<Token>>>,
+	logger		: Logger,
+	model		: Option<tfcv::hand_landmarker::HandLandmarker>,
 }
 
 impl VideoQueue
@@ -100,63 +111,20 @@ impl VideoQueue
 
 		let thread_handle = std::thread::Builder::new()
 			.name("Video".into())
-			.spawn(|| Self::do_work(queue_receiver, internal_signaller, curr_src, logger))?;
+			.spawn(|| {
+					let thread_stuff = VideoQueueThreadInfo {
+						receiver: queue_receiver,
+						sender: internal_signaller,
+						curr_src,
+						logger,
+						model : None // FIXME: No.
+					};
+					thread_stuff.do_work()
+				})?;
 
 		Ok((queue, thread_handle))
 	}
 
-	/// A producer will send an image to the work queue
-	///
-	/// The work queue will process the image, and send the result to the server
-	///
-	/// This requires two sets of producers and consumers. We'll call these pairs A and B
-	/// The producers own A_{Sender}, and the server owns B_{Receiver}, the other two are used for IO with the queue.
-	/// This may seem like a complicated setup, but it's just a fat pointer being moved around, so minimal allocations are necessary.
-	//  The parameters reflect the flow of this method.
-	fn do_work(receiver: std::sync::mpsc::Receiver<VideoTaskFull>, sender : WakeQSender<InternalSignal>, curr_src : Arc<Mutex<Option<Token>>>, logger : Logger) -> Result<(), Error>
-	{
-		logger.info("Starting working queue!")?;
-
-		loop {
-			// We do not need to match the token, since we only ever expect one activity.
-			let incoming_message = match receiver.recv() {
-				Ok(message) => { message }
-				Err(_) => { continue; } // opaque error. We can't properly handle it, since we don't know its severity.
-			};
-
-			let frame = match incoming_message.task {
-				VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!") }
-				VideoTask::Decode(from) => { todo!("Have not implemented decoding within the actual worker thread yet!") }
-				VideoTask::Transcode(from, to) => {
-					match (from, to)
-					{
-						(FrameType::TelloH264, FrameType::Png) => {
-							let upgraded_h264 = raw_h264_to_rgb(incoming_message.image_data);
-							match upgraded_h264 {
-								Some(image) => {
-									let mut png_buffer = Vec::new();
-									let png_encoder = PngEncoder::new(&mut png_buffer);
-									let (width, height) = image.dimensions();
-									png_encoder.write_image(&*image, width, height, ExtendedColorType::Rgb8)?;
-									sender.send_event(InternalSignal::FromVideoQueue((incoming_message.origin, png_buffer.into())))
-										// FIXME: determine how we want to handle this.
-										.unwrap_or(()); // If it fails to send, that's not big deal, for now...
-								}
-								None => { /* noop */ } // failed to transcode.
-							}
-
-						}
-						_ => todo!("Not sure how to transcode this yet.")
-					}
-
-				}
-				VideoTask::ShutDown => { break }
-			}; // match incoming_message
-		} // loop
-
-		logger.warn("Shutting down!")?;
-		Ok(())
-	} // work
 
 	#[inline(always)]
 	fn is_current(origin : Token, curr_src : Token) -> bool
@@ -204,6 +172,77 @@ impl VideoTaskFull
 			task,
 			image_data
 		}
+	} // fn new
+} // impl VideoTaskFull
+
+impl VideoQueueThreadInfo
+{
+	/// A producer will send an image to the work queue
+	///
+	/// The work queue will process the image, and send the result to the server
+	///
+	/// This requires two sets of producers and consumers. We'll call these pairs A and B
+	/// The producers own A_{Sender}, and the server owns B_{Receiver}, the other two are used for IO with the queue.
+	/// This may seem like a complicated setup, but it's just a fat pointer being moved around, so minimal allocations are necessary.
+	//  The parameters reflect the flow of this method.
+	fn do_work(&self) -> Result<(), Error>
+	{
+		self.logger.info("Starting working queue!")?;
+
+		loop {
+			// We do not need to match the token, since we only ever expect one activity.
+			let incoming_message = match self.receiver.recv() {
+				Ok(message) => { message }
+				Err(_) => { continue; } // opaque error. We can't properly handle it, since we don't know its severity.
+			};
+
+			let frame = match incoming_message.task {
+				VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!"); Err(Error::Custom("What the heck")) }
+				VideoTask::Decode(from) => { todo!("Have not implemented decoding within the actual worker thread yet!"); Err(Error::Custom("What the heck")) }
+				VideoTask::Transcode(from, to) => { self.internal_transcode(incoming_message, from, to) }
+				VideoTask::ShutDown => { break }
+				VideoTask::CV(frame_type) => { self.internal_cv(incoming_message, frame_type) }
+			}; // match incoming_message
+		} // loop
+		self.logger.warn("Shutting down!")?;
+		Ok(())
+	} // work
+
+	fn internal_transcode(&self, message : VideoTaskFull, from : FrameType, to : FrameType) -> Result<(), Error> {
+		match (from, to)
+		{
+			(FrameType::TelloH264, FrameType::Png) => {
+				let upgraded_h264 = raw_h264_to_rgb(message.image_data);
+				match upgraded_h264 {
+					Some(image) => {
+						let mut png_buffer = Vec::new();
+						let png_encoder = PngEncoder::new(&mut png_buffer);
+						let (width, height) = image.dimensions();
+						png_encoder.write_image(&*image, width, height, ExtendedColorType::Rgb8)?;
+						self.sender.send_event(InternalSignal::FromVideoQueue((message.origin, png_buffer.into())))
+							// FIXME: determine how we want to handle this.
+							.unwrap_or(()); // If it fails to send, that's not big deal, for now...
+					}
+					None => { /* noop */ } // failed to transcode.
+				}
+
+			}
+			_ => todo!("Not sure how to transcode this yet.")
+		}
+		Ok(())
+	}
+
+	fn internal_cv(&self, message : VideoTaskFull, frame_type: FrameType) -> Result<(), Error> {
+		let (width, height, image) = match frame_type
+		{
+			FrameType::TelloH264 => { todo!("Haven't implemented CV from TelloH264") }
+			FrameType::Png => { todo!("Haven't implemented CV from PNG") }
+			FrameType::Rgb(width, height) => { (width, height, message.image_data) }
+			FrameType::H264 => { todo!("Haven't implemented CV from H264") }
+		};
+
+		//self.model.run_model()?;
+
+		Ok(())
 	}
 }
-
