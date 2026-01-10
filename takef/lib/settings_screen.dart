@@ -31,8 +31,8 @@ class Settings extends StatelessWidget{
                       quarterTurns: -3, //Rotate the TabBar for vertical look
                     child: TabBar(
                         tabs: [
+                          Tab(child: RotatedBox(quarterTurns: -1, child: Text('Personalization', maxLines: 1, softWrap: false,))),
                           Tab(child: RotatedBox(quarterTurns: -1, child: Text('Drone Information', maxLines: 1,))),
-                          Tab(child: RotatedBox(quarterTurns: -1, child: Text('Settings', maxLines: 1, softWrap: false,))),
                           Tab(child: RotatedBox(quarterTurns: -1, child: Text('Gesture Settings', maxLines: 2, overflow: TextOverflow.visible,))),
                           Tab(child: RotatedBox(quarterTurns: -1, child: Text('Flight logs', maxLines: 2,))),
                         ],
@@ -50,6 +50,7 @@ class Settings extends StatelessWidget{
                     child: TabBarView(
                         children: [
                           //Drone info tab and down in order of tab creation
+                        //Navigator.of(context).pushNamed('/personalization');
                           Stack( // Drone info Tab
                             children: [
                               Align(
@@ -143,7 +144,7 @@ class Settings extends StatelessWidget{
                           Center(
                             child: Text('Flight Logs'),
                           ),
-                        ],
+                        ];
                     ),
                 ),
               ],
