@@ -144,7 +144,7 @@ class Settings extends StatelessWidget{
                           Center(
                             child: Text('Flight Logs'),
                           ),
-                        ];
+                        ],
                     ),
                 ),
               ],
