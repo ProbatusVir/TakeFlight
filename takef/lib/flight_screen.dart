@@ -241,7 +241,13 @@ class DeskFlight extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    FlightButton(control: control,),
+                    FlightButton(control: control, size: 50.0,),
+                    IconButton(
+                        onPressed: (){
+                          control.sendLanding(0x02);
+                        },
+                        icon: Icon(Icons.emergency_sharp, color: Colors.red, size: 50.0,)
+                    ),
                     //TODO::Implement actual recording logic here
                     RecordButton(getFrames: () => videoKey.currentState?.currentFrame,),
                     IconButton(
