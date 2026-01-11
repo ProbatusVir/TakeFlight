@@ -1,4 +1,4 @@
-Copyright (C) Joshua Smith, Ian Shaw & Rashid Byrdsell - All Rights Reserved
+Copyright (C) Joshua Smith & Rashid Byrdsell - All Rights Reserved
 Unauthorized copying of this file, via any medium is strictly prohibited
 Proprietary and confidential
 Written by Joshua Smith <joshbear05@hotmail.com>, October 12, 2025
@@ -24,8 +24,6 @@ Once these steps are complete, the project's build system will take care of the 
 
 # Contributors
 Rashid Byrdsell
-
-Ian Shaw
 
 Joshua Smith
 
