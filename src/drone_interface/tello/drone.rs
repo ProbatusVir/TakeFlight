@@ -200,8 +200,12 @@ impl drone_interface::Drone for TelloDrone
 		debug_assert!(fb >= -100 && fb <= 100);
 		debug_assert!(rot >= -100.0 && rot <= 100.0);
 
-		let pack = packet::set_sticks(self.seq_number, lr as i16, rot as i16, fb as i16, ud as i16);
-
+		 self.forward_percent = fb as i16;
+		 self.sideway_percent = lr as i16;
+		 self.rotate_percent = rot as i16;
+		 self.updown_percent = ud as i16;
+		let pack = packet::set_sticks(self.seq_number, self.forward_percent, self.sideway_percent, self.rotate_percent, self.updown_percent);
+		
 		self.command_sock.send(&pack)?;
 		self.seq_number += 1;
 
