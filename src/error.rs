@@ -26,6 +26,7 @@ pub enum Error
 	TryFromSliceError(std::array::TryFromSliceError),
 	NokhwaError(Box<nokhwa::NokhwaError>),				// 72 bytes
 	TryRecvError(std::sync::mpsc::TryRecvError),
+	Shutdown,
 }
 
 impl From<std::sync::mpsc::TryRecvError> for Error
@@ -151,6 +152,7 @@ impl Display for Error {
 			Error::TryFromSliceError(e) => { e.fmt(f) }
 			Error::NokhwaError(e) => { e.fmt(f) }
 			Error::TryRecvError(e) => { e.fmt(f) }
+			Error::Shutdown => { "Shutting down!".fmt(f) }
 		}
 	}
 }
