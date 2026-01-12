@@ -1,13 +1,17 @@
+use crate::JoinHandle;
+use crate::{ SYS_CAM};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc};
-use std::thread::{JoinHandle};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use nokhwa::NokhwaError;
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat};
 use nokhwa::utils::RequestedFormatType::AbsoluteHighestFrameRate;
 use crate::logger::Logger;
 use crate::Error;
+use crate::video::video_queue::{VideoQueue, };
+use crate::video::video_queue::FrameType::Rgb;
 
 pub struct Camera
 {
@@ -58,6 +62,7 @@ struct CameraThreadInfo {
 	take_pictures		: Arc<AtomicBool>,
 	continue_running	: Arc<AtomicBool>,
 	logger				: Logger,
+	video_queue_sender	: VideoQueue,
 }
 
 pub(crate) struct CameraThread
@@ -67,12 +72,13 @@ pub(crate) struct CameraThread
 }
 
 impl CameraThread {
-	pub fn spawn(logger : Logger, take_pictures : Arc<AtomicBool>, continue_running : Arc<AtomicBool>) -> Result<Arc<Self>, Error>
+	pub fn spawn(logger : Logger, video_queue_sender : VideoQueue, take_pictures : Arc<AtomicBool>, continue_running : Arc<AtomicBool>) -> Result<Arc<Self>, Error>
 	{
 		let info = Arc::new(CameraThreadInfo {
 			take_pictures,
 			continue_running,
 			logger,
+			video_queue_sender,
 		});
 		let info_clone = info.clone();
 		let _thread = Arc::new(std::thread::Builder::new()
@@ -87,6 +93,8 @@ impl CameraThread {
 }
 
 impl CameraThreadInfo {
+	const FRAMERATE		: usize = 20;
+	const FRAME_TIME_MS	: Duration = Duration::from_millis((1000 / Self::FRAMERATE) as u64);
 	/// When killing this thread, you may need to set take_pictures notify this thread
 	///
 	/// # Arguments
@@ -104,7 +112,6 @@ impl CameraThreadInfo {
 	/// ```
 	pub(crate) fn do_work(&self) -> Result<(), Error>
 	{
-		const FRAMERATE: usize = 30;
 		// create the camera
 		self.logger.info("Starting camera thread!")?;
 
@@ -123,12 +130,18 @@ impl CameraThreadInfo {
 
 		let (width, height) = camera.resolution();
 		self.logger.info("Camera started!")?;
-
-		// We don't need strong guarantees on order-of-operations.
+		let mut last_frame = UNIX_EPOCH;
+		// We don't need strong guarantees on order-of-operations. -- though x86-64 does have fairly strong ordering.
 		while self.continue_running.load(Relaxed) {
-			let (w, h) = camera.resolution();
-			let image = camera.get_rgb()?;
+			let now = SystemTime::now();
+			if now.duration_since(last_frame)? >= Self::FRAME_TIME_MS {
+				let (w, h) = camera.resolution();
+				let image = camera.get_rgb()?;
 
+				// FIXME: The second argument is wrong.
+				self.video_queue_sender.computer_vision(SYS_CAM, Some(SYS_CAM), Rgb(w,h), image.into())?;
+				last_frame = now;
+			}
 		} // while continue_running
 
 		Ok(())

@@ -72,6 +72,8 @@ type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
 pub(crate) const LISTENER			: Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const TOKEN_START: usize = u16::MAX as usize;
 pub(crate) const INTERNAL_SIGNALLER	: Token = Token(TOKEN_START + 1 ); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
+pub(crate) const COMP_VISION : Token = Token(TOKEN_START + 2);
+pub(crate) const SYS_CAM : Token = Token(TOKEN_START + 3);
 
 const LOG_DIR : &str = "logs/";
 const TIMEOUT : Duration = Duration::from_millis((1.5 * 1000.0) as u64);
@@ -156,7 +158,7 @@ fn main() -> Result<()> {
 	// start camera thread
 	let continue_running = Arc::new(AtomicBool::new(true));
 	let take_pictures = Arc::new(AtomicBool::new(true));
-	let camera_thread = CameraThread::spawn(logger.clone(), take_pictures.clone(), continue_running.clone())?;
+	let camera_thread = CameraThread::spawn(logger.clone(), queue_sender.clone(), take_pictures.clone(), continue_running.clone())?;
 	
 
 	// Start heartbeat
