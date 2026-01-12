@@ -1,16 +1,21 @@
+use std::default::Default;
+use std::sync::mpsc::TryRecvError;
+use std::option::Option;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::c_void;
 use crate::logger::Logger;
 use crate::video::decode::raw_h264_to_rgb;
 use crate::{Error, InternalSignal};
 use image::codecs::png::PngEncoder;
-use image::{ExtendedColorType, ImageEncoder};
+use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, Rgb, Rgb32FImage, RgbImage};
 use mio::{ Token };
 use mio_wakeq::WakeQSender;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use image::imageops::CatmullRom;
 use takeflight_computer_vision as tfcv;
-use takeflight_computer_vision::HandLandmarker;
+use takeflight_computer_vision::{ComputerVision, HandLandmarker};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameType
@@ -63,14 +68,29 @@ pub(crate) struct VideoQueue
 	sender: std::sync::mpsc::Sender<VideoTaskFull>
 }
 
+// TODO: an option Vec<u8> would be really cool for all the image allocations, we can make it into an imagebuffer, and go between rgb8 and rgbf32 all for the price of rgbf32 if we can guarantee that we'll put it back right.
 struct VideoQueueThreadInfo
 {
-	receiver	: std::sync::mpsc::Receiver<VideoTaskFull>,
-	sender		: WakeQSender<InternalSignal>,
-	curr_src	: Arc<Mutex<Option<Token>>>,
-	logger		: Logger,
-	model		: Option<tfcv::hand_landmarker::HandLandmarker>,
+	receiver		: std::sync::mpsc::Receiver<VideoTaskFull>,
+	sender			: WakeQSender<InternalSignal>,
+	curr_src		: Arc<Mutex<Option<Token>>>,
+	logger			: Logger,
+	model			: tfcv::hand_landmarker::HandLandmarker,
+
+	/// I don't like how memory expensive HS is, but it does have speed + more efficient allocation scheme.
+	///
+	/// The token will be the origin, and the usize will be index from _chrono_stack.
+	_sorting_set	: HashMap<Token, usize>,
+	/// The events as they came in. Most recent events are at the end, logically.
+	_chrono_stack	: VecDeque<VideoTaskFull>,
+	/// The top of _chrono_stack is at the bottom of the _sorted_dequeue,
+	/// consequently, when processing this structure, we want to start at
+	/// the front.
+	_sorted_dequeue	: VecDeque<VideoTaskFull>,
 }
+
+type InsertionError = ();
+
 
 impl VideoQueue
 {
@@ -97,10 +117,13 @@ impl VideoQueue
 		self.send_to_queue(origin, curr_src, image_data, VideoTask::Transcode(from, to))
 	}
 
-	pub fn shutdown(&self) -> Result<(), Error>
-	{
+	pub fn shutdown(&self) -> Result<(), Error> {
 		let vtf = VideoTaskFull { task: VideoTask::ShutDown, image_data: Box::new([]), origin : Token(0) };
 		self.sender.send(vtf).map_err(|_| { Error::Custom("Failed to send shutdown to the video stream thread. Did thread crash?") })
+	}
+
+	pub fn computer_vision(&self, origin : Token, curr_src : Option<Token>, frame_type : FrameType, image_data : Box<[u8]>) -> Result<(), Error> {
+		self.send_to_queue(origin, curr_src, image_data, VideoTask::CV(frame_type))
 	}
 
 	/// Start the work thread
@@ -112,12 +135,15 @@ impl VideoQueue
 		let thread_handle = std::thread::Builder::new()
 			.name("Video".into())
 			.spawn(|| {
-					let thread_stuff = VideoQueueThreadInfo {
+					let mut thread_stuff = VideoQueueThreadInfo {
 						receiver: queue_receiver,
 						sender: internal_signaller,
 						curr_src,
 						logger,
-						model : None // FIXME: No.
+						model : HandLandmarker::new()?,
+						_sorting_set: Default::default(),
+						_chrono_stack: Default::default(),
+						_sorted_dequeue: Default::default(),
 					};
 					thread_stuff.do_work()
 				})?;
@@ -185,28 +211,111 @@ impl VideoQueueThreadInfo
 	/// The producers own A_{Sender}, and the server owns B_{Receiver}, the other two are used for IO with the queue.
 	/// This may seem like a complicated setup, but it's just a fat pointer being moved around, so minimal allocations are necessary.
 	//  The parameters reflect the flow of this method.
-	fn do_work(&self) -> Result<(), Error>
+	fn do_work(&mut self) -> Result<(), Error>
 	{
 		self.logger.info("Starting working queue!")?;
 
 		loop {
-			// We do not need to match the token, since we only ever expect one activity.
-			let incoming_message = match self.receiver.recv() {
-				Ok(message) => { message }
-				Err(_) => { continue; } // opaque error. We can't properly handle it, since we don't know its severity.
-			};
-
-			let frame = match incoming_message.task {
-				VideoTask::Encode(to) => { todo!("Have not implemented encoding within the actual worker thread yet!"); Err(Error::Custom("What the heck")) }
-				VideoTask::Decode(from) => { todo!("Have not implemented decoding within the actual worker thread yet!"); Err(Error::Custom("What the heck")) }
-				VideoTask::Transcode(from, to) => { self.internal_transcode(incoming_message, from, to) }
-				VideoTask::ShutDown => { break }
-				VideoTask::CV(frame_type) => { self.internal_cv(incoming_message, frame_type) }
-			}; // match incoming_message
+			self.drain_events()?
 		} // loop
+
 		self.logger.warn("Shutting down!")?;
 		Ok(())
 	} // work
+
+	fn drain_events(&mut self) -> Result<(), Error> {
+		self.get_all_current_events()?;
+		while !self._sorted_dequeue.is_empty()
+		{
+			// `insert: O(min(i, n-i))` O(min(1, n-1)) -> O(1). I believe it's a circular buffer.
+			let incoming_message = match self._sorted_dequeue.pop_front() {
+				Some(message) => { message }
+				None => { todo!("This is an unreachable arm.") }
+			};
+
+
+			let frame = match incoming_message.task {
+				VideoTask::Encode(to) => {
+					todo!("Have not implemented encoding within the actual worker thread yet!");
+					Err(Error::Custom("What the heck"))
+				}
+				VideoTask::Decode(from) => {
+					todo!("Have not implemented decoding within the actual worker thread yet!");
+					Err(Error::Custom("What the heck"))
+				}
+				VideoTask::Transcode(from, to) => { self.internal_transcode(incoming_message, from, to) }
+				VideoTask::ShutDown => { break }
+				VideoTask::CV(frame_type) => { self.internal_cv(incoming_message, frame_type) }
+			}; // match incoming_message.task
+		}
+
+		Ok(())
+	}
+
+	fn get_all_current_events(&mut self) -> Result<(), Error>
+	{
+		let mut video_task : Option<VideoTaskFull>; // assigned before it's every read.
+		while {
+			video_task = self.try_to_get_new_message()?;
+			video_task.is_some()
+		} {
+			match video_task {
+				Some(inner_task) => { self._chrono_stack.push_back(inner_task) }
+				None => { self.logger.error("Unreachable execution path discovered in VideoQueueThreadInfo::get_all_current_events")? } // this should be an unreachable arm.
+			}
+		}
+
+		self.cull_work_events();
+
+		Ok(())
+	}
+
+	/// This isn't very scalable.
+	/// TODO: Needs a lot of work.
+	/// TODO: Find out if we need to clear the _sorting_set at the start.
+	fn cull_work_events(&mut self) {
+
+		while !self._chrono_stack.is_empty() {
+			let last_task = self._chrono_stack.pop_back();
+			match last_task {
+				// we'll check if the source has emitted a more recent
+				// event; If it has, then we do nothing (discard this item)
+				Some(task) => {
+					self.try_insert_to_sorted_stack(task).unwrap_or_default();
+				} // Some(task)
+				None => { todo!("This is an unreachable branch.") }
+			}// match last_task
+		} // while !is_empty()
+	} // fn cull_work_events
+
+	fn try_insert_to_sorted_stack(&mut self, task : VideoTaskFull) -> Result<(), InsertionError> {
+		let mut contains_origin : bool = false;
+
+		for element in &self._sorted_dequeue {
+			if element.origin == task.origin {
+				contains_origin = true;
+				break
+			} // if origin == origin
+		} // for element in sorted_stack
+
+		if contains_origin { self._sorted_dequeue.push_back(task); Ok(()) } else { Err(()) }
+	}
+
+	fn try_to_get_new_message(&self) -> Result<Option<VideoTaskFull>, Error>
+	{
+		match self.receiver.try_recv()
+		{
+			Ok(message) => { Ok(Some(message)) }
+			Err(e) => {
+				match e
+				{
+					TryRecvError::Empty => { Ok(None) }
+					TryRecvError::Disconnected => { Err(e)? }
+				}
+			}
+		}
+	}
+
 
 	fn internal_transcode(&self, message : VideoTaskFull, from : FrameType, to : FrameType) -> Result<(), Error> {
 		match (from, to)
@@ -232,7 +341,7 @@ impl VideoQueueThreadInfo
 		Ok(())
 	}
 
-	fn internal_cv(&self, message : VideoTaskFull, frame_type: FrameType) -> Result<(), Error> {
+	fn internal_cv(&mut self, message : VideoTaskFull, frame_type: FrameType) -> Result<(), Error> {
 		let (width, height, image) = match frame_type
 		{
 			FrameType::TelloH264 => { todo!("Haven't implemented CV from TelloH264") }
@@ -241,7 +350,24 @@ impl VideoQueueThreadInfo
 			FrameType::H264 => { todo!("Haven't implemented CV from H264") }
 		};
 
-		//self.model.run_model()?;
+		//RgbImage and ImageBuffer<Rgb<u8>, Vec<u8>> are equivalent.
+		let mut image =
+			match RgbImage::from_raw(width, height, image.into_vec()) { // why is there literally no documentation on Box<T> into_vec method???
+				None => { self.logger.error("Invalid image given to cv.")?; return Ok(()) } // maybe I should add an error type for this...
+				Some(image) => { DynamicImage::ImageRgb8(image).into_rgb32f() }
+			};
+		// FIXME: we're gonna make the scaling its own dang function!
+		// FIXME: implement more proper logic
+		image = DynamicImage::ImageRgb32F(image).resize_exact(HandLandmarker::WIDTH as u32, HandLandmarker::HEIGHT as u32, CatmullRom).into_rgb32f();
+
+		let output = self.model.run_model(image)?;
+		let digits = HandLandmarker::get_digits(&output);
+		let digits_down_array = HandLandmarker::digits_down(&digits);
+		let mut num_digits_down = 0;
+		// hideous one-liner for counting all the digits.
+		digits_down_array.iter().for_each(|digit| { if *digit { num_digits_down += 1 } });
+
+
 
 		Ok(())
 	}
