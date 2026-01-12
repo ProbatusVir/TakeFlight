@@ -80,16 +80,18 @@ struct VideoQueueThreadInfo
 	/// I don't like how memory expensive HS is, but it does have speed + more efficient allocation scheme.
 	///
 	/// The token will be the origin, and the usize will be index from _chrono_stack.
-	_sorting_set	: HashMap<Token, usize>,
+	_sorting_set	: HashSet<Token>,
 	/// The events as they came in. Most recent events are at the end, logically.
 	_chrono_stack	: VecDeque<VideoTaskFull>,
 	/// The top of _chrono_stack is at the bottom of the _sorted_dequeue,
 	/// consequently, when processing this structure, we want to start at
 	/// the front.
 	_sorted_dequeue	: VecDeque<VideoTaskFull>,
+	/// This keeps track of who currently needs attention in the batch.
+	_batch_set: HashSet<Token>
 }
 
-type InsertionError = ();
+type TryInsertionError = ();
 
 
 impl VideoQueue
@@ -144,6 +146,7 @@ impl VideoQueue
 						_sorting_set: Default::default(),
 						_chrono_stack: Default::default(),
 						_sorted_dequeue: Default::default(),
+						_batch_set: Default::default(),
 					};
 					thread_stuff.do_work()
 				})?;
@@ -216,51 +219,92 @@ impl VideoQueueThreadInfo
 		self.logger.info("Starting working queue!")?;
 
 		loop {
-			self.drain_events()?
+			// get networking events
+			self._sorting_set.clear();
+			self.drain_held_events_into_unsorted_buffer();
+			self.get_all_current_events()?;
+			
+			if self._batch_set.is_empty()
+			{
+				self.fill_batch_set();
+			}
+
+			// dispatch the incoming message.
+			match self._sorted_dequeue.pop_front() {
+				Some(message) => { 
+					match self.dispatch_incoming_message(message) {
+						Ok(()) => {} // Literally nothing to do
+						Err(Error::Shutdown) => { break }
+						Err(e) => { Err(e)? }
+					}
+				}
+				None => { todo!("This is an unreachable arm.") }
+			};
+
+
 		} // loop
 
 		self.logger.warn("Shutting down!")?;
 		Ok(())
 	} // work
-
-	fn drain_events(&mut self) -> Result<(), Error> {
-		self.get_all_current_events()?;
-		while !self._sorted_dequeue.is_empty()
+	
+	fn fill_batch_set(&mut self) {
+		
+		for item_of_unique_origin in &self._sorted_dequeue
 		{
-			// `insert: O(min(i, n-i))` O(min(1, n-1)) -> O(1). I believe it's a circular buffer.
-			let incoming_message = match self._sorted_dequeue.pop_front() {
-				Some(message) => { message }
-				None => { todo!("This is an unreachable arm.") }
+			debug_assert!(!self._batch_set.contains(&item_of_unique_origin.origin));
+			self._batch_set.insert(item_of_unique_origin.origin);
+		}
+	}
+
+	fn dispatch_incoming_message(&mut self, incoming_message : VideoTaskFull) -> Result<(), Error>
+	{
+		match incoming_message.task {
+			VideoTask::Encode(to) => {
+				todo!("Have not implemented encoding within the actual worker thread yet!");
+				Err(Error::Custom("What the heck"))
+			}
+			VideoTask::Decode(from) => {
+				todo!("Have not implemented decoding within the actual worker thread yet!");
+				Err(Error::Custom("What the heck"))
+			}
+			VideoTask::Transcode(from, to) => { self.internal_transcode(incoming_message, from, to) }
+			VideoTask::ShutDown => { Err(Error::Shutdown) }
+			VideoTask::CV(frame_type) => { self.internal_cv(incoming_message, frame_type) }
+		} // match incoming_message.task
+	}
+
+	/// This should retain ordering of the initial set, which means pop_front -> push_front
+	///
+	/// When re-sorted, these events will have the lowest priority.
+	fn drain_held_events_into_unsorted_buffer(&mut self) {
+		loop // !self._sorted_dequeue.is_empty()
+		{
+			let element = match self._sorted_dequeue.pop_front() {
+				Some(element) => { element }
+				None => { break }
 			};
 
-
-			let frame = match incoming_message.task {
-				VideoTask::Encode(to) => {
-					todo!("Have not implemented encoding within the actual worker thread yet!");
-					Err(Error::Custom("What the heck"))
-				}
-				VideoTask::Decode(from) => {
-					todo!("Have not implemented decoding within the actual worker thread yet!");
-					Err(Error::Custom("What the heck"))
-				}
-				VideoTask::Transcode(from, to) => { self.internal_transcode(incoming_message, from, to) }
-				VideoTask::ShutDown => { break }
-				VideoTask::CV(frame_type) => { self.internal_cv(incoming_message, frame_type) }
-			}; // match incoming_message.task
-		}
-
-		Ok(())
+			self._chrono_stack.push_front(element);
+		} // loop
 	}
 
 	fn get_all_current_events(&mut self) -> Result<(), Error>
 	{
-		let mut video_task : Option<VideoTaskFull>; // assigned before it's every read.
+		// do a blocking read here to avoid busy cycles.
+		if self._sorted_dequeue.is_empty()
+		{
+			let first_message = self.blocking_try_to_get_new_message()?;
+			self.handle_incoming_message(first_message);
+		}
+
+		let mut video_task : Option<VideoTaskFull>; // assigned before it's ever read.
 		while {
 			video_task = self.try_to_get_new_message()?;
 			video_task.is_some()
 		} {
 			match video_task {
-				Some(inner_task) => { self._chrono_stack.push_back(inner_task) }
+				Some(inner_task) => { self.handle_incoming_message(inner_task) }
 				None => { self.logger.error("Unreachable execution path discovered in VideoQueueThreadInfo::get_all_current_events")? } // this should be an unreachable arm.
 			}
 		}
@@ -269,6 +313,12 @@ impl VideoQueueThreadInfo
 
 		Ok(())
 	}
+	
+	fn handle_incoming_message(&mut self, task : VideoTaskFull)
+	{
+		self._chrono_stack.push_back(task);
+	}
+	
 
 	/// This isn't very scalable.
 	/// TODO: Needs a lot of work.
@@ -281,24 +331,25 @@ impl VideoQueueThreadInfo
 				// we'll check if the source has emitted a more recent
 				// event; If it has, then we do nothing (discard this item)
 				Some(task) => {
+					// make it known that this exists in the other set.
+					let task_origin = task.origin;
 					self.try_insert_to_sorted_stack(task).unwrap_or_default();
+					self._sorting_set.insert(task_origin);
 				} // Some(task)
 				None => { todo!("This is an unreachable branch.") }
 			}// match last_task
 		} // while !is_empty()
 	} // fn cull_work_events
 
-	fn try_insert_to_sorted_stack(&mut self, task : VideoTaskFull) -> Result<(), InsertionError> {
-		let mut contains_origin : bool = false;
-
-		for element in &self._sorted_dequeue {
-			if element.origin == task.origin {
-				contains_origin = true;
-				break
-			} // if origin == origin
-		} // for element in sorted_stack
-
-		if contains_origin { self._sorted_dequeue.push_back(task); Ok(()) } else { Err(()) }
+	fn try_insert_to_sorted_stack(&mut self, task : VideoTaskFull) -> Result<(), TryInsertionError> {
+		// If it contains the source, do nothing
+		// otherwise, insert the source
+		if !self._sorting_set.contains(&task.origin) {
+			self._sorted_dequeue.push_back(task);
+			Ok(())
+		} else {
+			Err(())
+		}
 	}
 
 	fn try_to_get_new_message(&self) -> Result<Option<VideoTaskFull>, Error>
@@ -312,6 +363,18 @@ impl VideoQueueThreadInfo
 					TryRecvError::Empty => { Ok(None) }
 					TryRecvError::Disconnected => { Err(e)? }
 				}
+			}
+		}
+	}
+
+	fn blocking_try_to_get_new_message(&self) -> Result<VideoTaskFull, Error>
+	{
+		match self.receiver.recv() {
+			Ok(message) => {
+				Ok(message)
+			}
+			Err(e) => {
+				Err(TryRecvError::Disconnected)?
 			}
 		}
 	}
