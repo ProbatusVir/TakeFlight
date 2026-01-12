@@ -1,16 +1,15 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::sync::Arc;
 
 pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error
 {
 	IOError(std::io::Error),
-	Custom(&'static str),							// 16 bytes
+	Custom(&'static str),								// 16 bytes
 	LocalIPError,
-	ImageError(Box<image::ImageError>),				// 64 bytes
-	H264Error(Box<openh264::Error>),				// 88 bytes
+	ImageError(Box<image::ImageError>),					// 64 bytes
+	H264Error(Box<openh264::Error>),					// 88 bytes
 	Infallible(std::convert::Infallible),
 	MutexError,
 	PoisonError,
@@ -26,8 +25,13 @@ pub enum Error
 	SystemTimeError(Box<std::time::SystemTimeError>),	// 16 bytes
 	TryFromSliceError(std::array::TryFromSliceError),
 	NokhwaError(Box<nokhwa::NokhwaError>),				// 72 bytes
+	TryRecvError(std::sync::mpsc::TryRecvError),
 }
 
+impl From<std::sync::mpsc::TryRecvError> for Error
+{
+	fn from(value: std::sync::mpsc::TryRecvError) -> Self { Error::TryRecvError(value) }
+}
 
 impl From<std::array::TryFromSliceError> for Error
 {
@@ -146,6 +150,7 @@ impl Display for Error {
 			Error::SystemTimeError(e) => { e.fmt(f) }
 			Error::TryFromSliceError(e) => { e.fmt(f) }
 			Error::NokhwaError(e) => { e.fmt(f) }
+			Error::TryRecvError(e) => { e.fmt(f) }
 		}
 	}
 }
