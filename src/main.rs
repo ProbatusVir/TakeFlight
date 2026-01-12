@@ -349,18 +349,16 @@ impl ServerInstance
 						// Receive signal will always go until an error is encountered.
 						// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
 						match drone.lock()?.receive_signal(token.0 as u16) {
-							Err(e) => {
-								match e
-								{
-									Error::IOError(io_error) => {
-										if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
-									}
+							Err(Error::IOError(e)) => { 
+								match e.kind() {
+									ErrorKind::WouldBlock => { /* noop */ }
 									_ => { Err(e)? }
-								}
-							}
+								} // match e.kind()
+							} // Err(IOError)
+							Err(e) => { Err(e)? }
 							_ => { /* noop */ }
-						}
-					}
+						} // match drone.lock?
+					} // Connection::Drone(drone)
 					Connection::ClientControl(..) => { handle_control_activity(token, self, &mut *self.ownership_map.clone().lock()?)? }
 					_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 				};
