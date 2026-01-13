@@ -1,6 +1,7 @@
 use std::io::{Read, };
 use std::path;
 use anyhow::Error;
+use chrono::{Datelike, Timelike};
 use const_format::{formatcp};
 
 const TEST_RESULT_FOLDER : &str = "test_results";
@@ -11,6 +12,19 @@ const TABLE_SCRIPTS : &str = "src/sql_scripts/create_tables";
 
 fn main() -> Result<(), Error>
 {
+	const BUILD_TYPE : &str = {
+		if cfg!(debug_assertions) {
+		    "D"
+		} else {
+			"R"
+		}
+	};
+	let (year, month, day, hour, minute, second) = {
+			let now = chrono::Local::now();
+			(now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second())
+		};
+	
+	println!("cargo::rustc-env=BUILD={BUILD_TYPE}-{year:04}-{month:02}-{day:02}-{hour:02}-{minute:02}-{second:02}");
 
 	if !std::fs::exists(TEST_RESULT_FOLDER)? { std::fs::create_dir(TEST_RESULT_FOLDER)?; }
 

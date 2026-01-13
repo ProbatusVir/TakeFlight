@@ -87,6 +87,12 @@ impl Logger
 /// I would love to make this return Result<!, Error> once it becomes stable.
 pub fn do_logging(receiver: Receiver<LogMessage>, log_file : Arc<Mutex<Option<File>>>, continue_logger : Arc<Mutex<bool>>) -> Result<()>
 {
+	// showoff at the start
+	{
+		const BUILD : &str = env!("BUILD");
+		write_message_out(LogMessage::new(LoggingLevel::Info, "Logger started!"), &log_file)?;
+		write_message_out(LogMessage::new(LoggingLevel::Info, format!("Running version: {BUILD}")), &log_file)?;
+	}
 	while *continue_logger.lock()? {
 		// Receive our message, but make sure that we actually have one.
 		match receiver.recv() {

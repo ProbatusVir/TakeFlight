@@ -14,7 +14,6 @@ image = { version="0.25.8", features = ["png", "jpeg"] }
 rusqlite = { version="0.37.0", features = ["bundled", "chrono"]}
 concat-arrays = "0.1.2"
 mio-wakeq = "0.1.0"
-#opencv = { version="0.97.2"}
 
 # This section is just to make the code more expressive.
 zerocopy = "0.8.27"	# This is for low-level byte operations on primitive types
@@ -25,15 +24,16 @@ anyhow = "1.0.100"	# I wish we had started with anyhow, this implements Error fo
 const_format = "0.2.35"	# Allows compile-time string formatting.
 serde = { version="1.0.228", features = ["serde_derive"] }	# Serialize/Deserialize using reflection.
 serde_json = "1.0.145" # Extends serde.
+nokhwa = { version="0.10.10", features = ["input-native"] }
 
 [dev-dependencies]
-nokhwa = { version="0.10.10", features = ["input-native"] }
 rstest = "0.26.1"
 
 [build-dependencies]
 rusqlite = { version="0.37.0", features = ["bundled"]}
 anyhow = "1.0.100"
 const_format = "0.2.35"
+chrono = "0.4.42"	# For simplifying time operations (should be the same interface as C++).
 
 [profile.test]
 opt-level = 3

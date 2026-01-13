@@ -200,8 +200,12 @@ impl drone_interface::Drone for TelloDrone
 		debug_assert!(fb >= -100 && fb <= 100);
 		debug_assert!(rot >= -100.0 && rot <= 100.0);
 
-		let pack = packet::set_sticks(self.seq_number, lr as i16, rot as i16, fb as i16, ud as i16);
-
+		 self.forward_percent = fb as i16;
+		 self.sideway_percent = lr as i16;
+		 self.rotate_percent = rot as i16;
+		 self.updown_percent = ud as i16;
+		let pack = packet::set_sticks(self.seq_number, self.forward_percent, self.sideway_percent, self.rotate_percent, self.updown_percent);
+		
 		self.command_sock.send(&pack)?;
 		self.seq_number += 1;
 
@@ -210,49 +214,12 @@ impl drone_interface::Drone for TelloDrone
 		Ok(())
 	}
 
-	/*
-	// FIXME: This is for debug purposes *only*
-	#[cfg(debug_assertions)]
-	fn send_heartbeat(&mut self) -> Result<(), Error> {
-		static mut DEBUG_NUMBER : usize = 0;
-
-		let debug_number = unsafe { DEBUG_NUMBER };
-
-		if debug_number == 0 {
-			self.takeoff()?;
-		}
-		else if debug_number > 20 {
-			self.graceful_land()?;
-		}
-		else if debug_number > 10 {
-			self.rotate_percent = 50;
-			self.logger.info_from_string(format!("Rotation: {}", self.rotate_percent))?;
-			self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-		}
-		else {
-			self.rotate_percent = 0;
-			self.logger.info_from_string(format!("rotation: {}\tvertical: {}\tsideways: {}\tforward: {}", self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-			self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-		}
-
-		unsafe {
-			DEBUG_NUMBER += 1;
-		}
-
-		self.seq_number += 1;
-
-		Ok(())
-	}
-	 */
-
 	fn send_heartbeat(&mut self) -> Result<(), Error> {
 		// Only set sticks if we're actively flying.
-		self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
-		return Ok(());
-
 		match &self.curr_state {
 			Some(state) => {
 				if state.is_flying {
+					dbg!("Sending sticks");
 					self.command_sock.send(&set_sticks(self.seq_number, self.rotate_percent, self.updown_percent, self.sideway_percent, self.forward_percent))?;
 				}
 			}
@@ -679,7 +646,7 @@ impl TelloDrone
 						image_buffer.extend_from_slice(&self.frame_buffer);
 
 
-						self.video_queue.transcode(Token(self.video_sock.local_addr()?.port() as usize), self.curr_video_src.lock()?.clone(), FrameType::TelloH264(), FrameType::Png(), image_buffer.into_boxed_slice())?;
+						self.video_queue.transcode(Token(self.video_sock.local_addr()?.port() as usize), self.curr_video_src.lock()?.clone(), FrameType::TelloH264, FrameType::Png, image_buffer.into_boxed_slice())?;
 					}
 					self.vid_frame_number = frame_number;
 					self.frame_buffer.clear();

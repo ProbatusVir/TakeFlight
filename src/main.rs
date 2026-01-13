@@ -14,6 +14,9 @@ mod database;
 
 #[cfg(test)]
 mod tests;
+mod system_camera;
+mod hacks;
+
 use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
 use crate::app_network::{ConnectionState, InfoPacket, RoShamBo, VideoCode};
 use crate::drone_interface::Drone;
@@ -33,11 +36,13 @@ use std::io::{ErrorKind, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 use takeflight_computer_vision as computer_vision;
 use video::video_queue::VideoQueue;
+use crate::system_camera::CameraThread;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -68,6 +73,8 @@ type ServerMap = Arc<Mutex<HashMap<Token, Connection>>>;
 pub(crate) const LISTENER			: Token = Token(0);	// 0 is the reserved file descriptor for stdin. It cannot be used for ports, so listener is always valid.
 const TOKEN_START: usize = u16::MAX as usize;
 pub(crate) const INTERNAL_SIGNALLER	: Token = Token(TOKEN_START + 1 ); // 1 is reserved by the system for stdout. (2 is stdout, we can use it as well.)
+pub(crate) const COMP_VISION : Token = Token(TOKEN_START + 2);
+pub(crate) const SYS_CAM : Token = Token(TOKEN_START + 3);
 
 const LOG_DIR : &str = "logs/";
 const TIMEOUT : Duration = Duration::from_millis((1.5 * 1000.0) as u64);
@@ -89,7 +96,7 @@ struct ServerInstance
 	frame_time		: Arc<Duration>,
 	read_buffer		: [u8;1024],
 	curr_drone		: Option<Arc<Mutex<Connection>>>,
-	internal_signal_receiver : Rc<WakeQ<InternalSignal>>
+	internal_signal_receiver : Rc<WakeQ<InternalSignal>>,
 }
 
 const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
@@ -97,6 +104,7 @@ const HEARTBEAT_TIME: Duration = Duration::from_millis(400);
 //Allowing for proper error handling in case the application can not be opened
 fn main() -> Result<()> {
 	const FRAME_TIME: Duration = Duration::from_millis(1000 / 20); // 20 fps doesn't seem bad for now.
+	const BUILD : &str = env!("BUILD");
 
 	let mut continue_logger = Arc::new(Mutex::new(true));
 	let mut continue_heartbeat = Arc::new(Mutex::new(true));
@@ -112,11 +120,10 @@ fn main() -> Result<()> {
 		let cloned_file = file.clone();
 		let cloned_continue_logger = continue_logger.clone();
 		thread::Builder::new()
-			.name(String::from("Logger"))
+			.name("Logger".into())
 			.spawn(move || { do_logging(receiver, cloned_file, cloned_continue_logger).unwrap()
 			})?
 	};
-	logger.info("Logger started!")?;
 
 	// Start the server
 	let poll = Arc::new(Mutex::new(Poll::new()?));
@@ -148,6 +155,12 @@ fn main() -> Result<()> {
 	// Start the video queue
 	let video_src = Arc::new(Mutex::new(None));
 	let (queue_sender, video_handle) = VideoQueue::start_work_thread(video_src.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
+
+	// start camera thread
+	let continue_running = Arc::new(AtomicBool::new(true));
+	let take_pictures = Arc::new(AtomicBool::new(true));
+	let camera_thread = CameraThread::spawn(logger.clone(), queue_sender.clone(), take_pictures.clone(), continue_running.clone())?;
+	
 
 	// Start heartbeat
 	let heartbeat_handle = do_heartbeat(continue_heartbeat.clone(), logger.clone(), internal_signal_receiver.get_sender())?;
@@ -325,8 +338,8 @@ impl ServerInstance
 			found_connection.unwrap().try_clone()
 		};
 
-		#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
-		self.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
+		//#[cfg(debug_assertions)]	// I wanna keep the logs fairly light in release.
+		//self.logger.info("Sending out keep-alives! FIXME: This is not actually the proper place for keep-alive, I genuinely have no clue how this got here.")?;
 		// CLARIFY: It's not clear right now if it's necessary to check the unwrap of this one, on the grounds that non-cloneables should be caught in the needs_reassigned block.
 		match cloned_connection
 		{
@@ -337,18 +350,16 @@ impl ServerInstance
 						// Receive signal will always go until an error is encountered.
 						// Below is the pattern matching for that error. We can recover from WouldBlock, but there are many layers of indirection.
 						match drone.lock()?.receive_signal(token.0 as u16) {
-							Err(e) => {
-								match e
-								{
-									Error::IOError(io_error) => {
-										if io_error.kind() == ErrorKind::WouldBlock { /* noop */ } else { Err(io_error)? }
-									}
+							Err(Error::IOError(e)) => { 
+								match e.kind() {
+									ErrorKind::WouldBlock => { /* noop */ }
 									_ => { Err(e)? }
-								}
-							}
+								} // match e.kind()
+							} // Err(IOError)
+							Err(e) => { Err(e)? }
 							_ => { /* noop */ }
-						}
-					}
+						} // match drone.lock?
+					} // Connection::Drone(drone)
 					Connection::ClientControl(..) => { handle_control_activity(token, self, &mut *self.ownership_map.clone().lock()?)? }
 					_ => { Err(Error::Custom("Error within drain_events token case. Did not know how to handle this connection..."))? }
 				};

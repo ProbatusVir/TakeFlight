@@ -103,15 +103,15 @@ impl<'a> HandLandmarker
 		Self::initialize_hand_landmarker_model(buffer)
 	}*/
 
-	// FIXME: This should not return the unit value.
 	// 	I'll have to see if consuming the value is good or not.
-	pub fn run_model(&mut self, input : Rgb32FImage) -> Result<Vec<Tensor<'_>>, Error>
+	/// This function takes the input, invokes the model, and returns the output
+	pub fn run_model(&mut self, input : &Rgb32FImage) -> Result<Vec<Tensor<'_>>, Error>
 	{
 		debug_assert_eq!(input.as_bytes().len(), Self::NUM_BATCHES * Self::WIDTH * Self::HEIGHT * Self::BIT_DEPTH * size_of::<f32>(), "Image dimensions did not match expected size");
 
 		let input_tensor = self.base.input(0)?;
 
-		input_tensor.set_data(&input.into_vec())?;
+		input_tensor.set_data(&input.as_raw())?;
 
 		self.base.invoke()?;
 
@@ -213,6 +213,9 @@ impl<'a> HandLandmarker
 	}
 
 	/// Counts the fingers that aren't the thumb on a hand.
+	///
+	/// Takes the result of get_digits
+	// TODO: If this needs clarified, should we have an abstraction of this? This way offers potential optimization...
 	pub fn digits_down(fingies : &[[Coord3D<f32>;4];5]) -> [bool;4]
 	{
 		let mut result = [false, false, false, false];
