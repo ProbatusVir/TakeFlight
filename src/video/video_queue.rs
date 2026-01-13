@@ -11,6 +11,7 @@ use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, Rgb, Rgb
 use mio::{ Token };
 use mio_wakeq::WakeQSender;
 use std::fmt::Debug;
+use std::io::{Cursor, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use image::imageops::CatmullRom;
@@ -418,7 +419,9 @@ impl VideoQueueThreadInfo
 			FrameType::H264 => { todo!("Haven't implemented CV from H264") }
 		};
 
-		let image_buffer = self.get_image_buffer();
+		let mut image_buffer = self.get_image_buffer();
+		let mut image_writer = Cursor::new(image);
+		image_writer.read_to_end(&mut image_buffer)?;
 
 		//RgbImage and ImageBuffer<Rgb<u8>, Vec<u8>> are equivalent.
 		let mut image =
@@ -437,8 +440,9 @@ impl VideoQueueThreadInfo
 		// hideous one-liner for counting all the digits.
 		digits_down_array.iter().for_each(|digit| { if *digit { num_digits_down += 1 } });
 
-
-		self.image_buffer = Some(vec_to_vec::<f32, u8>(image.into_raw()));
+		let mut image = image.into_raw();
+		image.clear();
+		self.image_buffer = Some(vec_to_vec::<f32, u8>(image));
 		Ok(())
 	} // fn internal_cv
 
