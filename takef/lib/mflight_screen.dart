@@ -35,7 +35,7 @@ class _MobileFlightState extends State<MobileFlight>{
   double rot = 0;
 
   void sendRC(){
-    widget.rcCon.buildPacket(lr,0,fb,0);
+    widget.rcCon.buildPacket(lr,ud,fb,rot);
     widget.control.sendRC();
   }
 
