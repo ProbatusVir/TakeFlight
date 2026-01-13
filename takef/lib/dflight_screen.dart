@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:takef/record_button.dart';
 import 'package:takef/settings_screen.dart';
 import 'package:takef/video_feed.dart';
@@ -27,6 +28,7 @@ class DeskFlight extends StatefulWidget{
 }
 
 class _DeskFlightState extends State<DeskFlight>{
+  final Set<LogicalKeyboardKey> keys ={};
 
   double lr = 0;
   double fb = 0;
@@ -93,38 +95,73 @@ class _DeskFlightState extends State<DeskFlight>{
               ),
             ),
           ),
-          //TODO::Fix joystick UI and handling for android
-          Align( //Joy sticks bottom left
-            alignment: Alignment.bottomLeft,
-            child: Padding(
-              padding: const EdgeInsets.all(125),
-              child: ThumbStickController(
-                onChange: (x, y){
-                  //Will be movement logic here
-                  lr = x;
-                  fb = y;
-                 sendRC();
-                },
+          //add keyboard listener
+          Focus(
+            autofocus: true,
+              onKeyEvent: _onKey,
+              child: Stack(
+                children: [
+                  Align( //Joy sticks bottom left
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.all(125),
+                      child: ThumbStickController(
+                        onChange: (x, y){
+                          //Will be movement logic here
+                          lr = x;
+                          fb = y;
+                          sendRC();
+                        },
+                      ),
+                    ),
+                  ),
+                  Align( //Joy sticks bottom right
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(125),
+                      child: ThumbStickController(
+                        input: 1,
+                        onChange: (x, y){
+                          //Will be height/axis control logic
+                          rot = x;
+                          ud = y;
+                          sendRC();
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ),
-          Align( //Joy sticks bottom right
-            alignment: Alignment.bottomRight,
-            child: Padding(
-              padding: const EdgeInsets.all(125),
-              child: ThumbStickController(
-                input: 1,
-                onChange: (x, y){
-                  //Will be height/axis control logic
-                  rot = x;
-                  ud = y;
-                  sendRC();
-                },
-              ),
-            ),
-          ),
+          )
         ],
       ),
     );
+  }
+  KeyEventResult _onKey(FocusNode node, KeyEvent event){
+    if(event is KeyDownEvent){
+      keys.add(event.logicalKey);
+      return KeyEventResult.handled;
+    }else if (event is KeyUpEvent){
+      keys.remove(event.logicalKey);
+      return KeyEventResult.handled;
+    }
+    ///Movement (Left Stick)
+    if (event.character == 'a' || event.character == 'd') {
+      lr = (keys.contains(LogicalKeyboardKey.keyD) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.keyA) ? -1 : 0);
+      return KeyEventResult.handled;
+    } else if (event.character == 'w' || event.character == 's'){
+      fb = (keys.contains(LogicalKeyboardKey.keyW) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.keyS) ? -1 : 0);
+      return KeyEventResult.handled;
+    }
+    ///Altitude & Rotation (Right Stick)
+    if(event.character == 'q' || event.character == 'e'){
+      rot = (keys.contains(LogicalKeyboardKey.keyQ) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.keyE) ? -1 : 0);
+      return KeyEventResult.handled;
+    }
+    sendRC();
+    return KeyEventResult.ignored;
   }
 }
