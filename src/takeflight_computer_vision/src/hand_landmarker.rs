@@ -105,13 +105,13 @@ impl<'a> HandLandmarker
 
 	// 	I'll have to see if consuming the value is good or not.
 	/// This function takes the input, invokes the model, and returns the output
-	pub fn run_model(&mut self, input : Rgb32FImage) -> Result<Vec<Tensor<'_>>, Error>
+	pub fn run_model(&mut self, input : &Rgb32FImage) -> Result<Vec<Tensor<'_>>, Error>
 	{
 		debug_assert_eq!(input.as_bytes().len(), Self::NUM_BATCHES * Self::WIDTH * Self::HEIGHT * Self::BIT_DEPTH * size_of::<f32>(), "Image dimensions did not match expected size");
 
 		let input_tensor = self.base.input(0)?;
 
-		input_tensor.set_data(&input.into_vec())?;
+		input_tensor.set_data(&input.as_raw())?;
 
 		self.base.invoke()?;
 
