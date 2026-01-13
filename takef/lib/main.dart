@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
-import 'flight_screen.dart';
+import 'central_screen.dart';
 import 'settings_screen.dart';
 import 'msettings_screen.dart';
 

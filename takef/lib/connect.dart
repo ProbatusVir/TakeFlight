@@ -4,7 +4,7 @@ import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart'; //For Uint8List
-import 'flight_screen.dart';
+import 'central_screen.dart';
 import 'video_feed.dart';
 class ControlRC{
   Socket? controlSoc;
