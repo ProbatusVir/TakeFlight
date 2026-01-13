@@ -15,6 +15,7 @@ mod database;
 #[cfg(test)]
 mod tests;
 mod system_camera;
+mod hacks;
 
 use crate::app_network::{handle_connection, handle_control_activity, handle_info_activity, ClientSocketType};
 use crate::app_network::{ConnectionState, InfoPacket, RoShamBo, VideoCode};

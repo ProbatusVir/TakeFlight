@@ -16,6 +16,7 @@ use std::thread;
 use image::imageops::CatmullRom;
 use takeflight_computer_vision as tfcv;
 use takeflight_computer_vision::{ComputerVision, HandLandmarker};
+use crate::hacks::vec_to_vec;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FrameType
@@ -88,7 +89,10 @@ struct VideoQueueThreadInfo
 	/// the front.
 	_sorted_dequeue	: VecDeque<VideoTaskFull>,
 	/// This keeps track of who currently needs attention in the batch.
-	_batch_set: HashSet<Token>
+	_batch_set: HashSet<Token>,
+
+	/// This is an option so we can take it out and keep reusing and reinterpreting it, while having a centralized place for it.
+	image_buffer	: Option<Vec<u8>>,
 }
 
 type TryInsertionError = ();
@@ -147,6 +151,7 @@ impl VideoQueue
 						_chrono_stack: Default::default(),
 						_sorted_dequeue: Default::default(),
 						_batch_set: Default::default(),
+						image_buffer: Some(VideoQueueThreadInfo::initialize_image_buffer()),
 					};
 					thread_stuff.do_work()
 				})?;
@@ -413,9 +418,11 @@ impl VideoQueueThreadInfo
 			FrameType::H264 => { todo!("Haven't implemented CV from H264") }
 		};
 
+		let image_buffer = self.get_image_buffer();
+
 		//RgbImage and ImageBuffer<Rgb<u8>, Vec<u8>> are equivalent.
 		let mut image =
-			match RgbImage::from_raw(width, height, image.into_vec()) { // why is there literally no documentation on Box<T> into_vec method???
+			match RgbImage::from_raw(width, height, image_buffer) { // why is there literally no documentation on Box<T> into_vec method???
 				None => { self.logger.error("Invalid image given to cv.")?; return Ok(()) } // maybe I should add an error type for this...
 				Some(image) => { DynamicImage::ImageRgb8(image).into_rgb32f() }
 			};
@@ -423,7 +430,7 @@ impl VideoQueueThreadInfo
 		// FIXME: implement more proper logic
 		image = DynamicImage::ImageRgb32F(image).resize_exact(HandLandmarker::WIDTH as u32, HandLandmarker::HEIGHT as u32, CatmullRom).into_rgb32f();
 
-		let output = self.model.run_model(image)?;
+		let output = self.model.run_model(&image)?;
 		let digits = HandLandmarker::get_digits(&output);
 		let digits_down_array = HandLandmarker::digits_down(&digits);
 		let mut num_digits_down = 0;
@@ -431,7 +438,21 @@ impl VideoQueueThreadInfo
 		digits_down_array.iter().for_each(|digit| { if *digit { num_digits_down += 1 } });
 
 
-
+		self.image_buffer = Some(vec_to_vec::<f32, u8>(image.into_raw()));
 		Ok(())
+	} // fn internal_cv
+
+	// during testing, I never had to reallocate.
+	fn get_image_buffer(&mut self) -> Vec<u8>
+	{
+		self.image_buffer.take().unwrap_or_else(|| { Self::initialize_image_buffer() })
 	}
-}
+
+	fn initialize_image_buffer() -> Vec<u8>
+	{
+		let new_vec = Vec::<f32>::new();
+		vec_to_vec(new_vec)
+	}
+
+
+} // impl VideoQueueThreadInfo
