@@ -140,14 +140,15 @@ class _MyHomePageState extends State<MyHomePage> {
                               child: ListView.separated(//allows the creation of a list with seperators
                                 itemCount: items.length,
                                 itemBuilder: (context, index){
+                                  final String ssid = items[index];
                                   return ListTile(
-                                    title: Text(items[index]),
+                                    title: Text(ssid),
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
                                     onTap: (){
-                                      //notifies user they connected
+                                      //final connected = info.sendSSID(ssid);                                      //notifies user they connected
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Connecting to...Drone${index +1}'))
+                                          SnackBar(content: Text('Connecting to...$ssid'))
                                       );
                                       //goes to main screen after connection
                                       Navigator.of(context).push(

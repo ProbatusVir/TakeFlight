@@ -130,6 +130,12 @@ class Info{
     }
     return completer.future;
   }
+
+  /*bool sendSSID(String SSID){
+    if(infoSoc != null){
+      infoSoc?.add([0x03, SSID])
+    }
+  }*/
 }
 
 class DroneVideo{
