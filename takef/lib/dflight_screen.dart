@@ -28,6 +28,15 @@ class DeskFlight extends StatefulWidget{
 
 class _DeskFlightState extends State<DeskFlight>{
 
+  double lr = 0;
+  double fb = 0;
+  double ud = 0;
+  double rot = 0;
+
+  void sendRC(){
+    widget.rcCon.buildPacket(lr,0,fb,0);
+    widget.control.sendRC();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,10 +101,9 @@ class _DeskFlightState extends State<DeskFlight>{
               child: ThumbStickController(
                 onChange: (x, y){
                   //Will be movement logic here
-                  final lr = x;
-                  final fb = y;
-                  widget.rcCon.buildPacket(lr,0,fb,0);
-                  widget.control.sendRC();
+                  lr = x;
+                  fb = y;
+                 sendRC();
                 },
               ),
             ),
@@ -108,10 +116,9 @@ class _DeskFlightState extends State<DeskFlight>{
                 input: 1,
                 onChange: (x, y){
                   //Will be height/axis control logic
-                  final rot = x;
-                  final ud = y;
-                  rcCon.buildPacket(0,ud,0,rot);
-                  control.sendRC();
+                  rot = x;
+                  ud = y;
+                  sendRC();
                 },
               ),
             ),

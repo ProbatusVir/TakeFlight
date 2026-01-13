@@ -29,6 +29,16 @@ class MobileFlight extends StatefulWidget{
 
 class _MobileFlightState extends State<MobileFlight>{
 
+  double lr = 0;
+  double fb = 0;
+  double ud = 0;
+  double rot = 0;
+
+  void sendRC(){
+    widget.rcCon.buildPacket(lr,0,fb,0);
+    widget.control.sendRC();
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky); //hides the nav and status bar
@@ -88,10 +98,9 @@ class _MobileFlightState extends State<MobileFlight>{
               child: ThumbStickController(
                 onChange: (x, y){
                   //Will be movement logic here
-                  final lr = x;
-                  final fb = y;
-                  rcCon.buildPacket(lr,0,fb,0);
-                  control.sendRC();
+                  lr = x;
+                  fb = y;
+                  sendRC();
                 },
               ),
             ),
@@ -104,10 +113,9 @@ class _MobileFlightState extends State<MobileFlight>{
                 input: 1,
                 onChange: (x, y){
                   //Will be height/axis control logic
-                  final rot = x;
-                  final ud = y;
-                  rcCon.buildPacket(0,ud,0,rot);
-                  control.sendRC();
+                  rot = x;
+                  ud = y;
+                  sendRC();
                 },
               ),
             ),
