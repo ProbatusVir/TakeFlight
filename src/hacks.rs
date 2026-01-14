@@ -21,6 +21,8 @@ pub(crate) fn vec_to_vec<T, U>(mut input : Vec<T>) -> Vec<U>
 	let vec_ptr = input.as_mut_ptr();
 	debug_assert_eq!((vec_ptr as usize) % align_of::<U>(), 0);
 	let new_length = available_bytes / size_of::<U>();
+	
+	std::mem::forget(input);
 
 	unsafe { Vec::from_raw_parts(vec_ptr as *mut U, 0, new_length) }
 }
