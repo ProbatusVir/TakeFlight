@@ -1,3 +1,4 @@
+use std::pin::Pin;
 use crate::geometry::{BoundBox, IndexBoundBox};
 use crate::hand_identifier::_IdentifierComponent::{Boxes, Confidences};
 use crate::{CVBase, ComputerVision};
@@ -8,7 +9,7 @@ use tflitec::tensor::{Shape, Tensor};
 
 pub struct HandIdentifier
 {
-	base : CVBase<'static>
+	base : Pin<Box<CVBase<'static>>>
 }
 
 pub enum _IdentifierComponent
