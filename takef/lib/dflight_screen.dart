@@ -138,30 +138,29 @@ class _DeskFlightState extends State<DeskFlight>{
     );
   }
   KeyEventResult _onKey(FocusNode node, KeyEvent event){
+    //Track keys being pressed/released
     if(event is KeyDownEvent){
       keys.add(event.logicalKey);
-      return KeyEventResult.handled;
     }else if (event is KeyUpEvent){
       keys.remove(event.logicalKey);
-      return KeyEventResult.handled;
+    }else{
+      return KeyEventResult.ignored;
     }
     ///Movement (Left Stick)
-    if (event.character == 'a' || event.character == 'd') {
-      lr = (keys.contains(LogicalKeyboardKey.keyD) ? 1 : 0) +
-          (keys.contains(LogicalKeyboardKey.keyA) ? -1 : 0);
-      return KeyEventResult.handled;
-    } else if (event.character == 'w' || event.character == 's'){
-      fb = (keys.contains(LogicalKeyboardKey.keyW) ? 1 : 0) +
-          (keys.contains(LogicalKeyboardKey.keyS) ? -1 : 0);
-      return KeyEventResult.handled;
-    }
+    lr = (keys.contains(LogicalKeyboardKey.keyD) ? 1 : 0) +
+        (keys.contains(LogicalKeyboardKey.keyA) ? -1 : 0);
+
+    fb = (keys.contains(LogicalKeyboardKey.keyW) ? 1 : 0) +
+        (keys.contains(LogicalKeyboardKey.keyS) ? -1 : 0);
+
     ///Altitude & Rotation (Right Stick)
-    if(event.character == 'q' || event.character == 'e'){
-      rot = (keys.contains(LogicalKeyboardKey.keyQ) ? 1 : 0) +
-          (keys.contains(LogicalKeyboardKey.keyE) ? -1 : 0);
-      return KeyEventResult.handled;
-    }
+    rot = (keys.contains(LogicalKeyboardKey.keyQ) ? 1 : 0) +
+        (keys.contains(LogicalKeyboardKey.keyE) ? -1 : 0);
+
+    ud = (keys.contains(LogicalKeyboardKey.arrowUp) ? 1 : 0) +
+        (keys.contains(LogicalKeyboardKey.arrowDown) ? -1 : 0);
+
     sendRC();
-    return KeyEventResult.ignored;
+    return KeyEventResult.handled;
   }
 }
