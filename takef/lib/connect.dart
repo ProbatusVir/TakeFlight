@@ -135,7 +135,7 @@ class Info{
     bool sent = false;
     if(infoSoc != null){
       try{
-        infoSoc?.add([0x00]);
+        infoSoc?.add([0x04]);
         infoSoc?.write(ssid);
         sent = true;
         print("Sent SSID back to server");
