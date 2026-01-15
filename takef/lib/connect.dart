@@ -4,7 +4,7 @@ import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart'; //For Uint8List
-import 'flight_screen.dart';
+import 'central_screen.dart';
 import 'video_feed.dart';
 class ControlRC{
   Socket? controlSoc;
@@ -129,6 +129,21 @@ class Info{
       );
     }
     return completer.future;
+  }
+
+  bool sendSSID(String ssid){
+    bool sent = false;
+    if(infoSoc != null){
+      try{
+        infoSoc?.add([0x00]);
+        infoSoc?.write(ssid);
+        sent = true;
+        print("Sent SSID back to server");
+      } catch (e){
+        print("Unable to send SSID back to server");
+      }
+    }
+    return sent;
   }
 }
 

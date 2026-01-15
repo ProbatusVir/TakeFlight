@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
+
 import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
-import 'flight_screen.dart';
-import 'video_feed.dart';
+import 'central_screen.dart';
 import 'settings_screen.dart';
+import 'msettings_screen.dart';
 
 void main() async {
   //WidgetsFlutterBinding.ensureInitialized(); //ensures flutter is initialized
@@ -41,6 +43,12 @@ class MyApp extends StatelessWidget {
       ),
       debugShowCheckedModeBanner: false, //gets rid of debug sash
       home: const MyHomePage(title: 'TakeFlight'),
+      routes: {
+        '/personalization': (_) =>  throw UnimplementedError(),//const PersonalizationPage(),
+        '/drone-info': (_) => throw UnimplementedError(),//const DroneInfoPage(),
+        '/gesture-control': (_) => throw UnimplementedError(),//const GestureControlPage(),
+        '/flight-logs': (_) => throw UnimplementedError(),//const FlightLogsPage()
+      },
     );
   }
 }
@@ -83,9 +91,15 @@ class _MyHomePageState extends State<MyHomePage> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
           onPressed: (){
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (BuildContext context) => Settings())
+          if(defaultTargetPlatform == TargetPlatform.android){
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext context) => MsettingsScreen())
             );
+          }else{
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext context) => Settings())
+            );
+          }
           },
           child: Icon(
             Icons.settings_outlined,
@@ -126,14 +140,15 @@ class _MyHomePageState extends State<MyHomePage> {
                               child: ListView.separated(//allows the creation of a list with seperators
                                 itemCount: items.length,
                                 itemBuilder: (context, index){
+                                  final String ssid = items[index];
                                   return ListTile(
-                                    title: Text(items[index]),
+                                    title: Text(ssid),
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
                                     onTap: (){
-                                      //notifies user they connected
+                                      final connected = info.sendSSID(ssid);                                      //notifies user they connected
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Connecting to...Drone${index +1}'))
+                                          SnackBar(content: Text('Connecting to...$ssid'))
                                       );
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
