@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::c_void;
 use crate::logger::Logger;
 use crate::video::decode::raw_h264_to_rgb;
-use crate::{Error, InternalSignal};
+use crate::{Error, InternalFlightDirection, InternalSignal};
 use image::codecs::png::PngEncoder;
 use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, Rgb, Rgb32FImage, RgbImage};
 use mio::{ Token };
@@ -424,13 +424,14 @@ impl VideoQueueThreadInfo
 		image_writer.read_to_end(&mut image_buffer)?;
 
 		//RgbImage and ImageBuffer<Rgb<u8>, Vec<u8>> are equivalent.
-		let mut image =
-			match RgbImage::from_raw(width, height, image_buffer) { // why is there literally no documentation on Box<T> into_vec method???
-				None => { self.logger.error("Invalid image given to cv.")?; return Ok(()) } // maybe I should add an error type for this...
-				Some(image) => { DynamicImage::ImageRgb8(image).into_rgb32f() }
-			};
+		let mut image = match RgbImage::from_raw(width, height, image_buffer) { // why is there literally no documentation on Box<T> into_vec method???
+			None => { self.logger.error("Invalid image given to cv.")?; return Ok(()) } // maybe I should add an error type for this...
+			Some(image) => { DynamicImage::ImageRgb8(image).into_rgb32f() }
+		};
+
 		// FIXME: we're gonna make the scaling its own dang function!
 		// FIXME: implement more proper logic
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		image = DynamicImage::ImageRgb32F(image).resize_exact(HandLandmarker::WIDTH as u32, HandLandmarker::HEIGHT as u32, CatmullRom).into_rgb32f();
 
 		let output = self.model.run_model(&image)?;
@@ -439,6 +440,28 @@ impl VideoQueueThreadInfo
 		let mut num_digits_down = 0;
 		// hideous one-liner for counting all the digits.
 		digits_down_array.iter().for_each(|digit| { if *digit { num_digits_down += 1 } });
+
+		let command = match digits_down_array
+		{
+			[true,true,true,true]	=> { Some(InternalFlightDirection::Stop) }
+			[false,true,true,true]	=> { Some(InternalFlightDirection::Forward) }
+			[true,true,true,false]	=> { Some(InternalFlightDirection::Backward) }
+			[true,false,true,true]	=> { Some(InternalFlightDirection::Left) }
+			[true,true,false,true]	=> { Some(InternalFlightDirection::Right) }
+			[true,false,false,true]	=> { Some(InternalFlightDirection::SpinC) }
+			[false,true,true,false]	=> { Some(InternalFlightDirection::SpinCC) }
+			_ => None
+		};
+
+		match command {
+			None => {}
+			Some(direction) => { self.sender.send_event(InternalSignal::FlightDirection(direction))? }
+		};
+
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 		let mut image = image.into_raw();
 		image.clear();
