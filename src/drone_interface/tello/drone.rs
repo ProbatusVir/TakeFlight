@@ -209,7 +209,7 @@ impl drone_interface::Drone for TelloDrone
 		self.command_sock.send(&pack)?;
 		self.seq_number += 1;
 
-		self.logger.info_from_string(format!("Just sent out the string: {}", crate::debug_utils::raw_hex_to_string(&pack)))?;
+		//self.logger.info_from_string(format!("Just sent out the string: {}", crate::debug_utils::raw_hex_to_string(&pack)))?;
 
 		Ok(())
 	}
@@ -624,8 +624,10 @@ impl TelloDrone
 
 			//Check if the frame is ending
 			// -- The following is not always true. -- 0x88 is the terminal local number.
+			// CLARIFY: When is self.vid_frame_number getting set? Does this make sense?
 			if frame_number != self.vid_frame_number && self.frame_buffer.len() > 0
 			{
+
 				// Check that we have all the components to output a coherent image.
 				if self.sps.is_some() && self.pps.is_some() && self.idr.len() > 0
 				{	// The following is for POI.
