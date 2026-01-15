@@ -11,7 +11,8 @@ class _GestureControlPageState extends State<GestureControlPage>{
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
-    throw UnimplementedError();
+    return  Center(
+      child: Text('Gesture Settings content'),
+    );
   }
 }

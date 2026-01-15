@@ -11,7 +11,8 @@ class _FlightLogsPageState extends State<FlightLogsPage>{
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
-    throw UnimplementedError();
+    return Center(
+      child: Text('Flight Logs'),
+    );
   }
 }

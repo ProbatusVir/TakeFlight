@@ -11,7 +11,8 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
-    throw UnimplementedError();
+    return Center(
+      child: Text('Personalization content'),
+    );
   }
 }
