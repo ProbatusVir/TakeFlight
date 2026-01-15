@@ -1,4 +1,4 @@
-/// Vec<T> -> Vec<U>
+/// `Vec<T> -> Vec<U>`
 ///
 /// This requires three things:
 ///
