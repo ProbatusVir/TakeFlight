@@ -1,9 +1,13 @@
 import 'package:flutter/foundation.dart';
+import 'package:takef/personalization_tab.dart';
 
 import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
 import 'central_screen.dart';
+import 'drone_info_tab.dart';
+import 'flight_logs_tab.dart';
+import 'gesture_tab.dart';
 import 'settings_screen.dart';
 import 'msettings_screen.dart';
 
@@ -44,10 +48,10 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false, //gets rid of debug sash
       home: const MyHomePage(title: 'TakeFlight'),
       routes: {
-        '/personalization': (_) =>  throw UnimplementedError(),//const PersonalizationPage(),
-        '/drone-info': (_) => throw UnimplementedError(),//const DroneInfoPage(),
-        '/gesture-control': (_) => throw UnimplementedError(),//const GestureControlPage(),
-        '/flight-logs': (_) => throw UnimplementedError(),//const FlightLogsPage()
+        '/personalization': (_) =>  const PersonalizationPage(),
+        '/drone-info': (_) => const DroneInfoPage(),
+        '/gesture-control': (_) => const GestureControlPage(),
+        '/flight-logs': (_) => const FlightLogsPage()
       },
     );
   }
