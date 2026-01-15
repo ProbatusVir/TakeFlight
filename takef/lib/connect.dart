@@ -131,11 +131,20 @@ class Info{
     return completer.future;
   }
 
-  /*bool sendSSID(String SSID){
+  bool sendSSID(String ssid){
+    bool sent = false;
     if(infoSoc != null){
-      infoSoc?.add([0x03, SSID])
+      try{
+        infoSoc?.add([0x00]);
+        infoSoc?.write(ssid);
+        sent = true;
+        print("Sent SSID back to server");
+      } catch (e){
+        print("Unable to send SSID back to server");
+      }
     }
-  }*/
+    return sent;
+  }
 }
 
 class DroneVideo{

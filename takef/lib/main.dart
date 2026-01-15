@@ -146,7 +146,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
                                     onTap: (){
-                                      //final connected = info.sendSSID(ssid);                                      //notifies user they connected
+                                      final connected = info.sendSSID(ssid);                                      //notifies user they connected
                                       ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text('Connecting to...$ssid'))
                                       );
