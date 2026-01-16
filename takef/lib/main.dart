@@ -20,6 +20,24 @@ void main() async {
 
 final info = Info();
 
+enum ConnectionState{
+  connecting(0),
+  connected(1),
+  failed(2),
+  disconnected(3),
+  unavailable(255);
+
+  final int code;
+  const ConnectionState(this.code);
+
+  static ConnectionState fromCode(int code) {
+    return ConnectionState.values.firstWhere(
+          (state) => state.code == code,
+      orElse: () => ConnectionState.unavailable,
+    );
+  }
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -80,7 +98,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void startInfo() async{
     port = await getServerPort();
     await info.connect(port);
-    await info.infoID(0x00); //SSID
+    await info.infoID(0x00); ///SSID
     items = await info.receiveSSID();
   }
 
@@ -150,15 +168,26 @@ class _MyHomePageState extends State<MyHomePage> {
                                     title: Text(ssid),
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
-                                    onTap: (){
-                                      final connected = info.sendSSID(ssid);                                      //notifies user they connected
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Connecting to...$ssid'))
-                                      );
-                                      //goes to main screen after connection
-                                      Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port,))
-                                      );
+                                    onTap: () async{
+                                      await info.infoID(0x03); ///DroneConnectionState
+                                      final status = await info.sendSSID(ssid);
+                                      switch (status){
+                                        case ConnectionState.connecting:
+                                        // TODO: Handle this case.
+                                          throw UnimplementedError();
+                                        case ConnectionState.connected:
+                                          // TODO: Handle this case.
+                                          throw UnimplementedError();
+                                        case ConnectionState.failed:
+                                          // TODO: Handle this case.
+                                          throw UnimplementedError();
+                                        case ConnectionState.disconnected:
+                                          // TODO: Handle this case.
+                                          throw UnimplementedError();
+                                        case ConnectionState.unavailable:
+                                          // TODO: Handle this case.
+                                          throw UnimplementedError();
+                                      }
                                     },
                                   );
                                 },
