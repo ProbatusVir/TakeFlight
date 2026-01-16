@@ -67,7 +67,7 @@ class ControlRC{
 class Info{
   Socket? infoSoc;
 
-  Future<void> connect (int infoID, int port) async{
+  Future<void> connect (int port) async{
     try{
       infoSoc = await Socket.connect('127.0.0.1', port);
       //Prints are for debugging
@@ -80,6 +80,11 @@ class Info{
       infoSoc?.add([0x42, 0x42, 0x03]);
       await infoSoc?.flush();
       print('Info Handshake was sent');
+    }
+  }
+
+  Future<void> infoID(int infoID) async{
+    if(infoSoc != null){
       //send data [INFO_ID : u8, RO_SHAM_BO : u8, payload_size : u16, PAYLOAD]
       final packet = Uint8List.fromList([
         infoID,  //SSID
@@ -93,7 +98,7 @@ class Info{
     }
   }
 
-  Future<List<String>> receiveInfo() async{
+  Future<List<String>> receiveSSID() async{
     final completer = Completer<List<String>>(); //manual control of future
 
     //receive SSID

@@ -79,8 +79,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void startInfo() async{
     port = await getServerPort();
-    await info.connect(0x00, port); //SSID
-    items = await info.receiveInfo();
+    await info.connect(port);
+    await info.infoID(0x00); //SSID
+    items = await info.receiveSSID();
   }
 
   @override
