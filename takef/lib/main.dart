@@ -169,7 +169,14 @@ class _MyHomePageState extends State<MyHomePage> {
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
                                     onTap: () async{
-                                      await info.infoID(0x04);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Connecting to...$ssid'))
+                                      );
+                                      //goes to main screen after connection
+                                      Navigator.of(context).push(
+                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port,))
+                                      );
+                                      /*await info.infoID(0x04);
                                       info.sendSSID(ssid);
                                       await info.infoID(0x03); ///DroneConnectionState
                                       final status = await info.connection();
@@ -207,7 +214,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                               SnackBar(content: Text("Drone-$ssid is Unavailable"))
                                           );
                                           break;
-                                      }
+                                      }*/
                                     },
                                   );
                                 },
