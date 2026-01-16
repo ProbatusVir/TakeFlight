@@ -126,7 +126,7 @@ class Info{
     switch(type){
       ///SSIDS
       case 0x00:
-        _handleSSIDList(data);
+        handleSSIDList(data);
         break;
         ///DroneStateDump
       case 0x01:
@@ -136,6 +136,7 @@ class Info{
         break;
         ///DroneConnection
       case 0x03:
+        handleConnectionState(data);
         break;
         ///Drone Selection
       case 0x04:
@@ -143,7 +144,7 @@ class Info{
     }
   }
 
-  void _handleSSIDList(Uint8List data) {
+  void handleSSIDList(Uint8List data) {
     //receive SSID
     List<String> recSSID = [];
     try {
@@ -163,18 +164,29 @@ class Info{
     }
   }
 
+  void handleConnectionState(Uint8List data){
+    print("Received Connection State data: $data");
+    final int code = data.length > 1 ? data[1] : 255; //assuming the received connection state is index 1
+    final state = ConnectionState.fromCode(code);
+    connectionCompleter!.complete(state);
+    connectionCompleter = null;
+  }
+
   Future<List<String>> receiveSSID() async{
     ssidCompleter = Completer<List<String>>();
     return ssidCompleter!.future;
   }
 
-  Future<ConnectionState> sendSSID(String ssid) async{
+  Future<ConnectionState> connection() async{
+    connectionCompleter = Completer<ConnectionState>();
+    return connectionCompleter!.future;
+  }
+  void sendSSID(String ssid) async{
+    await infoID(0x04);
     final ssidByte = utf8.encode(ssid);
-    int state = 0;
     if(infoSoc != null){
       infoSoc?.add(ssidByte);
     }
-    return ConnectionState.unavailable;
   }
 }
 
