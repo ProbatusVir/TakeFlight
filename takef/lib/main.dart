@@ -169,24 +169,44 @@ class _MyHomePageState extends State<MyHomePage> {
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
                                     onTap: () async{
+                                      await info.infoID(0x04);
+                                      info.sendSSID(ssid);
                                       await info.infoID(0x03); ///DroneConnectionState
-                                      final status = await info.sendSSID(ssid);
+                                      final status = await info.connection();
+                                      //do a mounted check to prevent crashes after await
+                                      if(!mounted) return;
                                       switch (status){
                                         case ConnectionState.connecting:
-                                        // TODO: Handle this case.
-                                          throw UnimplementedError();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Connecting to...drone-$ssid"))
+                                          );
+                                          break;
                                         case ConnectionState.connected:
-                                          // TODO: Handle this case.
-                                          throw UnimplementedError();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text("Connected to drone-$ssid"))
+                                          );
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => FlightScreen(port: port))
+                                          );
+                                          break;
                                         case ConnectionState.failed:
-                                          // TODO: Handle this case.
-                                          throw UnimplementedError();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Failed to connect to drone-$ssid"))
+                                          );
+                                          //TODO::Implement reconnect menu/exit
+                                          break;
                                         case ConnectionState.disconnected:
-                                          // TODO: Handle this case.
-                                          throw UnimplementedError();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Disconnected from drone-$ssid"))
+                                          );
+                                          //TODO::Implement reconnect menu/exit
+                                          break;
                                         case ConnectionState.unavailable:
-                                          // TODO: Handle this case.
-                                          throw UnimplementedError();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Drone-$ssid is Unavailable"))
+                                          );
+                                          break;
                                       }
                                     },
                                   );

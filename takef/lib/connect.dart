@@ -182,7 +182,6 @@ class Info{
     return connectionCompleter!.future;
   }
   void sendSSID(String ssid) async{
-    await infoID(0x04);
     final ssidByte = utf8.encode(ssid);
     if(infoSoc != null){
       infoSoc?.add(ssidByte);
