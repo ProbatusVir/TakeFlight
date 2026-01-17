@@ -397,7 +397,7 @@ impl ServerInstance
 				{
 					// If the token doesn't actually exist, that's a problem. But one that we can recover from!
 					None => {
-						self.info_token = None; // I guess this is valid because Token is copy?
+						self.info_token = None; 
 						Err(Error::Custom("While attempting to send info, found that the current token was invalid!"))
 					}
 
