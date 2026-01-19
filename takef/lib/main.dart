@@ -1,9 +1,15 @@
+import 'package:flutter/foundation.dart';
+import 'package:takef/personalization_tab.dart';
+
 import 'connect.dart';
 import 'package:flutter/material.dart';
 //import 'package:flutter_svg/flutter_svg.dart'; //svg package handler
-import 'flight_screen.dart';
-import 'video_feed.dart';
+import 'central_screen.dart';
+import 'drone_info_tab.dart';
+import 'flight_logs_tab.dart';
+import 'gesture_tab.dart';
 import 'settings_screen.dart';
+import 'msettings_screen.dart';
 
 void main() async {
   //WidgetsFlutterBinding.ensureInitialized(); //ensures flutter is initialized
@@ -41,6 +47,12 @@ class MyApp extends StatelessWidget {
       ),
       debugShowCheckedModeBanner: false, //gets rid of debug sash
       home: const MyHomePage(title: 'TakeFlight'),
+      routes: {
+        '/personalization': (_) =>  const PersonalizationPage(),
+        '/drone-info': (_) => const DroneInfoPage(),
+        '/gesture-control': (_) => const GestureControlPage(),
+        '/flight-logs': (_) => const FlightLogsPage()
+      },
     );
   }
 }
@@ -67,8 +79,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void startInfo() async{
     port = await getServerPort();
-    await info.connect(0x00, port); //SSID
-    items = await info.receiveInfo();
+    await info.connect(port);
+    await info.infoID(0x00); //SSID
+    items = await info.receiveSSID();
   }
 
   @override
@@ -83,9 +96,15 @@ class _MyHomePageState extends State<MyHomePage> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
           onPressed: (){
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (BuildContext context) => Settings())
+          if(defaultTargetPlatform == TargetPlatform.android){
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext context) => MsettingsScreen())
             );
+          }else{
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext context) => Settings())
+            );
+          }
           },
           child: Icon(
             Icons.settings_outlined,
@@ -126,14 +145,15 @@ class _MyHomePageState extends State<MyHomePage> {
                               child: ListView.separated(//allows the creation of a list with seperators
                                 itemCount: items.length,
                                 itemBuilder: (context, index){
+                                  final String ssid = items[index];
                                   return ListTile(
-                                    title: Text(items[index]),
+                                    title: Text(ssid),
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
                                     onTap: (){
-                                      //notifies user they connected
+                                      final connected = info.sendSSID(ssid);                                      //notifies user they connected
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Connecting to...Drone${index +1}'))
+                                          SnackBar(content: Text('Connecting to...$ssid'))
                                       );
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
