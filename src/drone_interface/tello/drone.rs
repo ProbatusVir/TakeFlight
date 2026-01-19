@@ -33,7 +33,7 @@ pub struct TelloDrone
 	frame_buffer	: Vec<u8>,
 	image			: Option<DynamicImage>,
 
-	last_sps_pps_req: std::time::SystemTime,
+	last_sps_pps_req: SystemTime,
 	sps				: Option<[u8;15 - 2]>,
 	pps				: Option<[u8;10 - 2]>,
 	idr				: Vec<u8>,
