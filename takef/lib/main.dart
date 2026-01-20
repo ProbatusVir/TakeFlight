@@ -67,7 +67,7 @@ class MyApp extends StatelessWidget {
       home: const MyHomePage(title: 'TakeFlight'),
       routes: {
         '/personalization': (_) =>  const PersonalizationPage(),
-        '/drone-info': (_) => const DroneInfoPage(),
+        '/drone-info': (_) => DroneInfoPage(info: info,),
         '/gesture-control': (_) => const GestureControlPage(),
         '/flight-logs': (_) => const FlightLogsPage()
       },
@@ -120,7 +120,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           }else{
             Navigator.of(context).push(
-                MaterialPageRoute(builder: (BuildContext context) => Settings())
+                MaterialPageRoute(builder: (BuildContext context) => Settings(info: info,))
             );
           }
           },
@@ -174,7 +174,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       );
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port,))
+                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port, info: info,))
                                       );
                                       /*await info.infoID(0x04);
                                       info.sendSSID(ssid);

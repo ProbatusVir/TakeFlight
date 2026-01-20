@@ -15,13 +15,15 @@ class DeskFlight extends StatefulWidget{
     required this.videoKey,
     required this.port,
     required this.control,
-    required this.rcCon
+    required this.rcCon,
+    required this.info
   });
 
   final GlobalKey<VideoFeedState> videoKey;
   final int port;
   final ControlRC control;
   final RC rcCon;
+  final Info info;
 
   @override
   State<DeskFlight> createState() => _DeskFlightState();
@@ -85,7 +87,7 @@ class _DeskFlightState extends State<DeskFlight>{
                     IconButton(
                         onPressed: () {
                           Navigator.of(context).push(
-                              MaterialPageRoute(builder: (BuildContext context) => Settings())
+                              MaterialPageRoute(builder: (BuildContext context) => Settings(info: widget.info,))
                           );
                         },
                         icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)

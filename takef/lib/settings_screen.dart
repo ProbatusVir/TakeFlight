@@ -3,9 +3,11 @@ import 'package:takef/drone_info_tab.dart';
 import 'package:takef/flight_logs_tab.dart';
 import 'package:takef/gesture_tab.dart';
 import 'package:takef/personalization_tab.dart';
+import 'connect.dart';
 
 class Settings extends StatelessWidget{
-  const Settings({super.key});
+  const Settings({super.key, required this.info});
+  final Info info;
 
   @override
   Widget build(BuildContext context){
@@ -53,7 +55,7 @@ class Settings extends StatelessWidget{
                   children: [
                     //Drone info tab and down in order of tab creation
                     PersonalizationPage(),
-                    DroneInfoPage(),
+                    DroneInfoPage(info: info,),
                     GestureControlPage(),
                     FlightLogsPage()
                   ],

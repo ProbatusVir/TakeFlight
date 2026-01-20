@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'connect.dart';
+
 class DroneInfoPage extends StatefulWidget{
-  const DroneInfoPage({super.key});
+  const DroneInfoPage({super.key, required this.info});
+  final Info info;
 
   @override
   State<DroneInfoPage> createState() => _DroneInfoPageState();

@@ -47,8 +47,9 @@ bool isMobile(BuildContext context){
 }
 
 class FlightScreen extends StatefulWidget{
-  const FlightScreen({super.key,required this.port});
+  const FlightScreen({super.key,required this.port, required this.info});
   final int port;
+  final Info info;
 
   @override
   State<FlightScreen> createState() => _FlightScreenState();
@@ -85,8 +86,8 @@ class _FlightScreenState extends State<FlightScreen>{
   @override
   Widget build(BuildContext context) {
     return isMobile(context) ?
-    MobileFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon,)
+    MobileFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon, info: widget.info,)
         :
-    DeskFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon,);
+    DeskFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon, info: widget.info,);
   }
 }
