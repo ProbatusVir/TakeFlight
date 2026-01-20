@@ -20,6 +20,24 @@ void main() async {
 
 final info = Info();
 
+enum ConnectionState{
+  connecting(0),
+  connected(1),
+  failed(2),
+  disconnected(3),
+  unavailable(255);
+
+  final int code;
+  const ConnectionState(this.code);
+
+  static ConnectionState fromCode(int code) {
+    return ConnectionState.values.firstWhere(
+          (state) => state.code == code,
+      orElse: () => ConnectionState.unavailable,
+    );
+  }
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -80,7 +98,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void startInfo() async{
     port = await getServerPort();
     await info.connect(port);
-    await info.infoID(0x00); //SSID
+    await info.infoID(0x00); ///SSID
     items = await info.receiveSSID();
   }
 
@@ -150,8 +168,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                     title: Text(ssid),
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
-                                    onTap: (){
-                                      final connected = info.sendSSID(ssid);                                      //notifies user they connected
+                                    onTap: () async{
                                       ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text('Connecting to...$ssid'))
                                       );
@@ -159,6 +176,45 @@ class _MyHomePageState extends State<MyHomePage> {
                                       Navigator.of(context).push(
                                           MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port,))
                                       );
+                                      /*await info.infoID(0x04);
+                                      info.sendSSID(ssid);
+                                      await info.infoID(0x03); ///DroneConnectionState
+                                      final status = await info.connection();
+                                      //do a mounted check to prevent crashes after await
+                                      if(!mounted) return;
+                                      switch (status){
+                                        case ConnectionState.connecting:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Connecting to...drone-$ssid"))
+                                          );
+                                          break;
+                                        case ConnectionState.connected:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text("Connected to drone-$ssid"))
+                                          );
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => FlightScreen(port: port))
+                                          );
+                                          break;
+                                        case ConnectionState.failed:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Failed to connect to drone-$ssid"))
+                                          );
+                                          //TODO::Implement reconnect menu/exit
+                                          break;
+                                        case ConnectionState.disconnected:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Disconnected from drone-$ssid"))
+                                          );
+                                          //TODO::Implement reconnect menu/exit
+                                          break;
+                                        case ConnectionState.unavailable:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Drone-$ssid is Unavailable"))
+                                          );
+                                          break;
+                                      }*/
                                     },
                                   );
                                 },
