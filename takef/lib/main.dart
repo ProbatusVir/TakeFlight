@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:takef/personalization_tab.dart';
 
@@ -175,7 +177,13 @@ class _MyHomePageState extends State<MyHomePage> {
                                       );
                                       await info.infoID(0x01);
                                       await info.sendSSID(ssid);
-                                      droneInfo = await info.recieveDroneInfo();
+                                      try {
+                                        droneInfo =
+                                        await info.recieveDroneInfo().timeout(
+                                            const Duration(seconds: 3));
+                                      } on TimeoutException{
+                                        debugPrint("Drone Info not available");
+                                      }
                                       if(!mounted) return;
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
