@@ -23,7 +23,7 @@ class MobileFlight extends StatefulWidget{
   final int port;
   final ControlRC control;
   final RC rcCon;
-  final Info info;
+  final Map<String, dynamic> info;
 
   @override
   State<MobileFlight> createState() => _MobileFlightState();

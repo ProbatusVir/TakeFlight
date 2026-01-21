@@ -4,7 +4,7 @@ import 'connect.dart';
 
 class DroneInfoPage extends StatefulWidget{
   const DroneInfoPage({super.key, required this.info});
-  final Info info;
+  final Map<String, dynamic> info;
 
   @override
   State<DroneInfoPage> createState() => _DroneInfoPageState();

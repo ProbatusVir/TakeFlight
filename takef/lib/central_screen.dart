@@ -49,7 +49,7 @@ bool isMobile(BuildContext context){
 class FlightScreen extends StatefulWidget{
   const FlightScreen({super.key,required this.port, required this.info});
   final int port;
-  final Info info;
+  final Map<String, dynamic> info;
 
   @override
   State<FlightScreen> createState() => _FlightScreenState();

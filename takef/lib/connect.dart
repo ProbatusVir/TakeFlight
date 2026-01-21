@@ -71,6 +71,7 @@ class Info{
   //Completers for awaiting responses
   Completer<ConnectionState>? connectionCompleter;
   Completer<List<String>>? ssidCompleter;
+  Completer<Map<String, dynamic>>? infoDump;
 
   Future<void> connect (int port) async{
     try{
@@ -130,6 +131,7 @@ class Info{
         break;
         ///DroneStateDump
       case 0x01:
+        handleDroneDump(data);
         break;
         ///Record Request
       case 0x02:
@@ -164,6 +166,24 @@ class Info{
     }
   }
 
+  void handleDroneDump(Uint8List data){
+    Map<String,dynamic> droneInfo;
+
+    try{
+      final recData = utf8.decode(data, allowMalformed: true);
+      print('Received: $recData');
+
+      final jmap = recData.substring(recData.indexOf('{'));
+      final decoded = jsonDecode(jmap);
+      droneInfo = decoded;
+      infoDump!.complete(droneInfo);
+      infoDump = null;
+    } catch (e){
+      infoDump!.completeError(e);
+      infoDump = null;
+    }
+  }
+
   void handleConnectionState(Uint8List data){
     //print("Received Connection State data: $data");
     final int code = data.length > 1 ? data[1] : 255; //assuming the received connection state is index 1
@@ -177,11 +197,16 @@ class Info{
     return ssidCompleter!.future;
   }
 
+  Future<Map<String, dynamic>> recieveDroneInfo() async{
+    infoDump = Completer<Map<String, dynamic>>();
+    return infoDump!.future;
+  }
+
   Future<ConnectionState> connection() async{
     connectionCompleter = Completer<ConnectionState>();
     return connectionCompleter!.future;
   }
-  void sendSSID(String ssid) async{
+  Future<void> sendSSID(String ssid) async{
     final ssidByte = utf8.encode(ssid);
     if(infoSoc != null){
       infoSoc?.add(ssidByte);

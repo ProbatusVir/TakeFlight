@@ -7,7 +7,7 @@ import 'connect.dart';
 
 class Settings extends StatelessWidget{
   const Settings({super.key, required this.info});
-  final Info info;
+  final Map<String, dynamic> info;
 
   @override
   Widget build(BuildContext context){
