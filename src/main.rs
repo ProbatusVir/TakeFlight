@@ -71,7 +71,8 @@ pub(crate) enum InternalSignal
 #[derive(Debug)]
 pub(crate) enum InternalFlightDirection
 {
-	Stop,
+	Neutral,
+	// cardinals
 	Forward,
 	Backward,
 	Up,
@@ -80,6 +81,15 @@ pub(crate) enum InternalFlightDirection
 	Right,
 	SpinC,
 	SpinCC,
+	// flips
+	LeftFlip,
+	RightFlip,
+	FrontFlip,
+	BackFlip,
+	// special
+	Takeoff,
+	Land,
+	EmergencyLand,
 }
 
 
@@ -616,7 +626,8 @@ impl ServerInstance
 
 				match direction
 				{
-					InternalFlightDirection::Stop		=> { drone_lock.rc(0   , 0   , 0   , 0.0) }
+					InternalFlightDirection::Neutral		=> { drone_lock.rc(0   , 0   , 0   , 0.0) }
+					// cardinals
 					InternalFlightDirection::Forward	=> { drone_lock.rc(0   , 0   , 100 , 0.0) }
 					InternalFlightDirection::Backward	=> { drone_lock.rc(0   , 0   , -100, 0.0) }
 					InternalFlightDirection::Up			=> { drone_lock.rc(0   , 100 , 0   , 0.0) }
@@ -625,6 +636,16 @@ impl ServerInstance
 					InternalFlightDirection::Right		=> { drone_lock.rc(100 , 0   , 0   , 0.0) }
 					InternalFlightDirection::SpinC		=> { drone_lock.rc(0   , 0   , 0   , 100.0) }
 					InternalFlightDirection::SpinCC 	=> { drone_lock.rc(0   , 0   , 0   , -100.0) }
+
+					//InternalFlightDirection::LeftFlip => { drone_lock.frontflip() }
+					//InternalFlightDirection::RightFlip => { drone_lock. }
+					InternalFlightDirection::FrontFlip	=> { drone_lock.frontflip()}
+					InternalFlightDirection::BackFlip	=> { drone_lock.backflip() }
+					InternalFlightDirection::Takeoff	=> { drone_lock.takeoff() }
+					InternalFlightDirection::Land		=> { drone_lock.graceful_land() }
+					InternalFlightDirection::EmergencyLand => { drone_lock.emergency_land() }
+
+					_ => Ok(())
 				}
 			}
 		}
