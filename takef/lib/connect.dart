@@ -170,12 +170,26 @@ class Info{
     Map<String,dynamic> droneInfo;
 
     try{
-      final recData = utf8.decode(data, allowMalformed: true);
-      print('Received: $recData');
+      final payload = data.sublist(1);
 
-      final jmap = recData.substring(recData.indexOf('{'));
-      final decoded = jsonDecode(jmap);
-      droneInfo = decoded;
+      //6 bytes length for ssid error
+      final ssidBytes = payload.sublist(0, 6);
+      final isInvalid = ssidBytes.every((b) => b == 0x00);
+
+      //check to see if its invalid
+      if(isInvalid){
+        infoDump!.completeError(
+          StateError("Drone Dump unavailable")
+        );
+        infoDump = null;
+        return;
+      }
+
+      //json data
+      final jBytes = payload.sublist(6);
+      final jMap = utf8.decode(jBytes);
+      final decode = jsonDecode(jMap);
+      droneInfo = decode;
       infoDump!.complete(droneInfo);
       infoDump = null;
     } catch (e){
@@ -210,6 +224,7 @@ class Info{
     final ssidByte = utf8.encode(ssid);
     if(infoSoc != null){
       infoSoc?.add(ssidByte);
+      print("Sent selected SSID");
     }
   }
 }
