@@ -14,6 +14,7 @@ use std::fmt::Debug;
 use std::io::{Cursor, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use chrono::format::Fixed::Internal;
 use image::imageops::CatmullRom;
 use takeflight_computer_vision as tfcv;
 use takeflight_computer_vision::{ComputerVision, HandLandmarker};
@@ -443,13 +444,30 @@ impl VideoQueueThreadInfo
 
 		let command = match digits_down_array
 		{
-			[true,true,true,true]	=> { Some(InternalFlightDirection::Stop) }
-			[false,true,true,true]	=> { Some(InternalFlightDirection::Forward) }
-			[true,true,true,false]	=> { Some(InternalFlightDirection::Backward) }
-			[true,false,true,true]	=> { Some(InternalFlightDirection::Left) }
-			[true,true,false,true]	=> { Some(InternalFlightDirection::Right) }
-			[true,false,false,true]	=> { Some(InternalFlightDirection::SpinC) }
-			[false,true,true,false]	=> { Some(InternalFlightDirection::SpinCC) }
+			[true,true,true,true]		=> { Some(InternalFlightDirection::Neutral) }
+			// cardinals (+)
+			[true,false,false,false]	=> { Some(InternalFlightDirection::Up) }
+			[false,true,false,false]	=> { Some(InternalFlightDirection::Right) }
+			[false,false,true,false]	=> { Some(InternalFlightDirection::Forward) }
+			[false,false,false,true]	=> { Some(InternalFlightDirection::SpinC) }
+			// anti-cardinals (-)
+			[false,true,true,true]		=> { Some(InternalFlightDirection::Down) }
+			[true,false,true,true]		=> { Some(InternalFlightDirection::Left) }
+			[true,true,false,true]		=> { Some(InternalFlightDirection::Backward) }
+			[true,true,true,false]		=> { Some(InternalFlightDirection::SpinCC) }
+			// cardinal flips (+)
+			[true,false,true,false]		=> { Some(InternalFlightDirection::RightFlip) }
+			[true,true,false,false]		=> { Some(InternalFlightDirection::FrontFlip) }
+			// anti-cardinal flips (-)
+			[false,true,false,true]		=> { Some(InternalFlightDirection::LeftFlip) }
+			[false,false,true,true]		=> { Some(InternalFlightDirection::BackFlip) }
+			// takeoff (+)
+			[false,true,true,false]		=> { Some(InternalFlightDirection::Takeoff) }
+			// anti-takeoff (-)
+			[true,false,false,true]		=> { Some(InternalFlightDirection::Land) }
+
+			[false,false,false,false]	=> { Some(InternalFlightDirection::EmergencyLand) }
+
 			_ => None
 		};
 
