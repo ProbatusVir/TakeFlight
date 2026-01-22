@@ -67,6 +67,7 @@ class ControlRC{
 
 class Info{
   Socket? infoSoc;
+  final List<int> dataBuffer = [];
 
   //Completers for awaiting responses
   Completer<ConnectionState>? connectionCompleter;
@@ -120,8 +121,36 @@ class Info{
     }
   }
 
+  /*void socketData(Uint8List data){
+    dataBuffer.addAll(data);
+    processBufferData();
+  }
+
+  void processBufferData(){
+    //loop through buffer and get first 4 bytes(header)
+    while(dataBuffer.length >= 4){
+      final infoId = dataBuffer[0];
+      final RoShamBo = dataBuffer[1];
+      final payloadSize = (dataBuffer[2] << 8) | dataBuffer[3];
+      final totalSize = 4 + payloadSize;
+
+      //wait for more data if necessary
+      if(dataBuffer.length < totalSize){
+        return;
+      }
+
+      final packet = Uint8List.fromList(
+        dataBuffer.sublist(0, totalSize)
+      );
+      
+      //remove data from buffer and move on
+      dataBuffer.removeRange(0, totalSize);
+      handleData(packet);
+    }
+  }*/
+
   void handleData(Uint8List data){
-    //print("Received info data: $data");
+    print("Received info data: $data");
     final int type = data[0];
 
     switch(type){
@@ -220,7 +249,7 @@ class Info{
     connectionCompleter = Completer<ConnectionState>();
     return connectionCompleter!.future;
   }
-  Future<void> sendSSID(String ssid) async{
+  void sendSSID(String ssid) async{
     final ssidByte = utf8.encode(ssid);
     if(infoSoc != null){
       infoSoc?.add(ssidByte);
