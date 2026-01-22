@@ -176,7 +176,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                           SnackBar(content: Text('Connecting to...$ssid'))
                                       );
                                       await info.infoID(0x01);
-                                      await info.sendSSID(ssid);
+                                      info.sendSSID(ssid);
                                       try {
                                         droneInfo =
                                         await info.recieveDroneInfo().timeout(
