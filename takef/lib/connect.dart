@@ -150,7 +150,7 @@ class Info{
   }*/
 
   void handleData(Uint8List data){
-    print("Received info data: $data");
+    //print("Received info data: $data");
     final int type = data[0];
 
     switch(type){
