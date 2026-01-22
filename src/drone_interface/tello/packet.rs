@@ -25,6 +25,18 @@ enum PacketType
 	Unknown2	= 0x07,
 }
 
+pub(crate) enum FlipDirection {
+	Forward,
+	Left,
+	Backward,
+	Right,
+
+	ForwardLeft,
+	BackwardLeft,
+	BackwardRight,
+	ForwardRight,
+}
+
 
 #[repr(u16)]
 #[derive(FromPrimitive, IntoPrimitive)]
@@ -191,6 +203,13 @@ pub fn set_sticks(sequence_number : u16, rx : i16, ry : i16, lx : i16, ly : i16)
 pub const fn packet_size(payload_len : u16) -> [u8;2]
 {
 	((payload_len + 11) << 3).to_le_bytes()
+}
+
+pub fn flip(sequence_number : u16, direction : FlipDirection) -> [u8;12] {
+	let payload =  [direction as u8];
+	let (header, footer) = packet_header(&payload, PacketType::Flip, Command::Flip, sequence_number);
+
+	concat_arrays!(header, payload, footer)
 }
 
 
