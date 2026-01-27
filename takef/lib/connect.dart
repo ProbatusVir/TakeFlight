@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
-import 'package:flutter/cupertino.dart';
+import 'main.dart';
+import 'package:flutter/cupertino.dart' hide ConnectionState;
 import 'package:flutter/foundation.dart'; //For Uint8List
 import 'central_screen.dart';
 import 'video_feed.dart';
@@ -67,6 +68,10 @@ class ControlRC{
 class Info{
   Socket? infoSoc;
 
+  //Completers for awaiting responses
+  Completer<ConnectionState>? connectionCompleter;
+  Completer<List<String>>? ssidCompleter;
+
   Future<void> connect (int port) async{
     try{
       infoSoc = await Socket.connect('127.0.0.1', port);
@@ -81,6 +86,22 @@ class Info{
       await infoSoc?.flush();
       print('Info Handshake was sent');
     }
+
+    if(infoSoc != null){
+      infoSoc?.listen(
+        (Uint8List data){
+          handleData(data);
+        },
+        onError: (e){
+          print('Error on socket: $e');
+          infoSoc?.destroy();
+        },
+        onDone: (){
+          print('Server disconnected');
+          infoSoc?.destroy();
+        }
+      );
+    }
   }
 
   Future<void> infoID(int infoID) async{
@@ -94,61 +115,77 @@ class Info{
       infoSoc?.add(packet);
       //one flush
       await infoSoc?.flush();
-      print('SSID packet sent');
+      print('Info $infoID packet sent');
     }
+  }
+
+  void handleData(Uint8List data){
+    //print("Received info data: $data");
+    final int type = data[0];
+
+    switch(type){
+      ///SSIDS
+      case 0x00:
+        handleSSIDList(data);
+        break;
+        ///DroneStateDump
+      case 0x01:
+        break;
+        ///Record Request
+      case 0x02:
+        break;
+        ///DroneConnection
+      case 0x03:
+        handleConnectionState(data);
+        break;
+        ///Drone Selection
+      case 0x04:
+        break;
+    }
+  }
+
+  void handleSSIDList(Uint8List data) {
+    //receive SSID
+    List<String> recSSID = [];
+    try {
+      //decode received data
+      final recData = utf8.decode(data, allowMalformed: true);
+      print('Received: $recData');
+      //decode json
+      final jString = recData.substring(recData.indexOf('{'));
+      final decoded = jsonDecode(jString); // decoded is a Map<String, dynamic>
+      recSSID = List<String>.from(decoded['ssids']);
+      print('The received SSIDs: $recSSID');
+      ssidCompleter!.complete(recSSID);
+      ssidCompleter = null;
+    } catch (e) {
+      ssidCompleter!.completeError(e);
+      ssidCompleter = null;
+    }
+  }
+
+  void handleConnectionState(Uint8List data){
+    //print("Received Connection State data: $data");
+    final int code = data.length > 1 ? data[1] : 255; //assuming the received connection state is index 1
+    final state = ConnectionState.fromCode(code);
+    connectionCompleter!.complete(state);
+    connectionCompleter = null;
   }
 
   Future<List<String>> receiveSSID() async{
-    final completer = Completer<List<String>>(); //manual control of future
-
-    //receive SSID
-    List<String> recSSID = [];
-    if(infoSoc != null){
-      infoSoc?.listen(
-              (Uint8List data){
-            //decode received data
-            final recData = utf8.decode(data, allowMalformed: true);
-            print('Received: $recData');
-            //decode json
-            final jString = recData.substring(recData.indexOf('{'));
-            final decoded = jsonDecode(jString); // decoded is a Map<String, dynamic>
-            recSSID = List<String>.from(decoded['ssids']);
-            print('The received SSIDs: $recSSID');
-
-            //fulfill the future with the SSIDs
-            if(!completer.isCompleted){
-              completer.complete(recSSID);
-            }
-          },
-          onError: (e){
-            if(!completer.isCompleted){
-              completer.completeError(e);
-            }
-            print('Error on socket: $e');
-            infoSoc?.destroy();
-          },
-          onDone: (){
-            print('Server disconnected');
-            infoSoc?.destroy();
-          }
-      );
-    }
-    return completer.future;
+    ssidCompleter = Completer<List<String>>();
+    return ssidCompleter!.future;
   }
 
-  bool sendSSID(String ssid){
-    bool sent = false;
+  Future<ConnectionState> connection() async{
+    connectionCompleter = Completer<ConnectionState>();
+    return connectionCompleter!.future;
+  }
+  void sendSSID(String ssid) async{
+    final ssidByte = utf8.encode(ssid);
     if(infoSoc != null){
-      try{
-        infoSoc?.add([0x04]);
-        infoSoc?.write(ssid);
-        sent = true;
-        print("Sent SSID back to server");
-      } catch (e){
-        print("Unable to send SSID back to server");
-      }
+      infoSoc?.add(ssidByte);
     }
-    return sent;
   }
 }
 
