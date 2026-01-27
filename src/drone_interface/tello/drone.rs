@@ -591,70 +591,44 @@ impl TelloDrone
 
 	// Rewritten code.
 	fn receive_video_packet(&mut self) -> Result<(), Error> {
-		let packet = VideoPacket::recv_packet(&mut self.video_sock, &mut self.inner_read_buf)?;
+		// Despite what I thought, it seems that they're using a custom format for these packets.
+		// The frame starts [n_frame, 0x00, 0x00, 0x00, 0x00, 0x01, ...] (I suspect the second byte here is also the local number, but it has to be zero.)
+		// 	In contrast, the standard H.264 frame starts [0x00, 0x00, 0x01], which means that we can simply strip the first three bytes.
+		// The following packets will follow the format [n_frame, n_local, ...], so in theory, we just need to strip that data and we are all set.
+
+		// This is dumb, but this was not made with this approach in mind.
+
+		let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
+		let frame_number = self.inner_read_buf[0];
+		let local_number = self.inner_read_buf[1];
+
+		if self.vid_frame_number == None { self.vid_frame_number = Some(frame_number) };
 
 
-		if packet.is_idr() {
-			if Self::is_new_idr(self.idr_frame_number, packet.frame_number()) { // new idr
-				self.accumulated_frames.clear();
-				self.idr_frame_number = Some(packet.frame_number());
-				self.idr.clear();
-				self.idr.extend_from_slice(packet.payload());
-				self.vid_frame_number = None;
-			} else { // continuing an existing idr 
-				self.idr.extend_from_slice(packet.payload());
-				
-				/*if packet.is_end_of_frame() { // is the end of the idr. All accumulated frames are now stale.
-					self.accumulated_frames.clear();
-					//self.accumulated_frames.extend_from_slice(&self.idr);
-				}*/
-			}
-		} else { // !packet.is_idr()
-			if packet.is_pps() { self.pps = Some(packet.payload().try_into()?);
-				self.logger.info("Received updated PPS (smaller)")?;
-			}
-			else if packet.is_sps() { self.sps = match packet.payload().try_into() {
-				Ok(pps) => {
-					self.logger.info("Received updated SPS (larger)")?;
-					Some(pps)
-				}
-				Err(e) => { panic!("{e}, length: {}", packet.payload().len()) }//panic!("PPS unexpected length ({})!", packet.payload().len()) }
-			} }
-			// Neither the sps nor the pps packets span multiple packets. The following is frame data
-			else if (if let Some(frame_number) = self.vid_frame_number { packet.frame_number() == frame_number } else { false }) {
-				self.frame_buffer.extend_from_slice(packet.payload())
-			}
-			else { // starting a fresh frame.
-				// handle frame skip
-				if let Some(last_frame) = self.vid_frame_number {
-					let expected_frame = last_frame.wrapping_add(1);
-					if packet.frame_number() != expected_frame {
-						println!("Frame skip detected! Expected {expected_frame}, received {}, waiting for next IDR", packet.frame_number());
-						// This will all be cleaned up when the IDR resets
-						return Ok(());
-					}
-				}
-				self.accumulated_frames.extend_from_slice(&self.frame_buffer);
 
+		self.handle_new_packet_number(bytes_read, frame_number, local_number)?;
 
-				println!("Completing frame {:?}, starting frame {}", self.vid_frame_number, packet.frame_number());
-				self.vid_frame_number = Some(packet.frame_number());
-				self.frame_buffer.clear();
-				self.frame_buffer.extend_from_slice(packet.payload())
-			}
-		} // else packet.is_idr()
+		let is_new_frame = if let Some(vid_frame_number)  = self.vid_frame_number { frame_number != vid_frame_number } else { false };
+		let frame_has_data = !self.frame_buffer.is_empty();
+		let all_components_exist = self.sps.is_some() && self.pps.is_some() && !self.idr.is_empty();
 
-		let is_frame = !packet.is_sps() && !packet.is_pps();
-		let all_components_present = self.sps.is_some() && self.pps.is_some() && !self.accumulated_frames.is_empty();
+		//Check if the frame is ending
+		// -- The following is not always true. -- 0x88 is the terminal local number.
+		// CLARIFY: When is self.vid_frame_number getting set? Does this make sense?
+		if is_new_frame && frame_has_data && all_components_exist
+		{	// The following is for POI.
+			// FIXME: WHY ARE WE ONLY PUTTING THE IDR HERE????
+			self.send_image_data_to_decoder(self.sps.as_ref(), self.pps.as_ref(), &self.idr)?;
 
-		if is_frame && packet.is_end_of_frame() && all_components_present {
-			self.accumulated_frames.extend_from_slice(&self.frame_buffer);
+			self.vid_frame_number = Some(frame_number);
 			self.frame_buffer.clear();
-			self.send_image_data_to_decoder(self.sps.as_ref(), self.pps.as_ref(), &self.accumulated_frames)?;
-		}
+		} // if is_new_frame && frame_has_data && all_components_exist
+
+		let payload = &self.inner_read_buf[Self::PAYLOAD_START..bytes_read];
+		self.frame_buffer.extend(payload);
 
 		Ok(())
-	}
+	} // Receive video_packet
 
 
 	fn is_new_idr(self_idr_frame_number : Option<u8>, packet_number : u8) -> bool {
@@ -685,7 +659,7 @@ impl TelloDrone
 
 		self.handle_new_packet_number(bytes_read, frame_number, local_number)?;
 
-		let is_new_frame = if let Some(vid_frame_number)  = dbg!(self.vid_frame_number) { frame_number != vid_frame_number } else { false };
+		let is_new_frame = if let Some(vid_frame_number)  = self.vid_frame_number { frame_number != vid_frame_number } else { false };
 		let frame_has_data = !self.frame_buffer.is_empty();
 		let all_components_exist = self.sps.is_some() && self.pps.is_some() && !self.idr.is_empty();
 
