@@ -374,7 +374,7 @@ impl InfoPacket
 
 	pub fn new_ssid(origin_play : RoShamBo, _server : &ServerInstance) -> Result<Self>
 	{
-		let list_of_ssids = crate::app_network::SSIDs { ssids : vec![String::from_str("Hello")?, String::from_str("world")?, String::from_str("!")?, ] };
+		let list_of_ssids = crate::app_network::SSIDs { ssids : vec![String::from_str("Tello")?, ] };
 		let json = serde_json::to_vec(&list_of_ssids)?;
 		// TODO: Make this a feature of the server.
 		Ok(Self {
