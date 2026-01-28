@@ -9,8 +9,6 @@ class PersonalizationPage extends StatefulWidget {
 }
 
 class _PersonalizationPageState extends State<PersonalizationPage>{
-  int fakePort = 0;
-  Map<String, dynamic> fakeInfo = {};
   bool isLightTheme = false;
 
   @override
@@ -19,7 +17,8 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
       children: [
         Align(
           alignment: Alignment.topRight,
-          child: BackButton(
+          child: IconButton(
+            icon: Icon(Icons.arrow_back),
             color: Colors.white,
             onPressed: (){
               Navigator.of(context).pop();
@@ -39,8 +38,13 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
                     data: MediaQuery.of(context).copyWith(
                       size: const Size(390, 844)
                     ),
-                  ///TODO::Should replace with a more test screen that changes instead of the actual screen
-                    child: FlightScreen(port: fakePort, info: fakeInfo),
+                  ///TODO::Should replace with a reactive test screen
+                    child: Scaffold(
+                      backgroundColor: Colors.grey[600],
+                      body: Center(
+                        child: Text("Drone Controls"),
+                      ),
+                    ),
                 ),
               ),
             )

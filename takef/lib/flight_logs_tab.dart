@@ -54,12 +54,14 @@ class _FlightLogsPageState extends State<FlightLogsPage>{
         ),
         ///Log details
         Expanded(
+          flex: 2,
             child: selectedLog == null
                 ? Column(
               children: [
                 Align(
                   alignment: Alignment.topRight,
-                  child: BackButton(
+                  child: IconButton(
+                    icon: Icon(Icons.arrow_back),
                     color: Colors.white,
                     onPressed: (){
                       Navigator.of(context).pop();
@@ -79,7 +81,8 @@ class _FlightLogsPageState extends State<FlightLogsPage>{
                 children: [
                   Align(
                     alignment: Alignment.topRight,
-                    child: BackButton(
+                    child: IconButton(
+                      icon: Icon(Icons.arrow_back),
                       color: Colors.white,
                       onPressed: (){
                         Navigator.of(context).pop();

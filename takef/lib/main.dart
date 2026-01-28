@@ -150,6 +150,7 @@ class _MyHomePageState extends State<MyHomePage> {
               style: Theme.of(context).textTheme.displayLarge,
             ),
             FloatingActionButton.extended( //extends the button to fit its contents
+              heroTag: 'ConnectionFAB',
               backgroundColor: Colors.grey.shade400, //grey with a shade value of 400 that gives the creamy look
                 onPressed: (){
                 //pop up for drone connection list

@@ -47,7 +47,8 @@ class _DroneInfoPageState extends State<DroneInfoPage>{
         ),
         Align(
           alignment: Alignment.topRight,
-          child: BackButton(
+          child: IconButton(
+            icon: Icon(Icons.arrow_back),
             color: Colors.white,
             onPressed: (){
               Navigator.of(context).pop();
