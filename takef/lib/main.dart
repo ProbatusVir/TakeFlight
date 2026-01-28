@@ -63,6 +63,9 @@ class MyApp extends StatelessWidget {
               ..color = Colors.white, //set the stroke color
           ),
           headlineMedium: TextStyle(color: Colors.black), //raw hex value til style file is created
+          headlineLarge: TextStyle(color: Colors.white),
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white),
         ),
         scaffoldBackgroundColor: Colors.black,
       ),
