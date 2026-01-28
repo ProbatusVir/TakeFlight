@@ -55,8 +55,21 @@ class _FlightLogsPageState extends State<FlightLogsPage>{
         ///Log details
         Expanded(
             child: selectedLog == null
-                ? Center(
-              child: Text("Select a flight log",style: Theme.of(context).textTheme.bodyLarge),
+                ? Column(
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: BackButton(
+                    color: Colors.white,
+                    onPressed: (){
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ),
+                Center(
+                  child: Text("Select a flight log",style: Theme.of(context).textTheme.bodyLarge),
+                )
+              ],
             )
                 :
             Padding(
@@ -64,6 +77,15 @@ class _FlightLogsPageState extends State<FlightLogsPage>{
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: BackButton(
+                      color: Colors.white,
+                      onPressed: (){
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ),
                   Text(selectedLog!,
                       style: Theme.of(context).textTheme.headlineLarge
                   ),
