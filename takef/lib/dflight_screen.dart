@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:takef/record_button.dart';
@@ -15,13 +17,15 @@ class DeskFlight extends StatefulWidget{
     required this.videoKey,
     required this.port,
     required this.control,
-    required this.rcCon
+    required this.rcCon,
+    required this.info
   });
 
   final GlobalKey<VideoFeedState> videoKey;
   final int port;
   final ControlRC control;
   final RC rcCon;
+  final Map<String, dynamic> info;
 
   @override
   State<DeskFlight> createState() => _DeskFlightState();
@@ -85,7 +89,7 @@ class _DeskFlightState extends State<DeskFlight>{
                     IconButton(
                         onPressed: () {
                           Navigator.of(context).push(
-                              MaterialPageRoute(builder: (BuildContext context) => Settings())
+                              MaterialPageRoute(builder: (BuildContext context) => Settings(info: widget.info,))
                           );
                         },
                         icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
@@ -137,6 +141,9 @@ class _DeskFlightState extends State<DeskFlight>{
       ),
     );
   }
+  double analog(double current, double target, double rate){
+    return current += (target - current) * rate;
+}
   KeyEventResult _onKey(FocusNode node, KeyEvent event){
     //Track keys being pressed/released
     if(event is KeyDownEvent){
@@ -146,21 +153,31 @@ class _DeskFlightState extends State<DeskFlight>{
     }else{
       return KeyEventResult.ignored;
     }
-    ///Movement (Left Stick)
-    lr = (keys.contains(LogicalKeyboardKey.keyD) ? 1 : 0) +
-        (keys.contains(LogicalKeyboardKey.keyA) ? -1 : 0);
+    //testing what adding a periodic timer does
+    Timer.periodic(const Duration( milliseconds: 20), (_){
+      ///Movement (Left Stick)
+      double targetLr = (keys.contains(LogicalKeyboardKey.keyD) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.keyA) ? -1 : 0);
 
-    fb = (keys.contains(LogicalKeyboardKey.keyW) ? 1 : 0) +
-        (keys.contains(LogicalKeyboardKey.keyS) ? -1 : 0);
+      double targetFb = (keys.contains(LogicalKeyboardKey.keyW) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.keyS) ? -1 : 0);
 
-    ///Altitude & Rotation (Right Stick)
-    rot = (keys.contains(LogicalKeyboardKey.keyQ) ? 1 : 0) +
-        (keys.contains(LogicalKeyboardKey.keyE) ? -1 : 0);
+      lr = analog(lr, targetLr, 0.02);
+      fb = analog(fb, targetFb, 0.02);
 
-    ud = (keys.contains(LogicalKeyboardKey.arrowUp) ? 1 : 0) +
-        (keys.contains(LogicalKeyboardKey.arrowDown) ? -1 : 0);
+      ///Altitude & Rotation (Right Stick)
+      double targetRot = (keys.contains(LogicalKeyboardKey.keyQ) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.keyE) ? -1 : 0);
 
-    sendRC();
+      double targetUd = (keys.contains(LogicalKeyboardKey.arrowUp) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.arrowDown) ? -1 : 0);
+
+      rot = analog(rot, targetRot, 0.02);
+      ud = analog(ud, targetUd, 0.02);
+
+      sendRC();
+    });
+
     return KeyEventResult.handled;
   }
 }

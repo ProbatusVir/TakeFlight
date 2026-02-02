@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:takef/personalization_tab.dart';
 
@@ -19,6 +21,7 @@ void main() async {
 }
 
 final info = Info();
+Map<String, dynamic> droneInfo = {};
 
 enum ConnectionState{
   connecting(0),
@@ -60,6 +63,9 @@ class MyApp extends StatelessWidget {
               ..color = Colors.white, //set the stroke color
           ),
           headlineMedium: TextStyle(color: Colors.black), //raw hex value til style file is created
+          headlineLarge: TextStyle(color: Colors.white),
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white),
         ),
         scaffoldBackgroundColor: Colors.black,
       ),
@@ -67,7 +73,7 @@ class MyApp extends StatelessWidget {
       home: const MyHomePage(title: 'TakeFlight'),
       routes: {
         '/personalization': (_) =>  const PersonalizationPage(),
-        '/drone-info': (_) => const DroneInfoPage(),
+        '/drone-info': (_) => DroneInfoPage(info: droneInfo,),
         '/gesture-control': (_) => const GestureControlPage(),
         '/flight-logs': (_) => const FlightLogsPage()
       },
@@ -120,7 +126,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           }else{
             Navigator.of(context).push(
-                MaterialPageRoute(builder: (BuildContext context) => Settings())
+                MaterialPageRoute(builder: (BuildContext context) => Settings(info: droneInfo,))
             );
           }
           },
@@ -144,6 +150,7 @@ class _MyHomePageState extends State<MyHomePage> {
               style: Theme.of(context).textTheme.displayLarge,
             ),
             FloatingActionButton.extended( //extends the button to fit its contents
+              heroTag: 'ConnectionFAB',
               backgroundColor: Colors.grey.shade400, //grey with a shade value of 400 that gives the creamy look
                 onPressed: (){
                 //pop up for drone connection list
@@ -172,9 +179,19 @@ class _MyHomePageState extends State<MyHomePage> {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text('Connecting to...$ssid'))
                                       );
+                                      await info.infoID(0x01);
+                                      info.sendSSID(ssid);
+                                      try {
+                                        droneInfo =
+                                        await info.recieveDroneInfo().timeout(
+                                            const Duration(seconds: 3));
+                                      } on TimeoutException{
+                                        debugPrint("Drone Info not available");
+                                      }
+                                      if(!mounted) return;
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port,))
+                                          MaterialPageRoute(builder: (_) => FlightScreen(port: port, info: droneInfo))
                                       );
                                       /*await info.infoID(0x04);
                                       info.sendSSID(ssid);
