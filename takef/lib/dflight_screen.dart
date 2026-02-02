@@ -113,31 +113,47 @@ class _DeskFlightState extends State<DeskFlight>{
                 children: [
                   Align( //Joy sticks bottom left
                     alignment: Alignment.bottomLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.all(125),
-                      child: ThumbStickController(
-                        onChange: (x, y){
-                          //Will be movement logic here
-                          lr = x;
-                          fb = y;
-                          sendRC();
-                        },
-                      ),
-                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32, bottom: 32),
+                          child: ThumbStickController(
+                            onChange: (x, y){
+                              //Will be movement logic here
+                              lr = x;
+                              fb = y;
+                              sendRC();
+                            },
+                          ),
+                        ),
+                        Text(
+                          "Movement"
+                        )
+                      ],
+                    )
                   ),
                   Align( //Joy sticks bottom right
                     alignment: Alignment.bottomRight,
-                    child: Padding(
-                      padding: const EdgeInsets.all(125),
-                      child: ThumbStickController(
-                        onChange: (x, y){
-                          //Will be height/axis control logic
-                          rot = x;
-                          ud = y;
-                          sendRC();
-                        },
-                      ),
-                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 32, bottom: 32),
+                          child: ThumbStickController(
+                            onChange: (x, y){
+                              //Will be height/axis control logic
+                              rot = x;
+                              ud = y;
+                              sendRC();
+                            },
+                          ),
+                        ),
+                        Text(
+                          "Height & Rotation"
+                        )
+                      ],
+                    )
                   ),
                 ],
               ),
