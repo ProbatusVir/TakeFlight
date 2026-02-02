@@ -78,22 +78,28 @@ class _DeskFlightState extends State<DeskFlight>{
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
                     FlightButton(control: widget.control, size: 50.0,),
-                    IconButton(
-                        onPressed: (){
-                          widget.control.sendLanding(0x02);
-                        },
-                        icon: Icon(Icons.emergency_sharp, color: Colors.red, size: 50.0,)
+                    Tooltip(
+                      message: "Emergency Land",
+                      child: IconButton(
+                          onPressed: (){
+                            widget.control.sendLanding(0x02);
+                          },
+                          icon: Icon(Icons.emergency_sharp, color: Colors.red, size: 50.0,)
+                      ),
                     ),
                     //TODO::Implement actual recording logic here
                     RecordButton(getFrames: () => widget.videoKey.currentState?.currentFrame,),
-                    IconButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                              MaterialPageRoute(builder: (BuildContext context) => Settings(info: widget.info,))
-                          );
-                        },
-                        icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
-                    ),
+                    Tooltip(
+                      message: "Settings",
+                      child: IconButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                                MaterialPageRoute(builder: (BuildContext context) => Settings(info: widget.info,))
+                            );
+                          },
+                          icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
+                      ),
+                    )
                   ],
                 ),
               ),

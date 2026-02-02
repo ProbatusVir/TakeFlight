@@ -129,18 +129,24 @@ class _RecordButtonState extends State<RecordButton>{
           await stopRecording();
         }
       },
-      child: isRecording? SvgPicture.asset(
-        'assets/Images/Stop_Circle.svg',
-        width: 50,
-        height: 50,
-        semanticsLabel: 'Stop Recording',
+      child: isRecording? Tooltip(
+        message: "End Recording",
+        child: SvgPicture.asset(
+          'assets/Images/Stop_Circle.svg',
+          width: 50,
+          height: 50,
+          semanticsLabel: 'Stop Recording',
+        ),
       )
-          :SvgPicture.asset(
-        'assets/Images/record_icon.svg',
-        width: 50,
-        height: 50,
-        semanticsLabel: 'Record',
-      ),
+          :Tooltip(
+        message: "Record",
+        child: SvgPicture.asset(
+          'assets/Images/record_icon.svg',
+          width: 50,
+          height: 50,
+          semanticsLabel: 'Record',
+        ),
+      )
     );
   }
 }

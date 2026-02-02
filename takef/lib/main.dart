@@ -119,6 +119,7 @@ class _MyHomePageState extends State<MyHomePage> {
       // settings button
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
+          tooltip: "Settings",
           onPressed: (){
           if(defaultTargetPlatform == TargetPlatform.android){
             Navigator.of(context).push(
@@ -249,7 +250,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   );
                 },
                 label: Text(
-                    'CONNECT...',
+                    'CONNECT',
                     style: Theme.of(context).textTheme.headlineMedium, //default text size and theme
                 ),
             ),
