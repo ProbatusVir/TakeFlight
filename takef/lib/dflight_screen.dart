@@ -124,7 +124,6 @@ class _DeskFlightState extends State<DeskFlight>{
                     child: Padding(
                       padding: const EdgeInsets.all(125),
                       child: ThumbStickController(
-                        input: 1,
                         onChange: (x, y){
                           //Will be height/axis control logic
                           rot = x;
