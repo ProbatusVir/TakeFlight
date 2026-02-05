@@ -63,6 +63,7 @@ flutter:
     - assets/Images/record_icon.svg
     - assets/Images/Stop_Circle.svg
     - assets/simulated_feed/
+    - assets/Images/Ges.png
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
