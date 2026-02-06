@@ -10,6 +10,15 @@ class GestureControlPage extends StatefulWidget{
 class _GestureControlPageState extends State<GestureControlPage>{
 
   double sliderVal = 0;
+  double slVal = 0;
+  double slVal1 = 0;
+  double slVal2 = 0;
+  double slVal3 = 0;
+  double slVal4 = 0;
+  double slVal5 = 0;
+  double slVal6 = 0;
+  double slVal7 = 0;
+
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +123,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
@@ -163,7 +172,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal1,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
@@ -212,7 +221,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal2,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
@@ -261,7 +270,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal3,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
@@ -310,7 +319,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal4,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
@@ -359,7 +368,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal5,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
@@ -408,7 +417,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal6,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
@@ -457,7 +466,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                             maxWidth: 350
                         ),
                         child: Slider(
-                          value: sliderVal,
+                          value: slVal7,
                           max: 100,
                           divisions: 5,
                           onChanged: (double value){
