@@ -30,7 +30,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
               padding: const EdgeInsets.all(16),
               children: [
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:  ///Top row: label + image
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,7 +79,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,7 +128,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,7 +177,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,7 +226,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +275,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,7 +324,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,7 +373,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -422,7 +422,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                   ),
                 ),
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
                   title:
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
