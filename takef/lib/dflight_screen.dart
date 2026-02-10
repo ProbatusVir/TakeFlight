@@ -1,15 +1,21 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:takef/record_button.dart';
 import 'package:takef/settings_screen.dart';
 import 'package:takef/video_feed.dart';
+import 'package:showcaseview/showcaseview.dart';
 import 'connect.dart';
 import 'flight_button.dart';
 import 'central_screen.dart';
 import 'joy_stick.dart';
 
+///Global Key for first showcase widget
+final GlobalKey _firstShow = GlobalKey();
+///Global key for last showcase widget
+final GlobalKey _lastShow = GlobalKey();
 ///Desktop Design
 class DeskFlight extends StatefulWidget{
   const DeskFlight({
@@ -33,6 +39,10 @@ class DeskFlight extends StatefulWidget{
 
 class _DeskFlightState extends State<DeskFlight>{
   final Set<LogicalKeyboardKey> keys ={};
+  ///Global key for each showcased widgets
+  final GlobalKey _flightKey = GlobalKey();
+  final GlobalKey _emergencyKey = GlobalKey();
+  final GlobalKey _recordKey = GlobalKey();
 
   double lr = 0;
   double fb = 0;
@@ -42,6 +52,82 @@ class _DeskFlightState extends State<DeskFlight>{
   void sendRC(){
     widget.rcCon.buildPacket(lr,ud,fb,rot);
     widget.control.sendRC();
+  }
+  
+  @override
+  void initState() {
+    super.initState();
+    ShowcaseView.register(
+      hideFloatingActionWidgetForShowcase: [_lastShow],
+      globalFloatingActionWidget: (showcaseContext) => FloatingActionWidget(
+        left: 16,
+          bottom: 16,
+          child: Padding(
+              padding: const EdgeInsets.all(16.0),
+            child: ElevatedButton(
+                onPressed: () => ShowcaseView.get().dismiss(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xffEE5366),
+                ),
+                child: const Text(
+                  'Skip',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                  ),
+                )
+            ),
+          )
+      ),
+      onStart: (index, key){
+        log('onStart: $index, $key');
+      },
+      onComplete: (index, key){
+        log('onComplete: $index, $key');
+        if(index == 5){
+          SystemChrome.setSystemUIOverlayStyle(
+              SystemUiOverlayStyle.light.copyWith(
+                statusBarBrightness: Brightness.dark,
+                statusBarColor: Colors.white
+              )
+          );
+        }
+      },
+      blurValue: 1,
+      autoPlayDelay: const Duration(seconds: 3),
+      globalTooltipActionConfig: const TooltipActionConfig(
+        position: TooltipActionPosition.inside,
+        alignment: MainAxisAlignment.spaceBetween,
+        actionGap: 20,
+      ),
+      globalTooltipActions: [
+        //Hide previous action for first showcase widget
+        TooltipActionButton(
+            type: TooltipDefaultActionType.previous,
+          textStyle: const TextStyle(
+            color: Colors.white,
+          ),
+          hideActionWidgetForShowcase: [_firstShow],
+        ),
+        //Same for last showcase
+        TooltipActionButton(
+            type: TooltipDefaultActionType.next,
+          textStyle: const TextStyle(
+            color: Colors.white
+          ),
+          hideActionWidgetForShowcase: [_lastShow],
+        ),
+      ],
+      onDismiss: (key){
+        debugPrint('Dismissed at $key');
+      },
+    );
+    //Start showcase view
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => ShowcaseView.get().startShowCase(
+            [_firstShow, _flightKey, _emergencyKey, _recordKey, _lastShow]
+        )
+    );
   }
 
   @override
