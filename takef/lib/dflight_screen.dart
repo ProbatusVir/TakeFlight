@@ -43,6 +43,7 @@ class _DeskFlightState extends State<DeskFlight>{
   final GlobalKey _flightKey = GlobalKey();
   final GlobalKey _emergencyKey = GlobalKey();
   final GlobalKey _recordKey = GlobalKey();
+  final GlobalKey _settingsKey = GlobalKey();
 
   double lr = 0;
   double fb = 0;
@@ -125,7 +126,7 @@ class _DeskFlightState extends State<DeskFlight>{
     //Start showcase view
     WidgetsBinding.instance.addPostFrameCallback(
         (_) => ShowcaseView.get().startShowCase(
-            [_firstShow, _flightKey, _emergencyKey, _recordKey, _lastShow]
+            [_firstShow, _flightKey, _emergencyKey, _recordKey, _settingsKey, _lastShow]
         )
     );
   }
@@ -163,28 +164,38 @@ class _DeskFlightState extends State<DeskFlight>{
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly, //Spaces widgets evenly within the Row
                   mainAxisSize: MainAxisSize.min, //Minimal size needed to fit
                   children: [
-                    FlightButton(control: widget.control, size: 50.0,),
-                    Tooltip(
-                      message: "Emergency Land",
-                      child: IconButton(
-                          onPressed: (){
-                            widget.control.sendLanding(0x02);
-                          },
-                          icon: Icon(Icons.emergency_sharp, color: Colors.red, size: 50.0,)
-                      ),
+                    Showcase(key: _flightKey, title: 'Flight Control', description: 'Start or Stop drone flight', child: FlightButton(control: widget.control, size: 50.0,)),
+                    Showcase(
+                        key: _emergencyKey,
+                        title: 'Emergency Landing',
+                        description: 'Immediately cuts the drone off',
+                        child: Tooltip(
+                          message: "Emergency Land",
+                          child: IconButton(
+                              onPressed: (){
+                                widget.control.sendLanding(0x02);
+                              },
+                              icon: Icon(Icons.emergency_sharp, color: Colors.red, size: 50.0,)
+                          ),
+                        ),
                     ),
                     //TODO::Implement actual recording logic here
-                    RecordButton(getFrames: () => widget.videoKey.currentState?.currentFrame,),
-                    Tooltip(
-                      message: "Settings",
-                      child: IconButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                                MaterialPageRoute(builder: (BuildContext context) => Settings(info: widget.info,))
-                            );
-                          },
-                          icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
-                      ),
+                    Showcase(key: _recordKey, title: 'Record/Stop Recording', description: 'Records the live feed of the drone', child: RecordButton(getFrames: () => widget.videoKey.currentState?.currentFrame,)),
+                    Showcase(
+                        key: _settingsKey,
+                        title: 'Settings',
+                        description: 'Configure Controls & Personalize the application',
+                        child: Tooltip(
+                          message: "Settings",
+                          child: IconButton(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (BuildContext context) => Settings(info: widget.info,))
+                                );
+                              },
+                              icon: Icon(Icons.settings_outlined, color: Colors.white, size: 50.0,)
+                          ),
+                        )
                     )
                   ],
                 ),
@@ -204,14 +215,19 @@ class _DeskFlightState extends State<DeskFlight>{
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(left: 32, bottom: 32),
-                          child: ThumbStickController(
-                            onChange: (x, y){
-                              //Will be movement logic here
-                              lr = x;
-                              fb = y;
-                              sendRC();
-                            },
-                          ),
+                          child: Showcase(
+                              key: _firstShow,
+                              title: 'Movement',
+                              description: 'Controls forward, backward, and diagonal movement of the drone',
+                              child: ThumbStickController(
+                                onChange: (x, y){
+                                  //Will be movement logic here
+                                  lr = x;
+                                  fb = y;
+                                  sendRC();
+                                },
+                              ),
+                          )
                         ),
                         Text(
                           "Movement"
@@ -226,14 +242,19 @@ class _DeskFlightState extends State<DeskFlight>{
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(right: 32, bottom: 32),
-                          child: ThumbStickController(
-                            onChange: (x, y){
-                              //Will be height/axis control logic
-                              rot = x;
-                              ud = y;
-                              sendRC();
-                            },
-                          ),
+                          child: Showcase(
+                              key: _lastShow,
+                              title: 'Height & YAW',
+                              description: 'Controls drones rotation and height',
+                              child: ThumbStickController(
+                                onChange: (x, y){
+                                  //Will be height/axis control logic
+                                  rot = x;
+                                  ud = y;
+                                  sendRC();
+                                },
+                              ),
+                          )
                         ),
                         Text(
                           "Height & Rotation"
