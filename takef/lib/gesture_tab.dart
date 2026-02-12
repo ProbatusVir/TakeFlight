@@ -128,7 +128,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal = value;
                             });
                           },
                         ),
@@ -177,7 +177,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal1 = value;
                             });
                           },
                         ),
@@ -226,7 +226,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal2 = value;
                             });
                           },
                         ),
@@ -275,7 +275,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal3 = value;
                             });
                           },
                         ),
@@ -324,7 +324,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal4 = value;
                             });
                           },
                         ),
@@ -373,7 +373,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal5 = value;
                             });
                           },
                         ),
@@ -422,7 +422,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal6 = value;
                             });
                           },
                         ),
@@ -471,7 +471,7 @@ class _GestureControlPageState extends State<GestureControlPage>{
                           divisions: 5,
                           onChanged: (double value){
                             setState(() {
-                              sliderVal = value;
+                              slVal7 = value;
                             });
                           },
                         ),
