@@ -13,6 +13,7 @@ void disconnect (BuildContext context){
                 onPressed: (){
                   //TODO::Needs to retry with the selected SSID
                   Navigator.of(context).pop();
+                  print('Retrying drone connection....');
                 },
                 child: const Text("Retry")
             ),
