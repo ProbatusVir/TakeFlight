@@ -72,6 +72,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false, //gets rid of debug sash
       home: const MyHomePage(title: 'TakeFlight'),
       routes: {
+        '/home': (_) => const MyHomePage(title: 'TakeFlight'),
         '/personalization': (_) =>  const PersonalizationPage(),
         '/drone-info': (_) => DroneInfoPage(info: droneInfo,),
         '/gesture-control': (_) => const GestureControlPage(),
@@ -210,6 +211,13 @@ class _MyHomePageState extends State<MyHomePage> {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(content: Text("Connected to drone-$ssid"))
                                           );
+                                          try {
+                                        droneInfo =
+                                        await info.recieveDroneInfo().timeout(
+                                            const Duration(seconds: 3));
+                                      } on TimeoutException{
+                                        debugPrint("Drone Info not available");
+                                      }
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(builder: (_) => FlightScreen(port: port))
