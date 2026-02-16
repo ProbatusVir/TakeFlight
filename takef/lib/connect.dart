@@ -92,7 +92,9 @@ class Info{
     if(infoSoc != null){
       infoSoc?.listen(
         (Uint8List data){
-          handleData(data);
+          print("Received ${data.length} bytes from server: ${data.toList()}");
+          dataBuffer.addAll(data);
+          processBufferData();
         },
         onError: (e){
           print('Error on socket: $e');
@@ -124,50 +126,52 @@ class Info{
   /*void socketData(Uint8List data){
     dataBuffer.addAll(data);
     processBufferData();
-  }
+  }*/
 
   void processBufferData(){
     //loop through buffer and get first 4 bytes(header)
-    while(dataBuffer.length >= 4){
-      final infoId = dataBuffer[0];
-      final RoShamBo = dataBuffer[1];
-      final payloadSize = (dataBuffer[2] << 8) | dataBuffer[3];
-      final totalSize = 4 + payloadSize;
+    print("RAW HEADER BYTES: ${dataBuffer.sublist(0, 4)}");
+    while(true){
+      if (dataBuffer.length < 4) return;
 
-      //wait for more data if necessary
-      if(dataBuffer.length < totalSize){
-        return;
-      }
+      final id = dataBuffer[0];
 
-      final packet = Uint8List.fromList(
-        dataBuffer.sublist(0, totalSize)
-      );
-      
-      //remove data from buffer and move on
-      dataBuffer.removeRange(0, totalSize);
-      handleData(packet);
+      final roShamBo = dataBuffer[1];
+
+      final payloadSize = dataBuffer[2];
+
+      final fullPacket = 4 + payloadSize;
+
+      //wait for entire packet
+      if(dataBuffer.length < fullPacket) return;
+
+      final packet = Uint8List.fromList(dataBuffer.sublist(0,fullPacket));
+
+      dataBuffer.removeRange(0, fullPacket);
+
+      handleData(id, roShamBo, packet.sublist(4));
     }
-  }*/
+  }
 
-  void handleData(Uint8List data){
+  void handleData(int id, int roShamBo, Uint8List payload){
     //print("Received info data: $data");
-    final int type = data[0];
+    //final int type = data[0];
 
-    switch(type){
+    switch(id){
       ///SSIDS
       case 0x00:
-        handleSSIDList(data);
+        handleSSIDList(payload);
         break;
         ///DroneStateDump
       case 0x01:
-        handleDroneDump(data);
+        handleDroneDump(payload);
         break;
         ///Record Request
       case 0x02:
         break;
         ///DroneConnection
       case 0x03:
-        handleConnectionState(data);
+        handleConnectionState(payload);
         break;
         ///Drone Selection
       case 0x04:
@@ -215,7 +219,7 @@ class Info{
       }
 
       //json data
-      final jBytes = payload.sublist(6);
+      final jBytes = payload.sublist(5);
       final jMap = utf8.decode(jBytes);
       final decode = jsonDecode(jMap);
       droneInfo = decode;
