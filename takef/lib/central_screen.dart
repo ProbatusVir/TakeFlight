@@ -67,11 +67,11 @@ class _FlightScreenState extends State<FlightScreen>{
       DeviceOrientation.landscapeRight,
     ]);
     startConnection();
-    Future.delayed(const Duration(seconds: 5), () {
+    /*Future.delayed(const Duration(seconds: 5), () {
       if (mounted) {
         disconnect(context);
       }
-    });
+    });*/
   }
 
   void startConnection() async{
