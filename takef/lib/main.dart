@@ -181,8 +181,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text('Connecting to...$ssid'))
                                       );
-                                      await info.infoID(0x01);
+                                      await info.infoID(0x04);
                                       info.sendSSID(ssid);
+                                      //await info.infoID(0x01);
                                       try {
                                         droneInfo =
                                         await info.recieveDroneInfo().timeout(
