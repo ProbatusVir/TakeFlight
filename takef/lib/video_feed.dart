@@ -29,6 +29,7 @@ class VideoFeedState extends State<VideoFeed>{
   @override
   void initState(){
     super.initState();
+    resetTimeOut();
   }
 
   void resetTimeOut(){
@@ -92,7 +93,7 @@ Widget noFeedIndicator(){
   return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black,
         borderRadius: BorderRadius.circular(10),
       ),
       child: const Column(
