@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'flight_control_mode.dart';
 import 'package:takef/central_screen.dart';
 
 class PersonalizationPage extends StatefulWidget {
@@ -10,6 +11,7 @@ class PersonalizationPage extends StatefulWidget {
 
 class _PersonalizationPageState extends State<PersonalizationPage>{
   bool isLightTheme = false;
+  ControlMode selectedMode = ControlMode.joystick;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +59,21 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
                 isLightTheme = value;
               });
             },
+          activeThumbColor: Colors.white,
+          activeTrackColor: Colors.grey.shade600,
+          inactiveThumbColor: Colors.white,
+          inactiveTrackColor: Colors.redAccent,
+        ),
+        Text("Control Mode", style: Theme.of(context).textTheme.headlineLarge),
+        Switch(
+          value: selectedMode,
+          onChanged: (enabled){
+            setState(() {
+              selectedMode = enabled ? ControlMode.keyboard
+                  : ControlMode.joystick;
+            });
+            saveControlMode(selectedMode);
+          },
           activeThumbColor: Colors.white,
           activeTrackColor: Colors.grey.shade600,
           inactiveThumbColor: Colors.white,
