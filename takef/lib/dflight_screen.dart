@@ -39,6 +39,8 @@ class DeskFlight extends StatefulWidget{
 
 class _DeskFlightState extends State<DeskFlight>{
   final Set<LogicalKeyboardKey> keys ={};
+  bool isPressed(LogicalKeyboardKey key) =>
+      keys.contains(key);
   ///Global key for each showcased widgets
   final GlobalKey _flightKey = GlobalKey();
   final GlobalKey _emergencyKey = GlobalKey();
@@ -53,6 +55,27 @@ class _DeskFlightState extends State<DeskFlight>{
   void sendRC(){
     widget.rcCon.buildPacket(lr,ud,fb,rot);
     widget.control.sendRC();
+  }
+
+  ///Keyboard display
+  Widget keyBox(String label, LogicalKeyboardKey key) {
+    final pressed = isPressed(key);
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 100),
+      width: 60,
+      height: 60,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: pressed ? Colors.blue : Colors.grey[800],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 20, color: Colors.white),
+      ),
+    );
   }
   
   @override
