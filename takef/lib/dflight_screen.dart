@@ -3,6 +3,7 @@ import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:takef/flight_control_mode.dart';
 import 'package:takef/record_button.dart';
 import 'package:takef/settings_screen.dart';
 import 'package:takef/video_feed.dart';
@@ -52,6 +53,8 @@ class _DeskFlightState extends State<DeskFlight>{
   double ud = 0;
   double rot = 0;
 
+  ControlMode mode = ControlMode.joystick;
+
   void sendRC(){
     widget.rcCon.buildPacket(lr,ud,fb,rot);
     widget.control.sendRC();
@@ -81,6 +84,11 @@ class _DeskFlightState extends State<DeskFlight>{
   @override
   void initState() {
     super.initState();
+    loadControlMode().then((loadedMode){
+      setState(() {
+        mode = loadedMode;
+      });
+    });
     ShowcaseView.register(
       hideFloatingActionWidgetForShowcase: [_lastShow],
       globalFloatingActionWidget: (showcaseContext) => FloatingActionWidget(
@@ -231,9 +239,26 @@ class _DeskFlightState extends State<DeskFlight>{
               onKeyEvent: _onKey,
               child: Stack(
                 children: [
-                  Align( //Joy sticks bottom left
+                  Align( //Joy sticks bottom left & WASD movement keys
                     alignment: Alignment.bottomLeft,
-                    child: Column(
+                    child: mode == ControlMode.keyboard
+                        ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        keyBox("W", LogicalKeyboardKey.keyW),
+                        SizedBox(height: 6),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            keyBox("A", LogicalKeyboardKey.keyA),
+                            SizedBox(height: 6),
+                            keyBox("S", LogicalKeyboardKey.keyS),
+                            SizedBox(height: 6),
+                            keyBox("D", LogicalKeyboardKey.keyD)
+                          ],
+                        )
+                      ],
+                    ): Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Padding(
@@ -258,9 +283,26 @@ class _DeskFlightState extends State<DeskFlight>{
                       ],
                     )
                   ),
-                  Align( //Joy sticks bottom right
+                  Align( //Joy sticks bottom right & Arrow keys
                     alignment: Alignment.bottomRight,
-                    child: Column(
+                    child: mode == ControlMode.keyboard
+                        ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        keyBox("↑", LogicalKeyboardKey.arrowUp),
+                        SizedBox(height: 6),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            keyBox("←", LogicalKeyboardKey.arrowLeft),
+                            SizedBox(height: 6),
+                            keyBox("↓", LogicalKeyboardKey.arrowDown),
+                            SizedBox(height: 6),
+                            keyBox("→", LogicalKeyboardKey.arrowRight)
+                          ],
+                        )
+                      ],
+                    ): Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Padding(
@@ -317,8 +359,8 @@ class _DeskFlightState extends State<DeskFlight>{
       fb = analog(fb, targetFb, 0.02);
 
       ///Altitude & Rotation (Right Stick)
-      double targetRot = (keys.contains(LogicalKeyboardKey.keyQ) ? 1 : 0) +
-          (keys.contains(LogicalKeyboardKey.keyE) ? -1 : 0);
+      double targetRot = (keys.contains(LogicalKeyboardKey.arrowLeft) ? 1 : 0) +
+          (keys.contains(LogicalKeyboardKey.arrowRight) ? -1 : 0);
 
       double targetUd = (keys.contains(LogicalKeyboardKey.arrowUp) ? 1 : 0) +
           (keys.contains(LogicalKeyboardKey.arrowDown) ? -1 : 0);
