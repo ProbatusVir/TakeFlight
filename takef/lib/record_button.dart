@@ -41,6 +41,8 @@ class RecordButton extends StatefulWidget{
 class _RecordButtonState extends State<RecordButton>{
   bool isRecording = false;
   Timer? capture;
+  Timer? _timer;
+  Duration recordingDuration = Duration.zero;
   late String outPath;
   late String pngPath;
   late Directory frameDir;
@@ -60,6 +62,14 @@ class _RecordButtonState extends State<RecordButton>{
   }
 
   Future<void> startRecording() async{
+    ///For recording timer label
+    recordingDuration = Duration.zero;
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() {
+        recordingDuration += const Duration(seconds: 1);
+      });
+    });
     //create output path
     //final dir = Directory.current.path;
     final andDir =  await getApplicationDocumentsDirectory();
@@ -105,6 +115,8 @@ class _RecordButtonState extends State<RecordButton>{
   }
 
   Future<void> stopRecording() async{
+    //Stops timer for recording duration
+    _timer?.cancel();
     //stops timer
     capture?.cancel();
     //Finishes the video encoder and saves it
@@ -129,24 +141,65 @@ class _RecordButtonState extends State<RecordButton>{
           await stopRecording();
         }
       },
-      child: isRecording? Tooltip(
-        message: "End Recording",
-        child: SvgPicture.asset(
-          'assets/Images/Stop_Circle.svg',
-          width: 50,
-          height: 50,
-          semanticsLabel: 'Stop Recording',
-        ),
-      )
-          :Tooltip(
-        message: "Record",
-        child: SvgPicture.asset(
-          'assets/Images/record_icon.svg',
-          width: 50,
-          height: 50,
-          semanticsLabel: 'Record',
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+            child: isRecording
+            ? Container(
+              key: const ValueKey("recordingBadge"),
+              padding: EdgeInsets.symmetric(
+                horizontal: 12,
+                  vertical: 6,
+              ),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.fiber_manual_record_outlined,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    formatDuration(recordingDuration),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                ],
+              ),
+            )
+                : const SizedBox.shrink(),
+          ),
+          Tooltip(
+            message: isRecording ? "End Recording" : "Record",
+            child: SvgPicture.asset(
+              isRecording
+                  ? 'assets/Images/Stop_Circle.svg'
+                  : 'assets/Images/record_icon.svg',
+              width: 50,
+              height: 50,
+              semanticsLabel:
+              isRecording ? 'Stop Recording' : 'Record',
+            ),
+          ),
+        ],
       )
     );
   }
+}
+
+///Helper
+String formatDuration(Duration d){
+  final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return "$minutes:$seconds";
 }
