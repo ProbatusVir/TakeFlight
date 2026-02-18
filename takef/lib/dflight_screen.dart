@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer';
 
+import 'package:battery_indicator/battery_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:takef/flight_control_mode.dart';
@@ -170,13 +171,21 @@ class _DeskFlightState extends State<DeskFlight>{
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0.0, //gets rid of the shadow
-        title: Text('H: 48m', style: TextStyle(color: Colors.white, fontSize: 25.0),),
+        title: Text(widget.info.isEmpty ? "H: 0" : "H:${widget.info["height"]}", style: TextStyle(color: Colors.white, fontSize: 25.0),),
         actions: [
           Icon(Icons.wifi_outlined, color: Colors.white, size: 35.0,),
           SizedBox(width: 50,), //for spacing between objects
-          Text('12m 34s', style: TextStyle(color: Colors.white, fontSize: 25.0),),
+          Text(widget.info.isEmpty ?  "D: 0m:00sec" : "D: ${widget.info["flight_duration"]}", style: TextStyle(color: Colors.white, fontSize: 25.0),),
           SizedBox(width: 50,),
-          Icon(Icons.battery_6_bar_sharp, color: Colors.green,size: 35.0,),
+          //Icon(Icons.battery_6_bar_sharp, color: Colors.green,size: 35.0,),
+          BatteryIndicator(
+            batteryFromPhone: false,
+            batteryLevel: widget.info.isEmpty ? 67 : widget.info['battery'],
+            colorful: true,
+            mainColor: Colors.green,
+            size: 35.0,
+            showPercentNum: true,
+          )
         ],
       ),
       body: Stack(
