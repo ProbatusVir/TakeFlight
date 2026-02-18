@@ -449,19 +449,20 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 							let drone_lock = drone.lock()?;
 							match drone_lock.get_state() {
 								None => {
-									InfoPacket::new_drone_state_dump(
+									let return_packet =InfoPacket::new_drone_state_dump(
 										packet.play.counterplay(),
 										[0, 0, 0, 0, 0, 0],
 										None
 									)?;
-
+									return_packet.write(origin)?;
 									Ok(())
 								}
 								Some(state) => {
-									InfoPacket::new_drone_state_dump(
+									let return_packet = InfoPacket::new_drone_state_dump(
 										packet.play.counterplay(),
 										[0, 0, 0, 0, 0, 0],
 										Some(&state))?;
+									return_packet.write(origin)?;
 									Ok(())
 								}
 							}
