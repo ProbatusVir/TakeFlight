@@ -485,6 +485,7 @@ impl TelloDrone
 					self.battery_percent = flight_data.battery_percent;
 					self.logger.info_from_string(format!("Battery Percent: {}", self.battery_percent))?;
 				}
+				self.curr_state = Some(flight_data);
 			}
 			Command::TakeOff => {
 				self.logger.info("Tello confirmed: Taking off...")?;
