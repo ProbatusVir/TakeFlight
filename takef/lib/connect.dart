@@ -219,9 +219,13 @@ class Info{
       }
 
       //json data
-      final jBytes = payload.sublist(6);
+      final jBytes = payload.sublist(5);
       final jMap = utf8.decode(jBytes);
       final decode = jsonDecode(jMap);
+      if(decode == null){
+        debugPrint("There is no drone info available");
+        return;
+      }
       droneInfo = decode;
       infoDump!.complete(droneInfo);
       infoDump = null;
