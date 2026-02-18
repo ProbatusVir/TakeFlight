@@ -13,6 +13,22 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
   bool isLightTheme = false;
   ControlMode selectedMode = ControlMode.joystick;
 
+  Future<void> noOverride() async{
+    final loaded =  await loadControlMode();
+
+    if(!mounted) return;
+
+    setState(() {
+      selectedMode = loaded;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    noOverride();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -66,13 +82,17 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
         ),
         Text("Control Mode", style: Theme.of(context).textTheme.headlineLarge),
         Switch(
-          value: selectedMode,
-          onChanged: (enabled){
+          value: selectedMode == ControlMode.keyboard,
+          onChanged: (enabled) async{
             setState(() {
               selectedMode = enabled ? ControlMode.keyboard
                   : ControlMode.joystick;
             });
-            saveControlMode(selectedMode);
+
+            debugPrint("Switch enabled = $enabled");
+            debugPrint("selectedMode BEFORE save = $selectedMode");
+
+            await saveControlMode(selectedMode);
           },
           activeThumbColor: Colors.white,
           activeTrackColor: Colors.grey.shade600,
