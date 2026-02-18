@@ -6,6 +6,7 @@ use chrono::Timelike;
 use concat_arrays::concat_arrays;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::{Cursor, Read};
+use lebe::Endian;
 use zerocopy::IntoBytes;
 
 #[allow(dead_code)]
