@@ -219,7 +219,7 @@ class Info{
       }
 
       //json data
-      final jBytes = payload.sublist(5);
+      final jBytes = payload.sublist(6);
       final jMap = utf8.decode(jBytes);
       final decode = jsonDecode(jMap);
       droneInfo = decode;
