@@ -68,6 +68,7 @@ class ControlRC{
 class Info{
   Socket? infoSoc;
   final List<int> dataBuffer = [];
+  String? currSSID;
 
   final connectionController = StreamController<ConnectionState>.broadcast();
 
@@ -263,11 +264,20 @@ class Info{
     return connectionCompleter!.future;
   }
   void sendSSID(String ssid) async{
+    currSSID = ssid;
     final ssidByte = utf8.encode(ssid);
     if(infoSoc != null){
       infoSoc?.add(ssidByte);
       print("Sent selected SSID");
     }
+  }
+  Future<ConnectionState> retryConnection() async{
+    await info.infoID(0x04);
+    info.sendSSID(currSSID!);
+    await info.infoID(0x03); ///DroneConnectionState
+    final status = await info.connection();
+
+    return status;
   }
 }
 
