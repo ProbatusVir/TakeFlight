@@ -473,7 +473,45 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 			}
 		}
 		InfoID::RecordRequest => { todo!("Haven't implemented RecordRequest yet.") }
-		InfoID::DroneConnectionState => { todo!("Haven't implemented response to DroneConnectionState request yet.") }
+		InfoID::DroneConnectionState => {
+			match &server.curr_drone{
+				None => {
+					let return_packet = InfoPacket::new_drone_connection_state(
+						packet.play.counterplay(),
+						ConnectionState::Disconnected,
+						[0, 0, 0, 0, 0, 0],
+					);
+					return_packet.write(origin)?;
+					Ok(())
+				}
+
+				Some(connection) => {
+					match &*connection.lock()?
+					{
+						Connection::Drone(drone) => {
+							let drone_lock = drone.lock()?;
+
+							let state = if !drone_lock.connected() {
+								ConnectionState::StillConnecting
+							} else{
+								ConnectionState::Connected
+							};
+
+							let return_packet = InfoPacket::new_drone_connection_state(
+								packet.play.counterplay(),
+								state,
+								[0, 0, 0, 0, 0, 0],
+							);
+							return_packet.write(origin)?;
+							Ok(())
+						}
+						_=> Err(Error::Custom(
+							"Wrong connection state!"
+						)),
+					}
+				}
+			}
+		}
 		InfoID::DroneSelection => { server.logger.error("We received a DroneSelection packet. This message is a little better than a crash.") }
 		InfoID::Invalid => { Err(Error::Custom("Attempted to handle invalid info packet."))? },
 	}
