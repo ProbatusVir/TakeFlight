@@ -178,7 +178,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
                                     onTap: () async{
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      /*ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text('Connecting to...$ssid'))
                                       );
                                       await info.infoID(0x04);
@@ -195,11 +195,12 @@ class _MyHomePageState extends State<MyHomePage> {
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
                                           MaterialPageRoute(builder: (_) => FlightScreen(port: port, info: droneInfo))
-                                      );
-                                      /*await info.infoID(0x04);
+                                      );*/
+                                      await info.infoID(0x04);
                                       info.sendSSID(ssid);
                                       await info.infoID(0x03); ///DroneConnectionState
                                       final status = await info.connection();
+                                      await info.infoID(0x01);
                                       //do a mounted check to prevent crashes after await
                                       if(!mounted) return;
                                       switch (status){
@@ -212,16 +213,18 @@ class _MyHomePageState extends State<MyHomePage> {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(content: Text("Connected to drone-$ssid"))
                                           );
+
                                           try {
-                                        droneInfo =
-                                        await info.recieveDroneInfo().timeout(
-                                            const Duration(seconds: 3));
-                                      } on TimeoutException{
-                                        debugPrint("Drone Info not available");
-                                      }
+                                            droneInfo =
+                                            await info.recieveDroneInfo().timeout(
+                                                const Duration(seconds: 3));
+                                          } on TimeoutException{
+                                            debugPrint("Drone Info not available");
+                                          }
+
                                           Navigator.push(
                                             context,
-                                            MaterialPageRoute(builder: (_) => FlightScreen(port: port))
+                                            MaterialPageRoute(builder: (_) => FlightScreen(port: port, info: droneInfo))
                                           );
                                           break;
                                         case ConnectionState.failed:
@@ -241,7 +244,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                               SnackBar(content: Text("Drone-$ssid is Unavailable"))
                                           );
                                           break;
-                                      }*/
+                                      }
                                     },
                                   );
                                 },
