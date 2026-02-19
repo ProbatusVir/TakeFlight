@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:takef/disconnect.dart';
 import 'dflight_screen.dart';
+import 'main.dart';
 import 'mflight_screen.dart';
 import 'package:flutter/services.dart';
 import 'video_feed.dart';
@@ -33,6 +36,8 @@ class RC{
 final rcCon = RC();
 final control = ControlRC();
 final vid = DroneVideo();
+late StreamSubscription<ConnectionState> sub;
+ConnectionState? _lastState;
 
 bool isMobile(BuildContext context){
   bool mob = false;
@@ -67,6 +72,24 @@ class _FlightScreenState extends State<FlightScreen>{
       DeviceOrientation.landscapeRight,
     ]);
     startConnection();
+    sub = info.connectionStream.listen((state){
+      if(!mounted) return;
+      if(state == _lastState) return;
+      _lastState = state;
+      switch(state){
+        case ConnectionState.disconnected:
+          disconnect(context);
+          break;
+        case ConnectionState.connecting:
+          break;
+        case ConnectionState.connected:
+          break;
+        case ConnectionState.failed:
+          break;
+        case ConnectionState.unavailable:
+          break;
+      }
+    });
     /*Future.delayed(const Duration(seconds: 5), () {
       if (mounted) {
         disconnect(context);
