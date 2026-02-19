@@ -236,8 +236,8 @@ class Info{
   }
 
   void handleConnectionState(Uint8List data){
-    //print("Received Connection State data: $data");
-    final int code = data.length > 1 ? data[1] : 255; //assuming the received connection state is index 1
+    //debugPrint("Received Connection State data: $data");
+    final int code = data.length > 1 ? data[6] : 255; //assuming the received connection state is index 1
     final state = ConnectionState.fromCode(code);
     connectionCompleter!.complete(state);
     connectionCompleter = null;
