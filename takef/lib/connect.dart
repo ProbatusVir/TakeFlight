@@ -74,6 +74,10 @@ class Info{
 
   Stream<ConnectionState> get connectionStream => connectionController.stream;
 
+  final StreamController<Map<String,dynamic>> _droneStateController = StreamController.broadcast();
+
+  Stream<Map<String,dynamic>> get droneStateStream => _droneStateController.stream;
+
   //Completers for awaiting responses
   Completer<ConnectionState>? connectionCompleter;
   Completer<List<String>>? ssidCompleter;
@@ -231,6 +235,7 @@ class Info{
         debugPrint("There is no drone info available");
         return;
       }
+      _droneStateController.add(decode);
       droneInfo = decode;
       infoDump!.complete(droneInfo);
       infoDump = null;
