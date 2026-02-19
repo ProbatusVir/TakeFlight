@@ -69,6 +69,10 @@ class Info{
   Socket? infoSoc;
   final List<int> dataBuffer = [];
 
+  final connectionController = StreamController<ConnectionState>.broadcast();
+
+  Stream<ConnectionState> get connectionStream => connectionController.stream;
+
   //Completers for awaiting responses
   Completer<ConnectionState>? connectionCompleter;
   Completer<List<String>>? ssidCompleter;
@@ -239,6 +243,7 @@ class Info{
     //debugPrint("Received Connection State data: $data");
     final int code = data.length > 1 ? data[6] : 255; //assuming the received connection state is index 1
     final state = ConnectionState.fromCode(code);
+    connectionController.add(state); //Add state to controller so other widgets can see it
     connectionCompleter!.complete(state);
     connectionCompleter = null;
   }
