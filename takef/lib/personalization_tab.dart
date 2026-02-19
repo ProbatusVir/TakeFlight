@@ -10,7 +10,6 @@ class PersonalizationPage extends StatefulWidget {
 }
 
 class _PersonalizationPageState extends State<PersonalizationPage>{
-  bool isLightTheme = false;
   ControlMode selectedMode = ControlMode.joystick;
 
   Future<void> noOverride() async{
@@ -69,11 +68,12 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
         ),
         Text("Toggle Light Theme", style: Theme.of(context).textTheme.headlineLarge),
         Switch(
-            value: isLightTheme,
-            onChanged: (value){
+            value: isLightMode,
+            onChanged: (value) async{
               setState(() {
-                isLightTheme = value;
+                isLightMode = value;
               });
+              await saveColorTheme(value);
             },
           activeThumbColor: Colors.white,
           activeTrackColor: Colors.grey.shade600,
