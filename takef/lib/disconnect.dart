@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
+import 'main.dart';
 
 void disconnect (BuildContext context){
   showDialog(
@@ -10,9 +11,40 @@ void disconnect (BuildContext context){
           content: Text('Unable to receive drone data. Please retry or exit back to home page.'),
           actions: [
             TextButton(
-                onPressed: (){
-                  //TODO::Needs to retry with the selected SSID
+                onPressed: () async{
                   Navigator.of(context).pop();
+
+                  final status = await info.retryConnection();
+
+                  if(!context.mounted) return;
+
+                  switch(status){
+
+                    case ConnectionState.connecting:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Reconnecting...")),
+                      );
+                      break;
+                    case ConnectionState.connected:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(
+                            "Reconnected to drone-${info.currSSID}"
+                        )),
+                      );
+                      break;
+                    case ConnectionState.failed:
+                      disconnect(context);
+                    case ConnectionState.disconnected:
+                      // TODO: Handle this case.
+                      throw UnimplementedError();
+                    case ConnectionState.unavailable:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(
+                            "Drone-${info.currSSID} is no longer available"
+                        )),
+                      );
+                      break;
+                  }
                   print('Retrying drone connection....');
                 },
                 child: const Text("Retry")
