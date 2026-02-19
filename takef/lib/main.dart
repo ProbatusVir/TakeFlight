@@ -51,7 +51,7 @@ final lightTheme = ThemeData(
     seedColor: Colors.grey.shade700,
     brightness: Brightness.dark,
   ),
-  scaffoldBackgroundColor: Colors.black,
+  scaffoldBackgroundColor: Colors.grey.shade700,
   textTheme: TextTheme(
     displayLarge: TextStyle(
       foreground: Paint()
@@ -140,7 +140,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     return Scaffold(
       //TODO::Change out logo text with SVG text fix logo size for mobile
-      backgroundColor: Colors.black,//changes the overall scaffold color which is the background of the screen itself
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,//changes the overall scaffold color which is the background of the screen itself
       // settings button
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,

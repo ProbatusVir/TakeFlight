@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:takef/disconnect.dart';
+import 'package:takef/flight_control_mode.dart';
 import 'dflight_screen.dart';
 import 'main.dart';
 import 'mflight_screen.dart';
@@ -95,6 +96,10 @@ class _FlightScreenState extends State<FlightScreen>{
         disconnect(context);
       }
     });*/
+  }
+
+  void colorLoaded() async{
+    await loadColorTheme();
   }
 
   void startConnection() async{
