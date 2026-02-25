@@ -55,7 +55,6 @@ class _PersonalizationPageState extends State<PersonalizationPage>{
                     data: MediaQuery.of(context).copyWith(
                       size: const Size(390, 844)
                     ),
-                  ///TODO::Should replace with a reactive test screen
                     child: Scaffold(
                       backgroundColor: Colors.grey[600],
                       body: Center(

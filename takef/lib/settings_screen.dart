@@ -14,7 +14,7 @@ class Settings extends StatelessWidget{
     return DefaultTabController(
         length: 4,
         child: Scaffold(
-          backgroundColor: Colors.grey.shade700,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: Row(
             children: [
               //Left side tab bar

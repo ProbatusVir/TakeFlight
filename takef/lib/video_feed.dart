@@ -32,6 +32,18 @@ class VideoFeedState extends State<VideoFeed>{
     resetTimeOut();
   }
 
+  void disconnectTimer(){
+    if(_feedState == FeedState.live || _feedState == FeedState.connecting) return;
+    final timer = Timer(const Duration(seconds: 15), (){
+      if(mounted){
+        setState(() {
+          _feedState = FeedState.disconnected;
+        });
+      }
+    });
+    disconnect(context);
+  }
+
   void resetTimeOut(){
     //Clear timeout timer
     _timeOut?.cancel();
@@ -42,6 +54,7 @@ class VideoFeedState extends State<VideoFeed>{
           //set the state to be in timeout
           _feedState = FeedState.timeout;
         });
+        //disconnectTimer();
       }
     });
   }
