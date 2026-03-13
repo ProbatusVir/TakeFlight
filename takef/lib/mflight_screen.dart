@@ -15,13 +15,15 @@ class MobileFlight extends StatefulWidget{
     required this.videoKey,
     required this.port,
     required this.control,
-    required this.rcCon
+    required this.rcCon,
+    required this.info
   });
 
   final GlobalKey<VideoFeedState> videoKey;
   final int port;
   final ControlRC control;
   final RC rcCon;
+  final Map<String, dynamic> info;
 
   @override
   State<MobileFlight> createState() => _MobileFlightState();

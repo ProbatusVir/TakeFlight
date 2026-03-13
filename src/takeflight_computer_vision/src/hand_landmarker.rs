@@ -9,12 +9,13 @@ use image::EncodableLayout;
 use image::Rgb32FImage;
 use std::fmt::{Debug, Formatter};
 use std::path::Path;
+use std::pin::Pin;
 use tflitec::tensor::{Shape, Tensor};
 use HandLandmarkIndices::Presence;
 
 pub struct HandLandmarker
 {
-	base : cv_base::CVBase<'static>,
+	base : Pin<Box<cv_base::CVBase<'static>>>,
 }
 
 const PRESENCE_THRESHOLD : f32 = 0.3;
@@ -72,7 +73,7 @@ pub enum DigitIndices
 }
 
 #[allow(dead_code)]
-impl<'a> HandLandmarker
+impl HandLandmarker
 {
 	pub fn new() -> Result<Self, Error>
 	{
@@ -230,7 +231,7 @@ impl<'a> HandLandmarker
 }
 
 
-impl Debug for HandLandmarker
+impl<'a> Debug for HandLandmarker
 {
 	fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
 		dbg!("Debug is not implemented for HandLandmarker!");

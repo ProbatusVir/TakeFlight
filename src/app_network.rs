@@ -374,7 +374,7 @@ impl InfoPacket
 
 	pub fn new_ssid(origin_play : RoShamBo, _server : &ServerInstance) -> Result<Self>
 	{
-		let list_of_ssids = crate::app_network::SSIDs { ssids : vec![String::from_str("Hello")?, String::from_str("world")?, String::from_str("!")?, ] };
+		let list_of_ssids = crate::app_network::SSIDs { ssids : vec![String::from_str("Tello")?, ] };
 		let json = serde_json::to_vec(&list_of_ssids)?;
 		// TODO: Make this a feature of the server.
 		Ok(Self {
@@ -449,19 +449,20 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 							let drone_lock = drone.lock()?;
 							match drone_lock.get_state() {
 								None => {
-									InfoPacket::new_drone_state_dump(
+									let return_packet =InfoPacket::new_drone_state_dump(
 										packet.play.counterplay(),
 										[0, 0, 0, 0, 0, 0],
 										None
 									)?;
-
+									return_packet.write(origin)?;
 									Ok(())
 								}
 								Some(state) => {
-									InfoPacket::new_drone_state_dump(
+									let return_packet = InfoPacket::new_drone_state_dump(
 										packet.play.counterplay(),
 										[0, 0, 0, 0, 0, 0],
 										Some(&state))?;
+									return_packet.write(origin)?;
 									Ok(())
 								}
 							}
@@ -472,7 +473,45 @@ pub(self) fn handle_info_packet(packet : &InfoPacket, origin : &mut TcpStream, s
 			}
 		}
 		InfoID::RecordRequest => { todo!("Haven't implemented RecordRequest yet.") }
-		InfoID::DroneConnectionState => { todo!("Haven't implemented response to DroneConnectionState request yet.") }
+		InfoID::DroneConnectionState => {
+			match &server.curr_drone{
+				None => {
+					let return_packet = InfoPacket::new_drone_connection_state(
+						packet.play.counterplay(),
+						ConnectionState::Disconnected,
+						[0, 0, 0, 0, 0, 0],
+					);
+					return_packet.write(origin)?;
+					Ok(())
+				}
+
+				Some(connection) => {
+					match &*connection.lock()?
+					{
+						Connection::Drone(drone) => {
+							let drone_lock = drone.lock()?;
+
+							let state = if !drone_lock.connected() {
+								ConnectionState::StillConnecting
+							} else{
+								ConnectionState::Connected
+							};
+
+							let return_packet = InfoPacket::new_drone_connection_state(
+								packet.play.counterplay(),
+								state,
+								[0, 0, 0, 0, 0, 0],
+							);
+							return_packet.write(origin)?;
+							Ok(())
+						}
+						_=> Err(Error::Custom(
+							"Wrong connection state!"
+						)),
+					}
+				}
+			}
+		}
 		InfoID::DroneSelection => { server.logger.error("We received a DroneSelection packet. This message is a little better than a crash.") }
 		InfoID::Invalid => { Err(Error::Custom("Attempted to handle invalid info packet."))? },
 	}

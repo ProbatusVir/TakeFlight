@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:takef/flight_control_mode.dart';
 import 'package:takef/personalization_tab.dart';
 
 import 'connect.dart';
@@ -16,9 +19,70 @@ void main() async {
   //Connect to rust server
   //await connectToServer();
   runApp(const MyApp());
+  await loadColorTheme();
 }
 
 final info = Info();
+Map<String, dynamic> droneInfo = {};
+
+final darkTheme = ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: Colors.grey.shade700,
+  ),
+  //Color for text theme
+  textTheme: TextTheme(
+    displayLarge: TextStyle(
+      //color: Colors.white,
+      foreground: Paint()
+        ..style = PaintingStyle.stroke //set the style to stroke
+        ..strokeWidth = 2 //defines the width of the strok
+        ..color = Colors.white, //set the stroke color
+    ),
+    headlineMedium: TextStyle(color: Colors.black), //raw hex value til style file is created
+    headlineLarge: TextStyle(color: Colors.white),
+    bodyLarge: TextStyle(color: Colors.white),
+    bodyMedium: TextStyle(color: Colors.white),
+  ),
+  scaffoldBackgroundColor: Colors.black,
+);
+
+final lightTheme = ThemeData(
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: Colors.grey.shade700,
+    brightness: Brightness.dark,
+  ),
+  scaffoldBackgroundColor: Colors.grey.shade700,
+  textTheme: TextTheme(
+    displayLarge: TextStyle(
+      foreground: Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Colors.white,
+    ),
+    headlineMedium: const TextStyle(color: Colors.black),
+    headlineLarge: const TextStyle(color: Colors.white),
+    bodyLarge: const TextStyle(color: Colors.white),
+    bodyMedium: const TextStyle(color: Colors.white),
+  ),
+);
+
+enum ConnectionState{
+  connecting(0),
+  connected(1),
+  failed(2),
+  disconnected(3),
+  unavailable(255);
+
+  final int code;
+  const ConnectionState(this.code);
+
+  static ConnectionState fromCode(int code) {
+    return ConnectionState.values.firstWhere(
+          (state) => state.code == code,
+      orElse: () => ConnectionState.unavailable,
+    );
+  }
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -28,28 +92,13 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'TakeFlight',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.grey.shade700,
-        ),
-        //Color for text theme
-        textTheme: TextTheme(
-          displayLarge: TextStyle(
-            //color: Colors.white,
-            foreground: Paint()
-              ..style = PaintingStyle.stroke //set the style to stroke
-              ..strokeWidth = 2 //defines the width of the strok
-              ..color = Colors.white, //set the stroke color
-          ),
-          headlineMedium: TextStyle(color: Colors.black), //raw hex value til style file is created
-        ),
-        scaffoldBackgroundColor: Colors.black,
-      ),
+      theme: isLightMode ? lightTheme : darkTheme,
       debugShowCheckedModeBanner: false, //gets rid of debug sash
       home: const MyHomePage(title: 'TakeFlight'),
       routes: {
+        '/home': (_) => const MyHomePage(title: 'TakeFlight'),
         '/personalization': (_) =>  const PersonalizationPage(),
-        '/drone-info': (_) => const DroneInfoPage(),
+        '/drone-info': (_) => DroneInfoPage(info: droneInfo,),
         '/gesture-control': (_) => const GestureControlPage(),
         '/flight-logs': (_) => const FlightLogsPage()
       },
@@ -80,7 +129,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void startInfo() async{
     port = await getServerPort();
     await info.connect(port);
-    await info.infoID(0x00); //SSID
+    await info.infoID(0x00); ///SSID
     items = await info.receiveSSID();
   }
 
@@ -91,10 +140,11 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     return Scaffold(
       //TODO::Change out logo text with SVG text fix logo size for mobile
-      backgroundColor: Colors.black,//changes the overall scaffold color which is the background of the screen itself
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,//changes the overall scaffold color which is the background of the screen itself
       // settings button
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black45,
+          tooltip: "Settings",
           onPressed: (){
           if(defaultTargetPlatform == TargetPlatform.android){
             Navigator.of(context).push(
@@ -102,7 +152,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           }else{
             Navigator.of(context).push(
-                MaterialPageRoute(builder: (BuildContext context) => Settings())
+                MaterialPageRoute(builder: (BuildContext context) => Settings(info: droneInfo,))
             );
           }
           },
@@ -126,6 +176,7 @@ class _MyHomePageState extends State<MyHomePage> {
               style: Theme.of(context).textTheme.displayLarge,
             ),
             FloatingActionButton.extended( //extends the button to fit its contents
+              heroTag: 'ConnectionFAB',
               backgroundColor: Colors.grey.shade400, //grey with a shade value of 400 that gives the creamy look
                 onPressed: (){
                 //pop up for drone connection list
@@ -150,15 +201,78 @@ class _MyHomePageState extends State<MyHomePage> {
                                     title: Text(ssid),
                                     trailing: Icon(Icons.wifi_outlined, color: Colors.white),
                                     textColor: Colors.white,
-                                    onTap: (){
-                                      final connected = info.sendSSID(ssid);                                      //notifies user they connected
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                    onTap: () async{
+                                      /*ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text('Connecting to...$ssid'))
                                       );
+                                      await info.infoID(0x04);
+                                      info.sendSSID(ssid);
+                                      await info.infoID(0x01);
+                                      try {
+                                        droneInfo =
+                                        await info.recieveDroneInfo().timeout(
+                                            const Duration(seconds: 3));
+                                      } on TimeoutException{
+                                        debugPrint("Drone Info not available");
+                                      }
+                                      if(!mounted) return;
                                       //goes to main screen after connection
                                       Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (BuildContext context) => FlightScreen(port: port,))
-                                      );
+                                          MaterialPageRoute(builder: (_) => FlightScreen(port: port, info: droneInfo))
+                                      );*/
+                                      await info.infoID(0x04);
+                                      info.sendSSID(ssid);
+                                      await info.infoID(0x03); ///DroneConnectionState
+                                      final status = await info.connection();
+                                      await info.infoID(0x01);
+                                      //do a mounted check to prevent crashes after await
+                                      if(!mounted) return;
+                                      switch (status){
+                                        case ConnectionState.connecting:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Connecting to...drone-$ssid"))
+                                          );
+                                          break;
+                                        case ConnectionState.connected:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text("Connected to drone-$ssid"))
+                                          );
+
+                                          try {
+                                            droneInfo =
+                                            await info.recieveDroneInfo().timeout(
+                                                const Duration(seconds: 3));
+                                          } on TimeoutException{
+                                            debugPrint("Drone Info not available");
+                                          }
+
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => FlightScreen(port: port, info: droneInfo))
+                                          );
+                                          break;
+                                        case ConnectionState.failed:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Failed to connect to drone-$ssid"))
+                                          );
+                                          //TODO::Implement reconnect menu/exit
+                                          break;
+                                        case ConnectionState.disconnected:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Disconnected from drone-$ssid"))
+                                          );
+                                          Navigator.push(
+                                              context,
+                                              MaterialPageRoute(builder: (_) => FlightScreen(port: port, info: droneInfo))
+                                          );
+                                          //TODO::Implement reconnect menu/exit
+                                          break;
+                                        case ConnectionState.unavailable:
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text("Drone-$ssid is Unavailable"))
+                                          );
+                                          break;
+                                      }
                                     },
                                   );
                                 },
@@ -176,7 +290,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   );
                 },
                 label: Text(
-                    'CONNECT...',
+                    'CONNECT',
                     style: Theme.of(context).textTheme.headlineMedium, //default text size and theme
                 ),
             ),

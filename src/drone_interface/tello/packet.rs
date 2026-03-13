@@ -6,6 +6,7 @@ use chrono::Timelike;
 use concat_arrays::concat_arrays;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::{Cursor, Read};
+use lebe::Endian;
 use zerocopy::IntoBytes;
 
 #[allow(dead_code)]
@@ -23,6 +24,18 @@ enum PacketType
 	SetInfo		= 0x05,
 	Flip		= 0x06,
 	Unknown2	= 0x07,
+}
+
+pub(crate) enum FlipDirection {
+	Forward,
+	Left,
+	Backward,
+	Right,
+
+	ForwardLeft,
+	BackwardLeft,
+	BackwardRight,
+	ForwardRight,
 }
 
 
@@ -110,15 +123,16 @@ fn test_takeoff()
 // Each value must be between 0-100.
 pub fn set_sticks(sequence_number : u16, rx : i16, ry : i16, lx : i16, ly : i16) -> [u8;22]
 {
-	const PARAMETER_RANGE: i16 = 100;
-	const MAGNITUDE_BASELINE : i16 = 1024;
-	const MAGNITUDE_RANGE: i16 = 364;
+	const PARAMETER_RANGE_I16: i16 = 100;
+	const PARAMETER_RANGE_I32: i32 = PARAMETER_RANGE_I16 as i32;
+	const MAGNITUDE_BASELINE : i32 = 1024;
+	const MAGNITUDE_RANGE: i32 = 364;
 	
 	//const MULTIPLE : i16 = i16::MAX / 100;
-	debug_assert!(rx >= -PARAMETER_RANGE && rx < PARAMETER_RANGE);
-	debug_assert!(ry >= -PARAMETER_RANGE && ry < PARAMETER_RANGE);
-	debug_assert!(lx >= -PARAMETER_RANGE && lx < PARAMETER_RANGE);
-	debug_assert!(ly >= -PARAMETER_RANGE && ly < PARAMETER_RANGE);
+	debug_assert!(rx >= -PARAMETER_RANGE_I16 && rx <= PARAMETER_RANGE_I16);
+	debug_assert!(ry >= -PARAMETER_RANGE_I16 && ry <= PARAMETER_RANGE_I16);
+	debug_assert!(lx >= -PARAMETER_RANGE_I16 && lx <= PARAMETER_RANGE_I16);
+	debug_assert!(ly >= -PARAMETER_RANGE_I16 && ly <= PARAMETER_RANGE_I16);
 
 	// I wish SIMD wasn't just nightly...
 	/*rot	*= MULTIPLE;
@@ -147,10 +161,10 @@ pub fn set_sticks(sequence_number : u16, rx : i16, ry : i16, lx : i16, ly : i16)
 	// To get values between (f normalized between -1:1), 1024 + 364 * f
 	// To maintain the accuracy with integer values between -100:100
 
-	let rx = MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * rx) / PARAMETER_RANGE;
-	let ry = MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * ry) / PARAMETER_RANGE;
-	let lx = MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * lx) / PARAMETER_RANGE;
-	let ly = MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * ly) / PARAMETER_RANGE;
+	let rx = (MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * rx as i32) / PARAMETER_RANGE_I32) as i16;
+	let ry = (MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * ry as i32) / PARAMETER_RANGE_I32) as i16;
+	let lx = (MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * lx as i32) / PARAMETER_RANGE_I32) as i16;
+	let ly = (MAGNITUDE_BASELINE + (MAGNITUDE_RANGE * ly as i32) / PARAMETER_RANGE_I32) as i16;
 
 	let fast = false; // FIXME: This should be a member variable.
 	let packed_axes= {
@@ -190,6 +204,13 @@ pub fn set_sticks(sequence_number : u16, rx : i16, ry : i16, lx : i16, ly : i16)
 pub const fn packet_size(payload_len : u16) -> [u8;2]
 {
 	((payload_len + 11) << 3).to_le_bytes()
+}
+
+pub fn flip(sequence_number : u16, direction : FlipDirection) -> [u8;12] {
+	let payload =  [direction as u8];
+	let (header, footer) = packet_header(&payload, PacketType::Flip, Command::Flip, sequence_number);
+
+	concat_arrays!(header, payload, footer)
 }
 
 

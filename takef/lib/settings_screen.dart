@@ -3,21 +3,23 @@ import 'package:takef/drone_info_tab.dart';
 import 'package:takef/flight_logs_tab.dart';
 import 'package:takef/gesture_tab.dart';
 import 'package:takef/personalization_tab.dart';
+import 'connect.dart';
 
 class Settings extends StatelessWidget{
-  const Settings({super.key});
+  const Settings({super.key, required this.info});
+  final Map<String, dynamic> info;
 
   @override
   Widget build(BuildContext context){
     return DefaultTabController(
         length: 4,
         child: Scaffold(
-          backgroundColor: Colors.grey.shade700,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: Row(
             children: [
               //Left side tab bar
               Container(
-                width: 125,
+                width: 150,
                 height: double.maxFinite,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.only(
@@ -33,10 +35,10 @@ class Settings extends StatelessWidget{
                   quarterTurns: -3, //Rotate the TabBar for vertical look
                   child: TabBar(
                     tabs: [
-                      Tab(child: RotatedBox(quarterTurns: -1, child: Text('Personalization', maxLines: 1, softWrap: false,))),
-                      Tab(child: RotatedBox(quarterTurns: -1, child: Text('Drone Information', maxLines: 1,))),
-                      Tab(child: RotatedBox(quarterTurns: -1, child: Text('Gesture Settings', maxLines: 2, overflow: TextOverflow.visible,))),
-                      Tab(child: RotatedBox(quarterTurns: -1, child: Text('Flight logs', maxLines: 2,))),
+                      Tab(height: 125, child: RotatedBox(quarterTurns: -1, child: Text('Personalization', maxLines: 1, softWrap: false,))),
+                      Tab(height: 125, child: RotatedBox(quarterTurns: -1, child: Text('Drone\nInformation', maxLines: 3,))),
+                      Tab(height: 125, child: RotatedBox(quarterTurns: -1, child: Text('Gesture\nSettings', maxLines: 4, overflow: TextOverflow.visible,))),
+                      Tab(height: 125, child: RotatedBox(quarterTurns: -1, child: Text('Flight\nlogs', maxLines: 2,))),
                     ],
                     labelColor: Colors.white,
                     unselectedLabelColor: Colors.grey,
@@ -53,7 +55,7 @@ class Settings extends StatelessWidget{
                   children: [
                     //Drone info tab and down in order of tab creation
                     PersonalizationPage(),
-                    DroneInfoPage(),
+                    DroneInfoPage(info: info,),
                     GestureControlPage(),
                     FlightLogsPage()
                   ],

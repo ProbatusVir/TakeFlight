@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert'; //For encoding/decoding
 import 'dart:math';
-import 'package:flutter/cupertino.dart';
+import 'main.dart';
+import 'package:flutter/cupertino.dart' hide ConnectionState;
 import 'package:flutter/foundation.dart'; //For Uint8List
 import 'central_screen.dart';
 import 'video_feed.dart';
@@ -66,6 +67,21 @@ class ControlRC{
 
 class Info{
   Socket? infoSoc;
+  final List<int> dataBuffer = [];
+  String? currSSID;
+
+  final connectionController = StreamController<ConnectionState>.broadcast();
+
+  Stream<ConnectionState> get connectionStream => connectionController.stream;
+
+  final StreamController<Map<String,dynamic>> _droneStateController = StreamController.broadcast();
+
+  Stream<Map<String,dynamic>> get droneStateStream => _droneStateController.stream;
+
+  //Completers for awaiting responses
+  Completer<ConnectionState>? connectionCompleter;
+  Completer<List<String>>? ssidCompleter;
+  Completer<Map<String, dynamic>>? infoDump;
 
   Future<void> connect (int port) async{
     try{
@@ -81,6 +97,24 @@ class Info{
       await infoSoc?.flush();
       print('Info Handshake was sent');
     }
+
+    if(infoSoc != null){
+      infoSoc?.listen(
+        (Uint8List data){
+          print("Received ${data.length} bytes from server: ${data.toList()}");
+          dataBuffer.addAll(data);
+          processBufferData();
+        },
+        onError: (e){
+          print('Error on socket: $e');
+          infoSoc?.destroy();
+        },
+        onDone: (){
+          print('Server disconnected');
+          infoSoc?.destroy();
+        }
+      );
+    }
   }
 
   Future<void> infoID(int infoID) async{
@@ -94,61 +128,161 @@ class Info{
       infoSoc?.add(packet);
       //one flush
       await infoSoc?.flush();
-      print('SSID packet sent');
+      print('Info $infoID packet sent');
     }
+  }
+
+  /*void socketData(Uint8List data){
+    dataBuffer.addAll(data);
+    processBufferData();
+  }*/
+
+  void processBufferData(){
+    //loop through buffer and get first 4 bytes(header)
+    print("RAW HEADER BYTES: ${dataBuffer.sublist(0, 4)}");
+    while(true){
+      if (dataBuffer.length < 4) return;
+
+      final id = dataBuffer[0];
+
+      final roShamBo = dataBuffer[1];
+
+      final payloadSize = dataBuffer[2];
+
+      final fullPacket = 4 + payloadSize;
+
+      //wait for entire packet
+      if(dataBuffer.length < fullPacket) return;
+
+      final packet = Uint8List.fromList(dataBuffer.sublist(0,fullPacket));
+
+      dataBuffer.removeRange(0, fullPacket);
+
+      handleData(id, roShamBo, packet.sublist(4));
+    }
+  }
+
+  void handleData(int id, int roShamBo, Uint8List payload){
+    //print("Received info data: $data");
+    //final int type = data[0];
+
+    switch(id){
+      ///SSIDS
+      case 0x00:
+        handleSSIDList(payload);
+        break;
+        ///DroneStateDump
+      case 0x01:
+        handleDroneDump(payload);
+        break;
+        ///Record Request
+      case 0x02:
+        break;
+        ///DroneConnection
+      case 0x03:
+        handleConnectionState(payload);
+        break;
+        ///Drone Selection
+      case 0x04:
+        break;
+    }
+  }
+
+  void handleSSIDList(Uint8List data) {
+    //receive SSID
+    List<String> recSSID = [];
+    try {
+      //decode received data
+      final recData = utf8.decode(data, allowMalformed: true);
+      print('Received: $recData');
+      //decode json
+      final jString = recData.substring(recData.indexOf('{'));
+      final decoded = jsonDecode(jString); // decoded is a Map<String, dynamic>
+      recSSID = List<String>.from(decoded['ssids']);
+      print('The received SSIDs: $recSSID');
+      ssidCompleter!.complete(recSSID);
+      ssidCompleter = null;
+    } catch (e) {
+      ssidCompleter!.completeError(e);
+      ssidCompleter = null;
+    }
+  }
+
+  void handleDroneDump(Uint8List data){
+    Map<String,dynamic> droneInfo;
+
+    try{
+      final payload = data.sublist(1);
+
+      //6 bytes length for ssid error
+      final ssidBytes = payload.sublist(0, 6);
+      final isInvalid = ssidBytes.every((b) => b == 0x00);
+
+      //check to see if its invalid
+      if(isInvalid){
+        infoDump!.completeError(
+          StateError("Drone Dump unavailable")
+        );
+        infoDump = null;
+        return;
+      }
+
+      //json data
+      final jBytes = payload.sublist(5);
+      final jMap = utf8.decode(jBytes);
+      final decode = jsonDecode(jMap);
+      if(decode == null){
+        debugPrint("There is no drone info available");
+        return;
+      }
+      _droneStateController.add(decode);
+      droneInfo = decode;
+      infoDump!.complete(droneInfo);
+      infoDump = null;
+    } catch (e){
+      infoDump!.completeError(e);
+      infoDump = null;
+    }
+  }
+
+  void handleConnectionState(Uint8List data){
+    //debugPrint("Received Connection State data: $data");
+    final int code = data.length > 1 ? data[6] : 255; //assuming the received connection state is index 1
+    final state = ConnectionState.fromCode(code);
+    connectionController.add(state); //Add state to controller so other widgets can see it
+    connectionCompleter!.complete(state);
+    connectionCompleter = null;
   }
 
   Future<List<String>> receiveSSID() async{
-    final completer = Completer<List<String>>(); //manual control of future
-
-    //receive SSID
-    List<String> recSSID = [];
-    if(infoSoc != null){
-      infoSoc?.listen(
-              (Uint8List data){
-            //decode received data
-            final recData = utf8.decode(data, allowMalformed: true);
-            print('Received: $recData');
-            //decode json
-            final jString = recData.substring(recData.indexOf('{'));
-            final decoded = jsonDecode(jString); // decoded is a Map<String, dynamic>
-            recSSID = List<String>.from(decoded['ssids']);
-            print('The received SSIDs: $recSSID');
-
-            //fulfill the future with the SSIDs
-            if(!completer.isCompleted){
-              completer.complete(recSSID);
-            }
-          },
-          onError: (e){
-            if(!completer.isCompleted){
-              completer.completeError(e);
-            }
-            print('Error on socket: $e');
-            infoSoc?.destroy();
-          },
-          onDone: (){
-            print('Server disconnected');
-            infoSoc?.destroy();
-          }
-      );
-    }
-    return completer.future;
+    ssidCompleter = Completer<List<String>>();
+    return ssidCompleter!.future;
   }
 
-  bool sendSSID(String ssid){
-    bool sent = false;
+  Future<Map<String, dynamic>> recieveDroneInfo() async{
+    infoDump = Completer<Map<String, dynamic>>();
+    return infoDump!.future;
+  }
+
+  Future<ConnectionState> connection() async{
+    connectionCompleter = Completer<ConnectionState>();
+    return connectionCompleter!.future;
+  }
+  void sendSSID(String ssid) async{
+    currSSID = ssid;
+    final ssidByte = utf8.encode(ssid);
     if(infoSoc != null){
-      try{
-        infoSoc?.add([0x04]);
-        infoSoc?.write(ssid);
-        sent = true;
-        print("Sent SSID back to server");
-      } catch (e){
-        print("Unable to send SSID back to server");
-      }
+      infoSoc?.add(ssidByte);
+      print("Sent selected SSID");
     }
-    return sent;
+  }
+  Future<ConnectionState> retryConnection() async{
+    await info.infoID(0x04);
+    info.sendSSID(currSSID!);
+    await info.infoID(0x03); ///DroneConnectionState
+    final status = await info.connection();
+
+    return status;
   }
 }
 

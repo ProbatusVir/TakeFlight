@@ -1,6 +1,6 @@
 use super::packet;
 use crate::app_network::DroneStateJSON;
-use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData};
+use crate::drone_interface::tello::packet::{land, set_sticks, strip_payload, Command, FlightData, FlipDirection};
 use crate::drone_interface::{IUnit, Unit, _DroneInternal};
 use crate::error::Error;
 use crate::logger::Logger;
@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zerocopy::IntoBytes;
+use crate::drone_interface::tello::video_packet::VideoPacket;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -29,11 +30,11 @@ pub struct TelloDrone
 
 	seq_number		: u16,
 	response_buffer	: Vec<u8>,
-	vid_frame_number: u8,
+	vid_frame_number: Option<u8>,
 	frame_buffer	: Vec<u8>,
 	image			: Option<DynamicImage>,
 
-	last_sps_pps_req: std::time::SystemTime,
+	last_sps_pps_req: SystemTime,
 	sps				: Option<[u8;15 - 2]>,
 	pps				: Option<[u8;10 - 2]>,
 	idr				: Vec<u8>,
@@ -59,6 +60,10 @@ pub struct TelloDrone
 
 	video_queue 			: VideoQueue,
 
+	accumulated_frames		: Vec<u8>,
+	is_pps_updated			: bool,
+	is_sps_updated			: bool,
+	is_previous_pack_idr	: bool,
 }
 
 impl drone_interface::Drone for TelloDrone
@@ -154,21 +159,35 @@ impl drone_interface::Drone for TelloDrone
 		Ok(())
 	}
 
-	fn backflip(&mut self) -> Result<(), Error> {
+	/*fn backflip(&mut self) -> Result<(), Error> {
 		self.command_sock.send(b"flip b")?;
 		self.command_sock.recv(&mut self.response_buffer)?;
 
 		sleep(Duration::from_secs(3));
 
 		Ok(())
+	}*/
+
+	fn backflip(&mut self) -> Result<(), Error> {
+		let pack = packet::flip(self.seq_number, FlipDirection::Backward);
+		self.command_sock.send(&pack)?;
+		self.seq_number += 1;
+		Ok(())
 	}
 
-	fn frontflip(&mut self) -> Result<(), Error> {
+	/*fn frontflip(&mut self) -> Result<(), Error> {
 		self.command_sock.send(b"flip f")?;
 		self.command_sock.recv(&mut self.response_buffer)?;
 
 		sleep(Duration::from_secs(3));
 
+		Ok(())
+	}*/
+
+	fn frontflip(&mut self) -> Result<(), Error> {
+		let pack = packet::flip(self.seq_number, FlipDirection::Backward);
+		self.command_sock.send(&pack)?;
+		self.seq_number += 1;
 		Ok(())
 	}
 
@@ -209,7 +228,7 @@ impl drone_interface::Drone for TelloDrone
 		self.command_sock.send(&pack)?;
 		self.seq_number += 1;
 
-		self.logger.info_from_string(format!("Just sent out the string: {}", crate::debug_utils::raw_hex_to_string(&pack)))?;
+		//self.logger.info_from_string(format!("Just sent out the string: {}", crate::debug_utils::raw_hex_to_string(&pack)))?;
 
 		Ok(())
 	}
@@ -375,7 +394,7 @@ impl TelloDrone
 			time_created	: SystemTime::now(),
 			seq_number,
 			response_buffer,
-			vid_frame_number: 0,
+			vid_frame_number: None,
 			frame_buffer	: Vec::new(),
 			image			: None,
 			last_sps_pps_req: std::time::SystemTime::UNIX_EPOCH,	// This prompts an immediate request for SPS/PPS
@@ -399,6 +418,10 @@ impl TelloDrone
 			curr_video_dst,
 			curr_state: None,
 			video_queue,
+			accumulated_frames: Vec::new(),
+			is_pps_updated: false,
+			is_sps_updated: false,
+			is_previous_pack_idr: false,
 		}
 		));
 
@@ -420,8 +443,7 @@ impl TelloDrone
 		Ok(this_drone)
 	}
 
-	fn request_sps_pss(&mut self) -> Result<(), Error>
-	{
+	fn request_sps_pss(&mut self) -> Result<(), Error> {
 		let sps_pps_request = packet::query_video_sps_pps(0);
 		self.seq_number += 1;
 		self.command_sock.send(&sps_pps_request)?;
@@ -429,8 +451,7 @@ impl TelloDrone
 		Ok(())
 	}
 
-	fn connect(&mut self) -> Result<(), Error>
-	{
+	fn connect(&mut self) -> Result<(), Error> {
 		const CONN_REQ : [u8;9] = *b"conn_req:";
 		let port_bytes : [u8;2] = u16::to_le_bytes(self.video_sock.local_addr()?.port());
 		let conn_string : [u8;11] = concat_arrays!(CONN_REQ, port_bytes);
@@ -439,8 +460,7 @@ impl TelloDrone
 		Ok(())
 	}
 
-	fn handle_cmd_bytes(&mut self, bytes_read : usize) -> Result<(), Error>
-	{
+	fn handle_cmd_bytes(&mut self, bytes_read : usize) -> Result<(), Error> {
 		let recvd_command : Command = u16::from_le_bytes([self.inner_read_buf[5], self.inner_read_buf[6]]).into();
 
 		match recvd_command {
@@ -457,12 +477,15 @@ impl TelloDrone
 			Command::FlightStatus => {
 				let payload = strip_payload(&self.inner_read_buf[..bytes_read]);
 				let flight_data = FlightData::new(payload)?;
+
+
 				// even though we have a bunch of data, looking at it all the time kinda sucks.
 				if flight_data.battery_percent != self.battery_percent
 				{
 					self.battery_percent = flight_data.battery_percent;
 					self.logger.info_from_string(format!("Battery Percent: {}", self.battery_percent))?;
 				}
+				self.curr_state = Some(flight_data);
 			}
 			Command::TakeOff => {
 				self.logger.info("Tello confirmed: Taking off...")?;
@@ -512,8 +535,7 @@ impl TelloDrone
 
 		Ok(())
 	}
-	fn handle_cmd_string(&mut self, bytes_read : usize) -> Result<(), Error>
-	{
+	fn handle_cmd_string(&mut self, bytes_read : usize) -> Result<(), Error> {
 		let message = String::from_utf8_lossy(&self.inner_read_buf[..bytes_read]);
 		let packet_end = [self.inner_read_buf[bytes_read - 2], self.inner_read_buf[bytes_read - 1]];
 
@@ -536,7 +558,7 @@ impl TelloDrone
 		else
 		{
 			println!("no clue what's going on...");
-			todo!("Non 0xCC packets from the Tello that weren't acknowledgement. The message: \"{}\"\t{}", message, message.len())
+			//todo!("Non 0xCC packets from the Tello that weren't acknowledgement. The message: \"{}\"\t{}", message, message.len())
 		}
 
 		// TODO: put something here.
@@ -544,10 +566,9 @@ impl TelloDrone
 		Ok(())
 	}
 
-	const SPS_REQUEST_SEC_INTERVAL : Duration = Duration::from_millis(1500);
+	const SPS_REQUEST_SEC_INTERVAL : Duration = Duration::from_millis(300);
 
-	fn receive_video(&mut self) -> Result<(), Error>
-	{
+	fn receive_video(&mut self) -> Result<(), Error> {
 		// Get image metadata to decode the image.
 		let now = SystemTime::now();
 		if now.duration_since(self.last_sps_pps_req)? > Self::SPS_REQUEST_SEC_INTERVAL || self.last_sps_pps_req == UNIX_EPOCH
@@ -557,115 +578,209 @@ impl TelloDrone
 			self.last_sps_pps_req = now;
 		}
 
-		loop
-		{
-			const END_OF_FRAME_BITMASK : u8 =  0b1000_0000;
-			const PAYLOAD_START : usize = 2;
-			// Despite what I thought, it seems that they're using a custom format for these packets.
-			// The frame starts [n_frame, 0x00, 0x00, 0x00, 0x00, 0x01, ...] (I suspect the second byte here is also the local number, but it has to be zero.)
-			// 	In contrast, the standard H.264 frame starts [0x00, 0x00, 0x01], which means that we can simply strip the first three bytes.
-			// The following packets will follow the format [n_frame, n_local, ...], so in theory, we just need to strip that data and we are all set.
-
-			let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
-			let frame_number = self.inner_read_buf[0];
-			let local_number = self.inner_read_buf[1];
-			// Manipulate the internal state of this object's image related members based on the contents of the payload
-			// This scope is necessary to let go of the borrow on payload. Of course, we must reborrow this at the end of the function, as we append the payload
-			// 	to the current frame_buffer.
-			{
-				let payload = &self.inner_read_buf[PAYLOAD_START..bytes_read];
-				// let nal_type : Option<u8> = ....;
-				let end_of_frame = local_number & END_OF_FRAME_BITMASK != 0;
-
-				if bytes_read == 15 && local_number == 0x80 // FIXME: Check the NAL type instead of the length.
-				{
-					self.logger.info("Received updated SPS (larger)")?;
-					self.sps = Some(payload.try_into()?);
-				} else if bytes_read == 10 && local_number == 0x80 // FIXME: Check the NAL type instead of the length
-				{
-					self.logger.info("Received updated PPS (smaller)")?;
-					self.pps = Some(payload.try_into()?);
-				} else if local_number == 0x80
-				{
-					todo!("WHAT, THERE'S ANOTHER THING THAT CAN BE 0x80??? {}", payload.len())
-				}
-				// NAL unit is 0x65, if we're starting an IDR, we should clear all image buffers
-				else if payload.len() > 4
-				{
-					if payload[4] == 0x65 && local_number == 0
-					{
-						self.idr_frame_number = Some(frame_number);
-						self.idr.clear();
-						self.frame_buffer.clear();
-					}
-				}
-				// this is basically just asking if it exists yet.
-				// TODO: Make this a little cleaner.
-				match self.idr_frame_number
-				{
-					// There's no sense in doing anything with an image if there's no IDR
-					None => { continue; }
-
-					Some(n) =>
-						{
-							// check if we're contributing to the active IDR, if we are, contribute.
-							if frame_number == n
-							{
-								self.idr.extend_from_slice(payload);
-								if !end_of_frame
-								{
-									continue;
-								}
-							}
-						}
-				}
-			}
-
-
-			//Check if the frame is ending
-			// -- The following is not always true. -- 0x88 is the terminal local number.
-			if frame_number != self.vid_frame_number && self.frame_buffer.len() > 0
-			{
-				// Check that we have all the components to output a coherent image.
-				if self.sps.is_some() && self.pps.is_some() && self.idr.len() > 0
-				{	// The following is for POI.
-					//if self.vid_frame_number % 100 == 0
-					{
-						/*let mut file = File::create(&format!("test_results/frame{frame_number}.h264"))?;
-						file.write_all(self.sps.as_ref().unwrap())?;
-						file.write_all(self.pps.as_ref().unwrap())?;
-						file.write_all(&self.idr)?;
-						file.write_all(&self.frame_buffer)?;
-
-						self.logger.info_from_string(format!("Saved a file: {frame_number}\t{}", self.vid_frame_number))?;
-						 */
-						let mut image_buffer = Vec::new();
-						image_buffer.extend_from_slice(&self.sps.unwrap());
-						image_buffer.extend_from_slice(&self.pps.unwrap());
-						image_buffer.extend_from_slice(&self.idr);
-						image_buffer.extend_from_slice(&self.frame_buffer);
-
-
-						self.video_queue.transcode(Token(self.video_sock.local_addr()?.port() as usize), self.curr_video_src.lock()?.clone(), FrameType::TelloH264, FrameType::Png, image_buffer.into_boxed_slice())?;
-					}
-					self.vid_frame_number = frame_number;
-					self.frame_buffer.clear();
-				}
-				//if frame_number == 0xFF { panic!("We reached 255.") }
-			}
-
-
-			let payload = &self.inner_read_buf[PAYLOAD_START..bytes_read];
-			self.frame_buffer.extend(payload);
-
-
+		loop {
+			self._receive_video_packet()?
 		}
 
 		#[allow(unreachable_code)]
 		Ok(())
+	} // receive_video
+
+	// Some video constants
+	const END_OF_FRAME_BITMASK : u8 =  0b1000_0000;
+	const PAYLOAD_START : usize = 2;
+
+	// Rewritten code.
+	fn receive_video_packet(&mut self) -> Result<(), Error> {
+		// Despite what I thought, it seems that they're using a custom format for these packets.
+		// The frame starts [n_frame, 0x00, 0x00, 0x00, 0x00, 0x01, ...] (I suspect the second byte here is also the local number, but it has to be zero.)
+		// 	In contrast, the standard H.264 frame starts [0x00, 0x00, 0x01], which means that we can simply strip the first three bytes.
+		// The following packets will follow the format [n_frame, n_local, ...], so in theory, we just need to strip that data and we are all set.
+
+		// This is dumb, but this was not made with this approach in mind.
+
+		let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
+		let frame_number = self.inner_read_buf[0];
+		let local_number = self.inner_read_buf[1];
+
+		if self.vid_frame_number == None { self.vid_frame_number = Some(frame_number) };
+
+
+
+		self.handle_new_packet_number(bytes_read, frame_number, local_number)?;
+
+		let is_new_frame = if let Some(vid_frame_number)  = self.vid_frame_number { frame_number != vid_frame_number } else { false };
+		let frame_has_data = !self.frame_buffer.is_empty();
+		let all_components_exist = self.sps.is_some() && self.pps.is_some() && !self.idr.is_empty();
+
+		//Check if the frame is ending
+		// -- The following is not always true. -- 0x88 is the terminal local number.
+		// CLARIFY: When is self.vid_frame_number getting set? Does this make sense?
+		if is_new_frame && frame_has_data && all_components_exist
+		{	// The following is for POI.
+			// FIXME: WHY ARE WE ONLY PUTTING THE IDR HERE????
+			self.send_image_data_to_decoder(self.sps.as_ref(), self.pps.as_ref(), &self.idr)?;
+
+			self.vid_frame_number = Some(frame_number);
+			self.frame_buffer.clear();
+		} // if is_new_frame && frame_has_data && all_components_exist
+
+		let payload = &self.inner_read_buf[Self::PAYLOAD_START..bytes_read];
+		self.frame_buffer.extend(payload);
+
+		Ok(())
+	} // Receive video_packet
+
+
+	fn is_new_idr(self_idr_frame_number : Option<u8>, packet_number : u8) -> bool {
+		match self_idr_frame_number {
+			None => { true }
+			Some(curr_idr) => {
+				curr_idr != packet_number
+			}
+		}
 	}
 
-}
+	/// Before the rewrite.
+
+	fn _receive_video_packet(&mut self) -> Result<(), Error> {
+		// Despite what I thought, it seems that they're using a custom format for these packets.
+		// The frame starts [n_frame, 0x00, 0x00, 0x00, 0x00, 0x01, ...] (I suspect the second byte here is also the local number, but it has to be zero.)
+		// 	In contrast, the standard H.264 frame starts [0x00, 0x00, 0x01], which means that we can simply strip the first three bytes.
+		// The following packets will follow the format [n_frame, n_local, ...], so in theory, we just need to strip that data and we are all set.
+
+		// This is dumb, but this was not made with this approach in mind.
+		
+		let bytes_read = self.video_sock.recv(&mut self.inner_read_buf)?;
+		let frame_number = self.inner_read_buf[0];
+		let local_number = self.inner_read_buf[1];
+
+		if self.vid_frame_number == None { self.vid_frame_number = Some(frame_number) };
+		
+
+		self.handle_new_packet_number(bytes_read, frame_number, local_number)?;
+
+		let is_new_frame = if let Some(vid_frame_number)  = self.vid_frame_number { frame_number != vid_frame_number } else { false };
+		let frame_has_data = !self.frame_buffer.is_empty();
+		let all_components_exist = self.sps.is_some() && self.pps.is_some() && !self.idr.is_empty();
+
+		//Check if the frame is ending
+		// -- The following is not always true. -- 0x88 is the terminal local number.
+		// CLARIFY: When is self.vid_frame_number getting set? Does this make sense?
+		if is_new_frame && frame_has_data && all_components_exist
+		{	// The following is for POI.
+			self.send_image_data_to_decoder(self.sps.as_ref(), self.pps.as_ref(), &self.idr)?;
+
+			self.vid_frame_number = Some(frame_number);
+			self.frame_buffer.clear();
+		} // if is_new_frame && frame_has_data && all_components_exist
+
+		let payload = &self.inner_read_buf[Self::PAYLOAD_START..bytes_read];
+		self.frame_buffer.extend(payload);
+
+		Ok(())
+	} // Receive video_packet
+
+	fn send_image_data_to_decoder(&self, sps : Option<&[u8;13]>, pps : Option<&[u8;8]>, idr : &Vec<u8>) -> Result<(), Error> {
+		let mut message = Vec::new();
+
+		if sps.is_none() {
+			self.logger.error("No sps when attempting to send image data to decoder")?;
+			return Ok(())
+		} else if pps.is_none() {
+			self.logger.error("No pps when attempting to send image data to decoder")?;
+			return Ok(())
+		}
+
+
+		message.extend_from_slice(sps.unwrap());
+		message.extend_from_slice(pps.unwrap());
+
+
+		message.extend_from_slice(&idr);
+		message.extend_from_slice(&self.accumulated_frames);
+
+		self.video_queue.transcode(Token(self.video_sock.local_addr()?.port() as usize), self.curr_video_src.lock()?.clone(), FrameType::TelloH264, FrameType::Png, message.into_boxed_slice())
+	}
+
+
+	fn get_payload(&self, bytes_read : usize) -> &[u8] { &self.inner_read_buf[Self::PAYLOAD_START..bytes_read] }
+ /// Manipulate the internal state of this object's image related members based on the contents of the payload
+ ///
+ /// # Arguments
+ ///
+ /// * `bytes_read`: the size of the packet in bytes
+ /// * `frame_number`:
+ /// * `local_number`:
+ ///
+ /// returns: true if this is the end of the frame, false if this is not the end of the frame.
+	fn handle_new_packet_number(&mut self, bytes_read : usize,  frame_number : u8, local_number : u8) -> Result<bool, Error> {
+		let end_of_frame = local_number & Self::END_OF_FRAME_BITMASK != 0;
+
+		self.try_update_pps_sps_idr(bytes_read, frame_number, local_number)?;
+
+		self.append_frame(bytes_read, frame_number);
+
+		Ok(end_of_frame)
+	}
+
+	/*fn is_idr_done(&self, packet_frame_number : u8) -> bool {
+		match self.idr_frame_number {
+			None => { false }
+			Some(curr_idr) => { packet_frame_number == curr_idr }
+		}
+	}
+	*/
+
+	fn try_update_pps_sps_idr(&mut self, bytes_read : usize, frame_number : u8, local_number : u8) -> Result<(), Error> {
+		let payload = self.get_payload(bytes_read);
+
+		if bytes_read == 15 && local_number == 0x80 // FIXME: Check the NAL type instead of the length.
+		{
+			self.logger.info("Received updated SPS (larger)")?;
+			self.sps = Some(payload.try_into()?);
+			self.is_sps_updated = true;
+		} else if bytes_read == 10 && local_number == 0x80 // FIXME: Check the NAL type instead of the length
+		{
+			self.logger.info("Received updated PPS (smaller)")?;
+			self.pps = Some(payload.try_into()?);
+			self.is_pps_updated = true;
+		} else if local_number == 0x80
+		{
+			//todo!("WHAT, THERE'S ANOTHER THING THAT CAN BE 0x80??? {}", payload.len())
+			dbg!();
+			self.logger.error_from_string(format!("We are not sure what this packet is. It has a frame number of 0x80, but a length of {bytes_read}"))?;
+		}
+		// NAL unit is 0x65, if we're starting an IDR, we should clear all image buffers
+		else if payload.len() > 4 {
+			if payload[4] == 0x65 && local_number == 0 {
+				self.idr_frame_number = Some(frame_number);
+				self.idr.clear();
+				self.frame_buffer.clear();
+			}
+		}
+
+		Ok(())
+	} // try_update_pps_sps_idr
+
+
+	fn append_frame(&mut self, bytes_read : usize, frame_number : u8) {
+		let payload = &self.inner_read_buf[Self::PAYLOAD_START..bytes_read];
+
+		match self.idr_frame_number
+		{
+			// There's no sense in doing anything with an image if there's no IDR
+			None => { /* noop */ }
+
+			Some(n) => {
+				// check if we're contributing to the active IDR, if we are, contribute.
+				if frame_number == n { self.idr.extend_from_slice(payload); }
+				else { self.accumulated_frames.extend_from_slice(payload) }
+			}
+		}
+	}
+
+} // TelloDrone
 
 
 impl _DroneInternal for TelloDrone

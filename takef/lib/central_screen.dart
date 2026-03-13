@@ -1,5 +1,10 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:takef/disconnect.dart';
+import 'package:takef/flight_control_mode.dart';
 import 'dflight_screen.dart';
+import 'main.dart';
 import 'mflight_screen.dart';
 import 'package:flutter/services.dart';
 import 'video_feed.dart';
@@ -32,6 +37,8 @@ class RC{
 final rcCon = RC();
 final control = ControlRC();
 final vid = DroneVideo();
+late StreamSubscription<ConnectionState> sub;
+ConnectionState? _lastState;
 
 bool isMobile(BuildContext context){
   bool mob = false;
@@ -47,8 +54,9 @@ bool isMobile(BuildContext context){
 }
 
 class FlightScreen extends StatefulWidget{
-  const FlightScreen({super.key,required this.port});
+  const FlightScreen({super.key,required this.port, required this.info});
   final int port;
+  final Map<String, dynamic> info;
 
   @override
   State<FlightScreen> createState() => _FlightScreenState();
@@ -65,6 +73,33 @@ class _FlightScreenState extends State<FlightScreen>{
       DeviceOrientation.landscapeRight,
     ]);
     startConnection();
+    sub = info.connectionStream.listen((state){
+      if(!mounted) return;
+      if(state == _lastState) return;
+      _lastState = state;
+      switch(state){
+        case ConnectionState.disconnected:
+          disconnect(context);
+          break;
+        case ConnectionState.connecting:
+          break;
+        case ConnectionState.connected:
+          break;
+        case ConnectionState.failed:
+          break;
+        case ConnectionState.unavailable:
+          break;
+      }
+    });
+    /*Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        disconnect(context);
+      }
+    });*/
+  }
+
+  void colorLoaded() async{
+    await loadColorTheme();
   }
 
   void startConnection() async{
@@ -85,8 +120,8 @@ class _FlightScreenState extends State<FlightScreen>{
   @override
   Widget build(BuildContext context) {
     return isMobile(context) ?
-    MobileFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon,)
+    MobileFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon, info: widget.info,)
         :
-    DeskFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon,);
+    DeskFlight(videoKey: videoKey, port: widget.port, control: control, rcCon: rcCon, info: widget.info,);
   }
 }

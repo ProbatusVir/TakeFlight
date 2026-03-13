@@ -65,6 +65,31 @@ pub(crate) enum InternalSignal
 	PingEveryone,
 	//ToVideoQueue(VideoTaskFull),		// I don't think this will be used.
 	FromVideoQueue((Token, Box<[u8]>)),	// The token will always be a "Video Source," no refactoring it out.
+	FlightDirection(InternalFlightDirection),
+}
+
+#[derive(Debug)]
+pub(crate) enum InternalFlightDirection
+{
+	Neutral,
+	// cardinals
+	Forward,
+	Backward,
+	Up,
+	Down,
+	Left,
+	Right,
+	SpinC,
+	SpinCC,
+	// flips
+	LeftFlip,
+	RightFlip,
+	FrontFlip,
+	BackFlip,
+	// special
+	Takeoff,
+	Land,
+	EmergencyLand,
 }
 
 
@@ -271,18 +296,7 @@ impl ServerInstance
 				LISTENER => { self.handle_listener_events() }
 				//HEARTBEAT => { self.handle_heartbeat_events() }
 				//VIDEO_QUEUE => { self.handle_video_queue_events() }
-				INTERNAL_SIGNALLER => {
-					for internal_signal in self.internal_signal_receiver.clone().iter_pending_events()
-					{
-						match internal_signal
-						{
-							InternalSignal::PingEveryone => { self.handle_heartbeat_events() }
-							InternalSignal::FromVideoQueue(event) => { self.handle_video_queue_events(event) }
-						}?
-					}
-
-					Ok(())
-				}
+				INTERNAL_SIGNALLER => { self.handle_internal_signaller_events() }
 				token => { self.handle_token(token) }
 				// It's assuring for the compiler to prove that this condition is unreachable.
 				#[allow(unreachable_patterns)]
@@ -393,7 +407,7 @@ impl ServerInstance
 				{
 					// If the token doesn't actually exist, that's a problem. But one that we can recover from!
 					None => {
-						self.info_token = None; // I guess this is valid because Token is copy?
+						self.info_token = None; 
 						Err(Error::Custom("While attempting to send info, found that the current token was invalid!"))
 					}
 
@@ -550,7 +564,7 @@ impl ServerInstance
 
 	/// This function may have no effect if it receives an event that is no longer relevant.
 	/// Such cases may happen when switching video sources.
-	fn handle_video_queue_events(&mut self, video_event : (Token, Box<[u8]>)) -> Result<()>
+	fn handle_video_queue_event(&mut self, video_event : (Token, Box<[u8]>)) -> Result<()>
 	{
 		// FIXME: This should not be hardcoded.
 		let ownership_lock = self.ownership_map.lock()?;
@@ -580,6 +594,62 @@ impl ServerInstance
 
 		Ok(())
 	} // fn handle_video_queue_events
+
+	fn handle_internal_signaller_events(&mut self) -> Result<()>
+	{
+		for internal_signal in self.internal_signal_receiver.clone().iter_pending_events()
+		{
+			match internal_signal
+			{
+				InternalSignal::PingEveryone => { self.handle_heartbeat_events() }
+				InternalSignal::FromVideoQueue(event) => { self.handle_video_queue_event(event) },
+				InternalSignal::FlightDirection(direction) => { self.handle_flight_direction_event(direction) }
+			}?
+		}
+
+		Ok(())
+	}
+
+	fn handle_flight_direction_event(&mut self, direction : InternalFlightDirection) -> Result<()> {
+		match &self.curr_drone
+		{
+			None => { Ok(()) }
+			Some(connection) => {
+
+				let connection_lock = connection.lock()?;
+				let drone = match &*connection_lock {
+					Connection::Drone(drone) => { drone }
+					_ => todo!("Somehow, the drone we unwrapped in main::handle_flight_direction_event")
+				};
+
+				let mut drone_lock = drone.lock()?;
+
+				match direction
+				{
+					InternalFlightDirection::Neutral		=> { drone_lock.rc(0   , 0   , 0   , 0.0) }
+					// cardinals
+					InternalFlightDirection::Forward	=> { drone_lock.rc(0   , 0   , 100 , 0.0) }
+					InternalFlightDirection::Backward	=> { drone_lock.rc(0   , 0   , -100, 0.0) }
+					InternalFlightDirection::Up			=> { drone_lock.rc(0   , 100 , 0   , 0.0) }
+					InternalFlightDirection::Down		=> { drone_lock.rc(0   , -100, 0   , 0.0) }
+					InternalFlightDirection::Left		=> { drone_lock.rc(-100, 0   , 0   , 0.0) }
+					InternalFlightDirection::Right		=> { drone_lock.rc(100 , 0   , 0   , 0.0) }
+					InternalFlightDirection::SpinC		=> { drone_lock.rc(0   , 0   , 0   , 100.0) }
+					InternalFlightDirection::SpinCC 	=> { drone_lock.rc(0   , 0   , 0   , -100.0) }
+
+					//InternalFlightDirection::LeftFlip => { drone_lock.frontflip() }
+					//InternalFlightDirection::RightFlip => { drone_lock. }
+					InternalFlightDirection::FrontFlip	=> { drone_lock.frontflip()}
+					InternalFlightDirection::BackFlip	=> { drone_lock.backflip() }
+					InternalFlightDirection::Takeoff	=> { drone_lock.takeoff() }
+					InternalFlightDirection::Land		=> { drone_lock.graceful_land() }
+					InternalFlightDirection::EmergencyLand => { drone_lock.emergency_land() }
+
+					_ => Ok(())
+				}
+			}
+		}
+	}
 
 
 } // impl ServerInstance
@@ -680,8 +750,8 @@ fn shutdown_video<T>(join_handle: JoinHandle<T>, queue_sender : VideoQueue) -> R
 		Err(_) => { println!("Encountered an error sending shutdown signal to video queue. Continuing.") }
 	}
 	match join_handle.join() {
-		Ok(_) => { println!("Successfully closed thread \"{}\"!", thread_name) }
-		Err(_e) => { println!("There may have been an error closing thread \"{}\", or the thread already closed.", thread_name)}
+		Ok(_) => { println!("Successfully closed thread \"{thread_name}\"!") }
+		Err(_e) => { println!("There may have been an error closing thread \"{thread_name}\", or the thread already closed.")}
 	}
 
 	Ok(())

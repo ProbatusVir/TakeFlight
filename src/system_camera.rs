@@ -104,12 +104,6 @@ impl CameraThreadInfo {
 	/// * `continue_running`: A(n atomic) boolean meant to clean up this thread.
 	///
 	/// returns: A crate error if the camera fails.
-	///
-	/// # Examples
-	///
-	/// ```
-	///
-	/// ```
 	pub(crate) fn do_work(&self) -> Result<(), Error>
 	{
 		// create the camera

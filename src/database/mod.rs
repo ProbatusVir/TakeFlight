@@ -2,7 +2,7 @@ mod entry;
 
 use crate::error::Error;
 use rusqlite as sql;
-use rusqlite::{named_params, params, Connection};
+use rusqlite::{named_params, params, Connection, OptionalExtension};
 
 pub const DB_DIR : &str = "logs/flightdb.db3";
 pub const SCRIPTS_DIR : &str = "src/sql_scripts";
@@ -51,7 +51,7 @@ fn test_insert_flight_model() -> Result<(), Error>
 
 	// Act
 	/// Again, there will be semantic data to this. This is just poor practice.
-	entry::insert_row_flight_model(&mut db, 1, 1)?;
+	entry::insert_row_flight_model(&mut db, 1)?;
 
 	Ok(())
 }

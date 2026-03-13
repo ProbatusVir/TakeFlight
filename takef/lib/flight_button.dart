@@ -16,23 +16,29 @@ class _FlightButtonState extends State<FlightButton>{
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      child: isFlying ? IconButton(
-          onPressed: (){
-            widget.control.sendLanding(0x01);
-            setState(() {
-              isFlying = false;
-            });
-          },
-          icon: Icon(Icons.flight_land, color: Colors.white, size: widget.size,)
-      ) :
-        IconButton(
+      child: isFlying ? Tooltip(
+        message: "Land",
+        child: IconButton(
             onPressed: (){
-              widget.control.sendTakeOff();
+              widget.control.sendLanding(0x01);
               setState(() {
-                isFlying = true;
+                isFlying = false;
               });
             },
-            icon: Icon(Icons.flight_takeoff, color: Colors.white, size: widget.size,)
+            icon: Icon(Icons.flight_land, color: Colors.white, size: widget.size,)
+        ),
+      ) :
+        Tooltip(
+          message: "Take Off",
+          child: IconButton(
+              onPressed: (){
+                widget.control.sendTakeOff();
+                setState(() {
+                  isFlying = true;
+                });
+              },
+              icon: Icon(Icons.flight_takeoff, color: Colors.white, size: widget.size,)
+          ),
         )
     );
   }
