@@ -4,7 +4,6 @@
 /Frontend/takeofftestapp/node_modules
 /Frontend/takeofftestapp/dist/
 /Frontend/takeofftestapp/.env
-/src/takeflight_computer_vision/model/
 /src/tests/test_data
 /src/takeflight_computer_vision/target
 /src/takeflight_computer_vision/test_results
